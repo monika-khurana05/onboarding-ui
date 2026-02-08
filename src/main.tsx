@@ -1,10 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { CssBaseline, ThemeProvider } from '@mui/material';
 import { QueryClientProvider } from '@tanstack/react-query';
 import App from './app/App';
 import { GlobalErrorProvider } from './app/GlobalErrorContext';
 import { RootErrorBoundary } from './app/RootErrorBoundary';
-import { ThemeModeProvider } from './app/ThemeModeContext';
+import { darkTheme } from './theme/theme';
 import { env } from './lib/env';
 import { queryClient } from './lib/queryClient';
 
@@ -18,11 +19,12 @@ async function bootstrap() {
     <React.StrictMode>
       <RootErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <ThemeModeProvider>
+          <ThemeProvider theme={darkTheme}>
+            <CssBaseline />
             <GlobalErrorProvider>
               <App />
             </GlobalErrorProvider>
-          </ThemeModeProvider>
+          </ThemeProvider>
         </QueryClientProvider>
       </RootErrorBoundary>
     </React.StrictMode>
