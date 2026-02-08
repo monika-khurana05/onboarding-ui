@@ -6,7 +6,7 @@ This is a React + TypeScript + Vite project for the Country Onboarding UI applic
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js** (v16 or later recommended)
+- **Node.js** (v18 or later recommended)
 - **npm** or **yarn** package manager
 
 To check your versions:
@@ -125,17 +125,17 @@ npm run e2e
 
 ```
 src/
-├── api/              # API client and types
-├── app/              # Root app components and context
-├── components/       # Reusable UI components
-├── features/         # Feature-specific modules
-│   ├── countries/    # Country management
-│   └── onboarding/   # Onboarding flow
-├── lib/              # Utility functions and clients
-├── mocks/            # MSW mock handlers
-├── models/           # Data models
-├── pages/            # Page components
-└── theme/            # Theme configuration
+|-- api/              # API client and types
+|-- app/              # Root app components and context
+|-- components/       # Reusable UI components
+|-- features/         # Feature-specific modules
+|   |-- countries/    # Country management
+|   `-- onboarding/   # Onboarding flow
+|-- lib/              # Utility functions and clients
+|-- mocks/            # MSW mock handlers
+|-- models/           # Data models
+|-- pages/            # Page components
+`-- theme/            # Theme configuration
 ```
 
 ## Key Routes
@@ -166,7 +166,7 @@ src/
 The application derives the environment (DEV/UAT/PROD) from the API URL. Configuration can be found in:
 - `src/lib/env.ts` - Environment variables
 - `src/lib/environment.ts` - Environment setup
-- `src/app/theme.ts` - Theme and styling
+- `src/theme/theme.ts` - Theme and styling
 
 ## Troubleshooting
 
@@ -217,3 +217,4 @@ This will show detailed error messages.
 - [MUI Documentation](https://mui.com/)
 - [React Router Documentation](https://reactrouter.com/)
 - [React Query Documentation](https://tanstack.com/query/latest/)
+
