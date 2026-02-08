@@ -1,0 +1,62 @@
+import { zodResolver } from '@hookform/resolvers/zod';
+import AddIcon from '@mui/icons-material/Add';
+import { Alert, Button, CircularProgress, Stack, TextField } from '@mui/material';
+import { useForm } from 'react-hook-form';
+import { snapshotVersionDefaults } from './defaultValues';
+import { snapshotVersionSchema, type SnapshotVersionValues } from './schema';
+
+type SnapshotVersionFormProps = {
+  disabled: boolean;
+  loading: boolean;
+  error?: string | null;
+  onSubmit: (values: SnapshotVersionValues) => Promise<void> | void;
+};
+
+export function SnapshotVersionForm({
+  disabled,
+  loading,
+  error,
+  onSubmit
+}: SnapshotVersionFormProps) {
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors }
+  } = useForm<SnapshotVersionValues>({
+    resolver: zodResolver(snapshotVersionSchema),
+    defaultValues: snapshotVersionDefaults
+  });
+
+  return (
+    <Stack
+      component="form"
+      spacing={1.5}
+      onSubmit={handleSubmit(async (values) => {
+        await onSubmit(values);
+        reset(snapshotVersionDefaults);
+      })}
+      aria-label="Snapshot version form"
+    >
+      {error ? <Alert severity="error">{error}</Alert> : null}
+      <TextField
+        fullWidth
+        label="Version Reason"
+        placeholder="Example: Added sanctions fallback path for local regulator controls."
+        disabled={disabled || loading}
+        error={Boolean(errors.reason)}
+        helperText={errors.reason?.message}
+        {...register('reason')}
+      />
+      <Button
+        type="submit"
+        variant="outlined"
+        startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <AddIcon />}
+        disabled={disabled || loading}
+        aria-label="Create snapshot version"
+      >
+        {loading ? 'Creating Version...' : 'Create New Version'}
+      </Button>
+    </Stack>
+  );
+}
