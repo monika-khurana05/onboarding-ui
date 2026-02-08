@@ -1,5 +1,6 @@
-import { Suspense, lazy, useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Box, TextField, Typography } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 
 const MonacoEditor = lazy(() => import('@monaco-editor/react'));
 
@@ -8,9 +9,24 @@ type JsonAdvancedEditorProps = {
   onChange?: (next: string) => void;
   ariaLabel: string;
   readOnly?: boolean;
+  helperText?: string;
+  hideHelper?: boolean;
+  height?: number | string;
+  label?: string;
 };
 
-export function JsonAdvancedEditor({ value, onChange, ariaLabel, readOnly = false }: JsonAdvancedEditorProps) {
+export function JsonAdvancedEditor({
+  value,
+  onChange,
+  ariaLabel,
+  readOnly = false,
+  helperText,
+  hideHelper = false,
+  height = '320px',
+  label
+}: JsonAdvancedEditorProps) {
+  const theme = useTheme();
+  const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
   const fallbackEditor = useMemo(
     () => (
       <TextField
@@ -18,23 +34,24 @@ export function JsonAdvancedEditor({ value, onChange, ariaLabel, readOnly = fals
         minRows={10}
         multiline
         value={value}
-        label="Workflow JSON"
+        label={label ?? 'JSON'}
         onChange={(event) => onChange?.(event.target.value)}
         InputProps={{ readOnly }}
         inputProps={{ 'aria-label': ariaLabel }}
       />
     ),
-    [ariaLabel, onChange, readOnly, value]
+    [ariaLabel, label, onChange, readOnly, value]
   );
 
   return (
     <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
       <Suspense fallback={fallbackEditor}>
         <MonacoEditor
-          height="320px"
+          height={height}
           language="json"
           value={value}
           onChange={(next) => onChange?.(next ?? '')}
+          theme={monacoTheme}
           options={{
             minimap: { enabled: false },
             fontSize: 13,
@@ -45,9 +62,11 @@ export function JsonAdvancedEditor({ value, onChange, ariaLabel, readOnly = fals
           }}
         />
       </Suspense>
-      <Typography variant="caption" sx={{ p: 1.5, display: 'block', color: 'text.secondary' }}>
-        Advanced mode accepts strict JSON and validates against the workflow schema.
-      </Typography>
+      {hideHelper ? null : (
+        <Typography variant="caption" sx={{ p: 1.5, display: 'block', color: 'text.secondary' }}>
+          {helperText ?? 'Advanced mode accepts strict JSON.'}
+        </Typography>
+      )}
     </Box>
   );
 }

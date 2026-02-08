@@ -1,13 +1,32 @@
-import { Alert, Chip, Grid, List, ListItem, ListItemText, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Chip, FormControlLabel, Grid, List, ListItem, ListItemText, Paper, Stack, Switch, Typography } from '@mui/material';
+import { useThemeMode } from '../app/ThemeModeContext';
 import { SectionCard } from '../components/SectionCard';
 import { env } from '../lib/env';
 import { deriveEnvironmentFromApiUrl } from '../lib/environment';
 
 export function SettingsPage() {
   const deploymentEnvironment = deriveEnvironmentFromApiUrl(env.apiBaseUrl);
+  const { mode, setMode } = useThemeMode();
 
   return (
     <Stack spacing={2}>
+      <SectionCard title="Appearance" subtitle="Theme preferences for long working sessions.">
+        <Stack spacing={1.5}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={mode === 'light'}
+                onChange={(_, checked) => setMode(checked ? 'light' : 'dark')}
+              />
+            }
+            label="Light mode"
+          />
+          <Typography variant="body2" color="text.secondary">
+            Dark mode is the default for reduced eye strain, with a light option for bright environments.
+          </Typography>
+        </Stack>
+      </SectionCard>
+
       <SectionCard
         title="Environment Configuration"
         subtitle="These values are read from Vite environment variables."

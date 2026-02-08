@@ -1,13 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { CssBaseline, ThemeProvider } from '@mui/material';
 import App from './app/App';
 import { GlobalErrorProvider } from './app/GlobalErrorContext';
 import { RootErrorBoundary } from './app/RootErrorBoundary';
+import { ThemeModeProvider } from './app/ThemeModeContext';
 import { env } from './lib/env';
 import { queryClient } from './lib/queryClient';
-import { appTheme } from './app/theme';
 
 async function bootstrap() {
   if (env.enableMsw) {
@@ -19,12 +18,11 @@ async function bootstrap() {
     <React.StrictMode>
       <RootErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <ThemeProvider theme={appTheme}>
-            <CssBaseline />
+          <ThemeModeProvider>
             <GlobalErrorProvider>
               <App />
             </GlobalErrorProvider>
-          </ThemeProvider>
+          </ThemeModeProvider>
         </QueryClientProvider>
       </RootErrorBoundary>
     </React.StrictMode>

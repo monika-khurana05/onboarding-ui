@@ -8,6 +8,7 @@ import {
   useState,
   type PropsWithChildren
 } from 'react';
+import { setGlobalErrorHandler } from './globalErrorReporter';
 
 type GlobalErrorContextValue = {
   message: string | null;
@@ -48,10 +49,12 @@ export function GlobalErrorProvider({ children }: PropsWithChildren) {
 
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
+    setGlobalErrorHandler(showError);
 
     return () => {
       window.removeEventListener('error', onError);
       window.removeEventListener('unhandledrejection', onRejection);
+      setGlobalErrorHandler(null);
     };
   }, [showError]);
 

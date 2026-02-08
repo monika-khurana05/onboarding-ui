@@ -1,6 +1,6 @@
-# cpx-country-onboarding-ui
+# country-onboarding-ui
 
-Production-grade enterprise UI for **CPX Country Onboarding**.
+**Country Onboarding**
 
 ## What This UI Covers
 
@@ -10,10 +10,10 @@ Production-grade enterprise UI for **CPX Country Onboarding**.
 3. FSM/config preview generation
 4. Repository pack validation before commit
 - Enterprise shell:
-  - MUI AppBar + Drawer layout
-  - Environment badge derived from API URL (`DEV/UAT/PROD`)
-  - Global error snackbar
-  - Root error boundary
+1. MUI AppBar + Drawer layout
+2. Environment badge derived from API URL (`DEV/UAT/PROD`)
+3. Global error snackbar
+4. Root error boundary
 
 ## Routes
 
@@ -35,6 +35,7 @@ Production-grade enterprise UI for **CPX Country Onboarding**.
 - Monaco Editor (`@monaco-editor/react`) for advanced JSON mode
 - ESLint + Prettier
 - Vitest + Testing Library
+- Playwright
 
 ## Backend Endpoints Integrated
 
@@ -46,12 +47,18 @@ Production-grade enterprise UI for **CPX Country Onboarding**.
 - `POST /generate/preview`
 - `GET /repos/{repoSlug}/packs?ref=main` (optional)
 
+## Setup
+
+```bash
+npm install
+```
+
 ## Environment Variables
 
 Create a `.env` file using `.env.example`:
 
 ```env
-VITE_API_BASE_URL=
+VITE_API_BASE_URL=http://localhost:8080
 VITE_AUTH_TOKEN=
 ```
 
@@ -64,17 +71,28 @@ Environment badge is auto-derived from `VITE_API_BASE_URL` (`DEV`, `UAT`, `PROD`
 ## Run
 
 ```bash
-npm install
 npm run dev
 ```
 
-## Build and Quality
+## Build
+
+```bash
+npm run build
+```
+
+## Tests
+
+```bash
+npm run test
+npm run e2e
+```
+
+## Quality
 
 ```bash
 npm run typecheck
 npm run lint
-npm run test
-npm run build
+npm run format
 ```
 
 ## Notes

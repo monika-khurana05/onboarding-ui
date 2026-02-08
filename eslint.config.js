@@ -28,6 +28,15 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { attributes: false } }],
       '@typescript-eslint/consistent-type-definitions': 'off',
+      'sort-imports': [
+        'error',
+        {
+          ignoreDeclarationSort: true,
+          ignoreMemberSort: false,
+          allowSeparatedGroups: true,
+          ignoreCase: true
+        }
+      ],
       'react-hooks/incompatible-library': 'off'
     }
   },

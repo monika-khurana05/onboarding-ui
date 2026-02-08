@@ -2,13 +2,13 @@ import { ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { appTheme } from '../../app/theme';
+import { createAppTheme } from '../../app/theme';
 import { SnapshotRequestForm } from './SnapshotRequestForm';
 
 function renderForm() {
   const onSubmit = vi.fn();
   render(
-    <ThemeProvider theme={appTheme}>
+    <ThemeProvider theme={createAppTheme('dark')}>
       <SnapshotRequestForm submitting={false} onSubmit={onSubmit} />
     </ThemeProvider>
   );
