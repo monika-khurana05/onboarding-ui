@@ -1,6 +1,7 @@
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { Alert, AlertTitle, Button, Stack, Typography } from '@mui/material';
+import { enterpriseDesign, spacingScale } from '../theme/designSystem';
 
 type ErrorStateProps = {
   title?: string;
@@ -17,7 +18,7 @@ export function ErrorState({
     <Alert
       severity="error"
       icon={<ErrorOutlineIcon fontSize="inherit" />}
-      sx={{ borderRadius: 2 }}
+      sx={{ borderRadius: `${enterpriseDesign.borderRadius}px` }}
       action={
         onRetry ? (
           <Button
@@ -34,7 +35,7 @@ export function ErrorState({
       }
     >
       <AlertTitle>{title}</AlertTitle>
-      <Stack spacing={0.5}>
+      <Stack spacing={spacingScale.s4}>
         <Typography variant="body2">{message}</Typography>
       </Stack>
     </Alert>

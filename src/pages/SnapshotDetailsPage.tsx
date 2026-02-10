@@ -23,8 +23,10 @@ import type { SnapshotDetailDto } from '../api/types';
 import { JsonMonacoPanel } from '../components/JsonMonacoPanel';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
+import { CardSection } from '../components/CardSection';
+import { InlineHelpText } from '../components/InlineHelpText';
 import { LoadingState } from '../components/LoadingState';
-import { SectionCard } from '../components/SectionCard';
+import { PageContainer } from '../components/PageContainer';
 import { useGlobalError } from '../app/GlobalErrorContext';
 import type { SnapshotModel } from '../models/snapshot';
 import { CreateSnapshotWizard } from '../features/onboarding-flow/CreateSnapshotWizard';
@@ -103,10 +105,13 @@ export function SnapshotDetailsPage() {
   const jsonPayload = snapshotPayload ?? snapshotQuery.data;
 
   return (
-    <Stack spacing={2.5}>
-      <SectionCard
-        title="Snapshot Details"
-        subtitle="Review snapshot payload, generate previews, and create new versions."
+    <PageContainer
+      title={`Snapshot ${snapshotId}`}
+      subtitle="Review payload composition, capability coverage, and generation-readiness."
+    >
+      <CardSection
+        title="Snapshot Summary"
+        subtitle="Primary identifiers and controls for this snapshot version."
         actions={
           <Stack direction="row" spacing={1}>
             <Button
@@ -140,19 +145,23 @@ export function SnapshotDetailsPage() {
             <Typography variant="caption" color="text.secondary">
               Snapshot ID
             </Typography>
-            <Typography variant="subtitle1">{headerFields.snapshotId}</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+              {headerFields.snapshotId}
+            </Typography>
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Country Code
             </Typography>
-            <Typography variant="subtitle1">{headerFields.countryCode}</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+              {headerFields.countryCode}
+            </Typography>
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <Typography variant="caption" color="text.secondary">
               Version
             </Typography>
-            <Typography variant="subtitle1">
+            <Typography variant="body1" sx={{ fontWeight: 600 }}>
               {typeof headerFields.version === 'number' ? headerFields.version : 'Latest'}
             </Typography>
           </Grid>
@@ -160,14 +169,14 @@ export function SnapshotDetailsPage() {
             <Typography variant="caption" color="text.secondary">
               Created At
             </Typography>
-            <Typography variant="subtitle1">
+            <Typography variant="body1" sx={{ fontWeight: 600 }}>
               {headerFields.createdAt ? new Date(headerFields.createdAt).toLocaleString() : 'n/a'}
             </Typography>
           </Grid>
         </Grid>
-      </SectionCard>
+      </CardSection>
 
-      <SectionCard
+      <CardSection
         title="Enabled Capabilities"
         subtitle="CPX runtime domains enabled for this snapshot."
       >
@@ -180,36 +189,36 @@ export function SnapshotDetailsPage() {
         ) : (
           <Alert severity="info">No capabilities are enabled.</Alert>
         )}
-      </SectionCard>
+      </CardSection>
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 4 }}>
-          <SectionCard title="Validations" subtitle="Validation rules in the CPX checks lane.">
-            <Typography variant="h5">{validations.length}</Typography>
-            <Typography variant="body2" color="text.secondary">
+          <CardSection title="Validations" subtitle="Validation rules in the CPX checks lane.">
+            <Typography variant="h4">{validations.length}</Typography>
+            <InlineHelpText>
               {validations.map((rule) => rule.key).filter(Boolean).join(', ') || 'No validations configured.'}
-            </Typography>
-          </SectionCard>
+            </InlineHelpText>
+          </CardSection>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <SectionCard title="Enrichments" subtitle="Enrichment rules applied before clearing.">
-            <Typography variant="h5">{enrichments.length}</Typography>
-            <Typography variant="body2" color="text.secondary">
+          <CardSection title="Enrichments" subtitle="Enrichment rules applied before clearing.">
+            <Typography variant="h4">{enrichments.length}</Typography>
+            <InlineHelpText>
               {enrichments.map((rule) => rule.key).filter(Boolean).join(', ') || 'No enrichments configured.'}
-            </Typography>
-          </SectionCard>
+            </InlineHelpText>
+          </CardSection>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <SectionCard title="Actions" subtitle="Runtime actions attached to the workflow.">
-            <Typography variant="h5">{actions.length}</Typography>
-            <Typography variant="body2" color="text.secondary">
+          <CardSection title="Actions" subtitle="Runtime actions attached to the workflow.">
+            <Typography variant="h4">{actions.length}</Typography>
+            <InlineHelpText>
               {actions.map((action) => action.key).filter(Boolean).join(', ') || 'No actions configured.'}
-            </Typography>
-          </SectionCard>
+            </InlineHelpText>
+          </CardSection>
         </Grid>
       </Grid>
 
-      <SectionCard title="Workflow Summary" subtitle="State Manager FSM configured for this snapshot.">
+      <CardSection title="Workflow Summary" subtitle="State Manager FSM configured for this snapshot.">
         <Stack spacing={1.5}>
           <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
             <Chip label={`Workflow: ${workflow.workflowKey || 'N/A'}`} variant="outlined" />
@@ -222,21 +231,21 @@ export function SnapshotDetailsPage() {
             </Typography>
           ) : null}
         </Stack>
-      </SectionCard>
+      </CardSection>
 
-      <SectionCard title="What Will Be Generated?" subtitle="CPX outputs mapped to target repositories.">
+      <CardSection title="What Will Be Generated?" subtitle="CPX outputs mapped to target repositories.">
         <Stack spacing={1}>
-          <Typography variant="body2">
-            state-manager repo: fsm.yaml + service cfg + component tests
-          </Typography>
-          <Typography variant="body2">payment-initiation repo: pipeline yaml</Typography>
-          <Typography variant="body2">country-container repo: deployment + smoke</Typography>
+          <InlineHelpText>state-manager repo: fsm.yaml + service cfg + component tests</InlineHelpText>
+          <InlineHelpText>payment-initiation repo: pipeline yaml</InlineHelpText>
+          <InlineHelpText>country-container repo: deployment + smoke</InlineHelpText>
         </Stack>
-      </SectionCard>
+      </CardSection>
 
       <Accordion>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="subtitle1">Snapshot JSON</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            Snapshot JSON
+          </Typography>
         </AccordionSummary>
         <AccordionDetails>
           <Stack spacing={1.5}>
@@ -264,6 +273,6 @@ export function SnapshotDetailsPage() {
           />
         </DialogContent>
       </Dialog>
-    </Stack>
+    </PageContainer>
   );
 }

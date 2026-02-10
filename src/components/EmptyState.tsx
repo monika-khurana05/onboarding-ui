@@ -1,5 +1,7 @@
 import InboxIcon from '@mui/icons-material/Inbox';
 import { Box, Button, Paper, Stack, Typography } from '@mui/material';
+import { enterpriseDesign, spacingScale } from '../theme/designSystem';
+import { InlineHelpText } from './InlineHelpText';
 
 type EmptyStateProps = {
   title: string;
@@ -14,13 +16,14 @@ export function EmptyState({ title, description, actionLabel, onAction }: EmptyS
       role="status"
       variant="outlined"
       sx={{
-        p: 3,
+        p: `${enterpriseDesign.cardPadding.mobile}px`,
         borderStyle: 'dashed',
         borderWidth: 2,
-        borderColor: 'divider'
+        borderColor: 'divider',
+        borderRadius: `${enterpriseDesign.borderRadius}px`
       }}
     >
-      <Stack spacing={1.5} alignItems="center" textAlign="center">
+      <Stack spacing={spacingScale.s12} alignItems="center" textAlign="center">
         <Box
           sx={{
             width: 44,
@@ -34,10 +37,8 @@ export function EmptyState({ title, description, actionLabel, onAction }: EmptyS
         >
           <InboxIcon color="action" />
         </Box>
-        <Typography variant="h6">{title}</Typography>
-        <Typography variant="body2" color="text.secondary">
-          {description}
-        </Typography>
+        <Typography variant="h5">{title}</Typography>
+        <InlineHelpText>{description}</InlineHelpText>
         {actionLabel && onAction ? (
           <Button variant="outlined" onClick={onAction} aria-label={actionLabel}>
             {actionLabel}

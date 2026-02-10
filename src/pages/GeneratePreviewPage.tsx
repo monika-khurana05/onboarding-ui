@@ -21,11 +21,18 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getRepoDefaults, getSnapshot, previewGenerate } from '../api/client';
-import type { PreviewErrorDto, PreviewGenerateResponseDto, SnapshotDetailDto } from '../api/types';
+import type {
+  PreviewArtifactDto,
+  PreviewErrorDto,
+  PreviewGenerateResponseDto,
+  SnapshotDetailDto
+} from '../api/types';
 import { JsonMonacoPanel } from '../components/JsonMonacoPanel';
+import { CardSection } from '../components/CardSection';
+import { InlineHelpText } from '../components/InlineHelpText';
 import { LoadingState } from '../components/LoadingState';
+import { PageContainer } from '../components/PageContainer';
 import { RepoTargetsTable, type RepoDefaultsEntry, type RepoTarget } from '../components/RepoTargetsTable';
-import { SectionCard } from '../components/SectionCard';
 import { useGlobalError } from '../app/GlobalErrorContext';
 
 type PreviewFile = {
@@ -438,10 +445,13 @@ export function GeneratePreviewPage() {
   };
 
   return (
-    <Stack spacing={2.5}>
-      <SectionCard
-        title="Preview Generation"
-        subtitle="Run a pre-commit preview to validate what CPX automation will generate."
+    <PageContainer
+      title="Generate Preview"
+      subtitle="Run pre-commit generation and inspect repo-level artifacts before automation."
+    >
+      <CardSection
+        title="Preview Request"
+        subtitle="Provide snapshot references and active target repositories."
         actions={
           <Button
             variant="contained"
@@ -454,9 +464,9 @@ export function GeneratePreviewPage() {
         }
       >
         <Stack spacing={2}>
-          <Typography variant="body2" color="text.secondary">
+          <InlineHelpText>
             Enter a snapshot and repo targets to render the generated files before PR automation exists.
-          </Typography>
+          </InlineHelpText>
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, md: 4 }}>
               <TextField
@@ -488,9 +498,9 @@ export function GeneratePreviewPage() {
             <Alert severity="warning">Snapshot could not be loaded. Repo targets can be filled manually.</Alert>
           ) : null}
         </Stack>
-      </SectionCard>
+      </CardSection>
 
-      <SectionCard title="Repository Targets" subtitle="Review or override repo targets for preview generation.">
+      <CardSection title="Repository Targets" subtitle="Review or override repo targets for preview generation.">
         <Stack spacing={2}>
           <RepoTargetsTable
             variant="simple"
@@ -506,13 +516,13 @@ export function GeneratePreviewPage() {
             <Alert severity="warning">Add at least one repo slug before generating preview.</Alert>
           ) : null}
         </Stack>
-      </SectionCard>
+      </CardSection>
 
       {previewMutation.isPending ? <LoadingState message="Generating preview..." minHeight={160} /> : null}
 
       {previewMutation.data ? (
         <Stack spacing={2.5}>
-          <SectionCard
+          <CardSection
             title="Preview Results"
             subtitle="Each repo card shows the generated files and status for the preview run."
             actions={
@@ -525,14 +535,16 @@ export function GeneratePreviewPage() {
               {normalizedPreview.repoResults.length ? (
                 normalizedPreview.repoResults.map((repo) => (
                   <Grid key={repo.repoSlug} size={{ xs: 12, md: 6 }}>
-                    <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Paper variant="outlined" sx={{ p: 2, borderRadius: '8px' }}>
                       <Stack spacing={1.5}>
                         <Stack direction="row" justifyContent="space-between" alignItems="center">
                           <Stack spacing={0.5}>
-                            <Typography variant="subtitle1">{repo.repoSlug}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Pack: {repo.packVersion ?? 'n/a'} | Files: {repo.files.length}
+                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                              {repo.repoSlug}
                             </Typography>
+                            <InlineHelpText>
+                              Pack: {repo.packVersion ?? 'n/a'} | Files: {repo.files.length}
+                            </InlineHelpText>
                           </Stack>
                           <Chip
                             label={repo.status}
@@ -549,7 +561,11 @@ export function GeneratePreviewPage() {
                             <Stack spacing={1.5}>
                               {repo.files.length ? (
                                 repo.files.map((file, fileIndex) => (
-                                  <Paper key={`${repo.repoSlug}-${file.path}-${fileIndex}`} variant="outlined" sx={{ p: 1.5 }}>
+                                  <Paper
+                                    key={`${repo.repoSlug}-${file.path}-${fileIndex}`}
+                                    variant="outlined"
+                                    sx={{ p: 1.5, borderRadius: '8px' }}
+                                  >
                                     <Stack spacing={1}>
                                       <Stack direction="row" justifyContent="space-between" alignItems="center">
                                         <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
@@ -572,12 +588,12 @@ export function GeneratePreviewPage() {
                                         </Stack>
                                       </Stack>
                                       <Stack direction="row" spacing={2} flexWrap="wrap">
-                                        <Typography variant="caption" color="text.secondary">
+                                        <InlineHelpText component="span">
                                           Size: {file.sizeBytes ?? 'n/a'}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
+                                        </InlineHelpText>
+                                        <InlineHelpText component="span">
                                           SHA256: {file.sha256 ?? 'n/a'}
-                                        </Typography>
+                                        </InlineHelpText>
                                       </Stack>
                                       {file.previewText ? (
                                         <Accordion>
@@ -613,7 +629,7 @@ export function GeneratePreviewPage() {
                                                       : 'grey.100',
                                                   border: '1px solid',
                                                   borderColor: 'divider',
-                                                  borderRadius: 1,
+                                                  borderRadius: '8px',
                                                   fontSize: 12,
                                                   fontFamily: '"IBM Plex Mono", "Courier New", monospace',
                                                   whiteSpace: 'pre-wrap'
@@ -625,17 +641,13 @@ export function GeneratePreviewPage() {
                                           </AccordionDetails>
                                         </Accordion>
                                       ) : (
-                                        <Typography variant="caption" color="text.secondary">
-                                          No preview text returned.
-                                        </Typography>
+                                        <InlineHelpText>No preview text returned.</InlineHelpText>
                                       )}
                                     </Stack>
                                   </Paper>
                                 ))
                               ) : (
-                                <Typography variant="body2" color="text.secondary">
-                                  No files returned for this repo.
-                                </Typography>
+                                <InlineHelpText>No files returned for this repo.</InlineHelpText>
                               )}
                             </Stack>
                           </AccordionDetails>
@@ -650,14 +662,16 @@ export function GeneratePreviewPage() {
                 </Grid>
               )}
             </Grid>
-          </SectionCard>
+          </CardSection>
 
-          <SectionCard title="Errors" subtitle="Backend errors grouped by repo when possible.">
+          <CardSection title="Errors" subtitle="Backend errors grouped by repo when possible.">
             {normalizedPreview.errorGroups.length ? (
               <Stack spacing={1.5}>
                 {normalizedPreview.errorGroups.map((group) => (
-                  <Paper key={group.repoSlug} variant="outlined" sx={{ p: 1.5 }}>
-                    <Typography variant="subtitle2">{group.repoSlug}</Typography>
+                  <Paper key={group.repoSlug} variant="outlined" sx={{ p: 1.5, borderRadius: '8px' }}>
+                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                      {group.repoSlug}
+                    </Typography>
                     <Stack spacing={1} sx={{ mt: 1 }}>
                       {group.errors.map((error, index) => (
                         <Alert key={`${group.repoSlug}-${index}`} severity={error.severity}>
@@ -671,11 +685,13 @@ export function GeneratePreviewPage() {
             ) : (
               <Alert severity="success">No errors reported in preview response.</Alert>
             )}
-          </SectionCard>
+          </CardSection>
 
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="subtitle1">Preview JSON</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                Preview JSON
+              </Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Stack spacing={1.5}>
@@ -690,10 +706,8 @@ export function GeneratePreviewPage() {
           </Accordion>
         </Stack>
       ) : (
-        <Typography variant="body2" color="text.secondary">
-          Run a preview generation to see repo-by-repo outputs and file manifests.
-        </Typography>
+        <InlineHelpText>Run a preview generation to see repo-by-repo outputs and file manifests.</InlineHelpText>
       )}
-    </Stack>
+    </PageContainer>
   );
 }

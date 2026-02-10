@@ -1,5 +1,7 @@
 import { Alert, Chip, Grid, List, ListItem, ListItemText, Paper, Stack, Typography } from '@mui/material';
-import { SectionCard } from '../components/SectionCard';
+import { CardSection } from '../components/CardSection';
+import { InlineHelpText } from '../components/InlineHelpText';
+import { PageContainer } from '../components/PageContainer';
 import { env } from '../lib/env';
 import { deriveEnvironmentFromApiUrl } from '../lib/environment';
 
@@ -7,17 +9,15 @@ export function SettingsPage() {
   const deploymentEnvironment = deriveEnvironmentFromApiUrl(env.apiBaseUrl);
 
   return (
-    <Stack spacing={2}>
-      <SectionCard
+    <PageContainer title="Settings" subtitle="Environment configuration and operational posture for this UI.">
+      <CardSection
         title="Environment Configuration"
         subtitle="These values are read from Vite environment variables."
       >
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 6 }}>
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                API Base URL
-              </Typography>
+              <InlineHelpText>API Base URL</InlineHelpText>
               <Typography variant="body1">
                 {env.apiBaseUrl ?? 'Not configured (sample-data mode active)'}
               </Typography>
@@ -25,27 +25,25 @@ export function SettingsPage() {
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
             <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Auth Token
-              </Typography>
+              <InlineHelpText>Auth Token</InlineHelpText>
               <Typography variant="body1">{env.authToken ? 'Configured' : 'Not configured'}</Typography>
             </Paper>
           </Grid>
         </Grid>
-      </SectionCard>
+      </CardSection>
 
-      <SectionCard title="About" subtitle="Application identity and rollout posture.">
-        <Stack spacing={1.25}>
-          <Typography variant="body2">Application: CPX Country Onboarding</Typography>
-          <Typography variant="body2">Build: Enterprise UI shell for snapshot and preview pipeline</Typography>
+      <CardSection title="About" subtitle="Application identity and rollout posture.">
+        <Stack spacing={1.5}>
+          <Typography variant="body1">Application: CPX Country Onboarding</Typography>
+          <Typography variant="body1">Build: Enterprise UI shell for snapshot and preview pipeline</Typography>
           <Stack direction="row" alignItems="center" spacing={1}>
-            <Typography variant="body2">Environment:</Typography>
+            <Typography variant="body1">Environment:</Typography>
             <Chip size="small" label={deploymentEnvironment} color="primary" variant="outlined" />
           </Stack>
         </Stack>
-      </SectionCard>
+      </CardSection>
 
-      <SectionCard
+      <CardSection
         title="Operational Guarantees"
         subtitle="Built-in guardrails aligned to enterprise onboarding standards."
       >
@@ -69,11 +67,11 @@ export function SettingsPage() {
             />
           </ListItem>
         </List>
-      </SectionCard>
+      </CardSection>
 
       <Alert severity="info">
         Configure `VITE_API_BASE_URL` and optional `VITE_AUTH_TOKEN` in `.env` before calling backend endpoints.
       </Alert>
-    </Stack>
+    </PageContainer>
   );
 }

@@ -1,4 +1,5 @@
 import { createTheme } from '@mui/material/styles';
+import { enterpriseDesign } from '../theme/designSystem';
 
 export type AppThemeMode = 'light' | 'dark';
 
@@ -44,19 +45,36 @@ export function createAppTheme(mode: AppThemeMode) {
   return createTheme({
     palette,
     shape: {
-      borderRadius: 12
+      borderRadius: enterpriseDesign.borderRadius
     },
     typography: {
       fontFamily: '"IBM Plex Sans", "Segoe UI", Tahoma, sans-serif',
+      fontSize: enterpriseDesign.typography.body,
       h4: {
+        fontSize: enterpriseDesign.typography.pageTitle,
         fontWeight: 600,
+        lineHeight: 1.3,
         letterSpacing: '-0.01em'
       },
       h5: {
-        fontWeight: 600
+        fontSize: enterpriseDesign.typography.sectionTitle,
+        fontWeight: 500,
+        lineHeight: 1.35
       },
       h6: {
         fontWeight: 600
+      },
+      body1: {
+        fontSize: enterpriseDesign.typography.body,
+        lineHeight: 1.5
+      },
+      body2: {
+        fontSize: enterpriseDesign.typography.body,
+        lineHeight: 1.5
+      },
+      caption: {
+        fontSize: enterpriseDesign.typography.caption,
+        lineHeight: 1.4
       }
     },
     components: {
@@ -101,13 +119,23 @@ export function createAppTheme(mode: AppThemeMode) {
         },
         styleOverrides: {
           root: {
-            textTransform: 'none'
+            textTransform: 'none',
+            borderRadius: enterpriseDesign.borderRadius,
+            minHeight: enterpriseDesign.buttonHeight,
+            fontWeight: 500
+          },
+          sizeSmall: {
+            minHeight: 32
+          },
+          sizeLarge: {
+            minHeight: 40
           }
         }
       },
       MuiOutlinedInput: {
         styleOverrides: {
           root: {
+            borderRadius: enterpriseDesign.borderRadius,
             backgroundColor: isDark ? 'rgba(15, 23, 42, 0.6)' : '#ffffff'
           }
         }

@@ -1,4 +1,5 @@
 import { Box, CircularProgress, Typography } from '@mui/material';
+import { spacingScale } from '../theme/designSystem';
 
 type LoadingStateProps = {
   message?: string;
@@ -16,11 +17,11 @@ export function LoadingState({ message = 'Loading...', minHeight = 180 }: Loadin
         alignItems: 'center',
         justifyContent: 'center',
         flexDirection: 'column',
-        gap: 1.5
+        gap: spacingScale.s12
       }}
     >
       <CircularProgress size={28} aria-label="Loading indicator" />
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body1" color="text.secondary">
         {message}
       </Typography>
     </Box>

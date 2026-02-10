@@ -117,7 +117,7 @@ export function AppShell() {
               sx={(themeValue) => ({
                 mx: 1,
                 my: 0.5,
-                borderRadius: 1.5,
+                borderRadius: '8px',
                 '&.Mui-selected': {
                   backgroundColor:
                     themeValue.palette.mode === 'dark' ? 'rgba(79, 163, 255, 0.2)' : themeValue.palette.primary.light,

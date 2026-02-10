@@ -70,7 +70,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                   p: 1.5,
                   border: '1px solid',
                   borderColor: 'divider',
-                  borderRadius: 2
+                  borderRadius: '8px'
                 }}
                 spacing={0.75}
               >

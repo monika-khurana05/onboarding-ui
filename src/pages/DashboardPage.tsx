@@ -18,7 +18,9 @@ import {
 } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { SectionCard } from '../components/SectionCard';
+import { CardSection } from '../components/CardSection';
+import { InlineHelpText } from '../components/InlineHelpText';
+import { PageContainer } from '../components/PageContainer';
 
 type RecentSnapshot = {
   snapshotId: string;
@@ -69,37 +71,43 @@ export function DashboardPage() {
   }, [search, snapshots]);
 
   return (
-    <Stack spacing={2.5}>
-      <SectionCard title="Quick Start" subtitle="The 3-step CPX onboarding flow.">
+    <PageContainer title="Dashboard" subtitle="Monitor recent snapshots and launch onboarding workflows.">
+      <CardSection title="Quick Start" subtitle="Three-step CPX onboarding flow.">
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Stack spacing={0.75}>
-              <Typography variant="subtitle1">1) Create snapshot</Typography>
-              <Typography variant="body2" color="text.secondary">
+            <Stack spacing={1}>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                1) Create snapshot
+              </Typography>
+              <InlineHelpText>
                 Capture country, capabilities, and workflow into a versioned snapshot.
-              </Typography>
+              </InlineHelpText>
             </Stack>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Stack spacing={0.75}>
-              <Typography variant="subtitle1">2) Preview generation</Typography>
-              <Typography variant="body2" color="text.secondary">
+            <Stack spacing={1}>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                2) Preview generation
+              </Typography>
+              <InlineHelpText>
                 Validate generated files repo-by-repo before automation.
-              </Typography>
+              </InlineHelpText>
             </Stack>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Stack spacing={0.75}>
-              <Typography variant="subtitle1">3) (Later) Create PRs + deploy</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Future phase: open PRs, approvals, and deploy.
+            <Stack spacing={1}>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                3) (Later) Create PRs + deploy
               </Typography>
+              <InlineHelpText>
+                Future phase: open PRs, approvals, and deploy.
+              </InlineHelpText>
             </Stack>
           </Grid>
         </Grid>
-      </SectionCard>
+      </CardSection>
 
-      <SectionCard
+      <CardSection
         title="Recent Snapshots"
         subtitle="Snapshots stored locally from recent onboarding work."
         actions={
@@ -129,11 +137,13 @@ export function DashboardPage() {
           />
 
           {snapshots.length === 0 ? (
-            <Stack spacing={1.5} sx={{ p: 2, border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}>
-              <Typography variant="subtitle1">No snapshots yet</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Start by creating a snapshot to capture country, capability, and workflow details.
+            <Stack spacing={1.5} sx={{ p: 2, border: '1px dashed', borderColor: 'divider', borderRadius: '8px' }}>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                No snapshots yet
               </Typography>
+              <InlineHelpText>
+                Start by creating a snapshot to capture country, capability, and workflow details.
+              </InlineHelpText>
               <Button component={RouterLink} to="/snapshots/new" variant="contained">
                 Create Snapshot
               </Button>
@@ -190,7 +200,7 @@ export function DashboardPage() {
             </Table>
           )}
         </Stack>
-      </SectionCard>
-    </Stack>
+      </CardSection>
+    </PageContainer>
   );
 }

@@ -1,18 +1,20 @@
-import { Button, Stack, Typography } from '@mui/material';
+import { Button, Stack } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
-import { SectionCard } from '../components/SectionCard';
+import { CardSection } from '../components/CardSection';
+import { InlineHelpText } from '../components/InlineHelpText';
+import { PageContainer } from '../components/PageContainer';
 
 export function NotFoundPage() {
   return (
-    <SectionCard title="Page Not Found" subtitle="The route does not exist in the onboarding console.">
-      <Stack spacing={2}>
-        <Typography variant="body2" color="text.secondary">
-          Check the URL or return to the dashboard.
-        </Typography>
-        <Button component={RouterLink} to="/" variant="contained" aria-label="Return to dashboard">
-          Back to Dashboard
-        </Button>
-      </Stack>
-    </SectionCard>
+    <PageContainer title="Page Not Found" subtitle="The requested route does not exist in this onboarding console.">
+      <CardSection title="Route Unavailable" subtitle="Use primary navigation to return to a valid workflow.">
+        <Stack spacing={2}>
+          <InlineHelpText>Check the URL or return to the dashboard.</InlineHelpText>
+          <Button component={RouterLink} to="/" variant="contained" aria-label="Return to dashboard">
+            Back to Dashboard
+          </Button>
+        </Stack>
+      </CardSection>
+    </PageContainer>
   );
 }

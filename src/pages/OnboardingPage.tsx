@@ -1,7 +1,8 @@
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { Alert, Button, Snackbar, Stack } from '@mui/material';
+import { Alert, Button, Snackbar } from '@mui/material';
 import { useMemo, useState } from 'react';
-import { SectionCard } from '../components/SectionCard';
+import { CardSection } from '../components/CardSection';
+import { PageContainer } from '../components/PageContainer';
 import { useCreateOnboardingMutation, useTemplatesQuery } from '../features/countries/hooks';
 import { CountryOnboardingForm } from '../features/onboarding/CountryOnboardingForm';
 import type { CountryOnboardingInput } from '../features/onboarding/schema';
@@ -41,7 +42,10 @@ export function OnboardingPage() {
   };
 
   return (
-    <Stack spacing={2}>
+    <PageContainer
+      title="Country Onboarding"
+      subtitle="Create onboarding payloads through guided inputs or advanced JSON controls."
+    >
       {!env.apiBaseUrl ? (
         <Alert icon={<InfoOutlinedIcon />} severity="info">
           `VITE_API_BASE_URL` is not set. Running in local sample-data mode.
@@ -65,7 +69,7 @@ export function OnboardingPage() {
         <Alert severity="info">Loading template metadata. You can still fill the form now.</Alert>
       ) : null}
 
-      <SectionCard
+      <CardSection
         title="Country Onboarding Request"
         subtitle="Create and validate onboarding payloads through guided fields or advanced JSON."
       >
@@ -75,7 +79,7 @@ export function OnboardingPage() {
           submitError={submitError}
           onSubmit={submit}
         />
-      </SectionCard>
+      </CardSection>
 
       <Snackbar
         open={Boolean(successMessage)}
@@ -87,6 +91,6 @@ export function OnboardingPage() {
           {successMessage}
         </Alert>
       </Snackbar>
-    </Stack>
+    </PageContainer>
   );
 }
