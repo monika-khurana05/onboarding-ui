@@ -5,10 +5,12 @@ import {
   Chip,
   IconButton,
   MenuItem,
+  Paper,
   Stack,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -140,94 +142,96 @@ export function WorkflowEditor({ value, onChange, helperText, showErrors = true 
 
       <Stack spacing={1}>
         <Typography variant="subtitle2">Transitions</Typography>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>From</TableCell>
-              <TableCell>To</TableCell>
-              <TableCell>On Event</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-          {value.transitions.map((transition, index) => {
-            const errors = transitionErrors[index];
-            const fromError = showErrors && !errors?.from;
-            const toError = showErrors && !errors?.to;
-            const eventError = showErrors && !errors?.onEvent;
-            return (
-              <TableRow key={`${transition.from}-${transition.to}-${index}`}>
-                <TableCell>
-                  <TextField
-                    select
-                    size="small"
-                    value={transition.from}
-                    onChange={(event) => handleUpdateTransition(index, { from: event.target.value })}
-                    error={fromError}
-                    helperText={fromError ? 'Select a state' : ' '}
-                    fullWidth
-                  >
-                    {states.map((state) => (
-                      <MenuItem key={state} value={state}>
-                        {state}
-                      </MenuItem>
-                      ))}
-                    </TextField>
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                    select
-                    size="small"
-                    value={transition.to}
-                    onChange={(event) => handleUpdateTransition(index, { to: event.target.value })}
-                    error={toError}
-                    helperText={toError ? 'Select a state' : ' '}
-                    fullWidth
-                  >
-                      {states.map((state) => (
-                        <MenuItem key={state} value={state}>
-                          {state}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                    size="small"
-                    value={transition.onEvent}
-                    onChange={(event) => handleUpdateTransition(index, { onEvent: event.target.value })}
-                    error={eventError}
-                    helperText={eventError ? 'Event required' : ' '}
-                    fullWidth
-                  />
-                  </TableCell>
-                  <TableCell>
-                    <IconButton
-                      aria-label="Remove transition"
-                      onClick={() =>
-                        onChange({
-                          ...value,
-                          transitions: value.transitions.filter((_, rowIndex) => rowIndex !== index)
-                        })
-                      }
-                    >
-                      <DeleteOutlineIcon />
-                    </IconButton>
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell>From</TableCell>
+                <TableCell>To</TableCell>
+                <TableCell>On Event</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {value.transitions.map((transition, index) => {
+                const errors = transitionErrors[index];
+                const fromError = showErrors && !errors?.from;
+                const toError = showErrors && !errors?.to;
+                const eventError = showErrors && !errors?.onEvent;
+                return (
+                  <TableRow key={`${transition.from}-${transition.to}-${index}`}>
+                    <TableCell>
+                      <TextField
+                        select
+                        size="small"
+                        value={transition.from}
+                        onChange={(event) => handleUpdateTransition(index, { from: event.target.value })}
+                        error={fromError}
+                        helperText={fromError ? 'Select a state' : ' '}
+                        fullWidth
+                      >
+                        {states.map((state) => (
+                          <MenuItem key={state} value={state}>
+                            {state}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        select
+                        size="small"
+                        value={transition.to}
+                        onChange={(event) => handleUpdateTransition(index, { to: event.target.value })}
+                        error={toError}
+                        helperText={toError ? 'Select a state' : ' '}
+                        fullWidth
+                      >
+                        {states.map((state) => (
+                          <MenuItem key={state} value={state}>
+                            {state}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        size="small"
+                        value={transition.onEvent}
+                        onChange={(event) => handleUpdateTransition(index, { onEvent: event.target.value })}
+                        error={eventError}
+                        helperText={eventError ? 'Event required' : ' '}
+                        fullWidth
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <IconButton
+                        aria-label="Remove transition"
+                        onClick={() =>
+                          onChange({
+                            ...value,
+                            transitions: value.transitions.filter((_, rowIndex) => rowIndex !== index)
+                          })
+                        }
+                      >
+                        <DeleteOutlineIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {value.transitions.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4}>
+                    <Typography variant="body2" color="text.secondary">
+                      No transitions configured yet.
+                    </Typography>
                   </TableCell>
                 </TableRow>
-              );
-            })}
-            {value.transitions.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4}>
-                  <Typography variant="body2" color="text.secondary">
-                    No transitions configured yet.
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
+              ) : null}
+            </TableBody>
+          </Table>
+        </TableContainer>
         <Button
           variant="outlined"
           startIcon={<AddIcon />}

@@ -18,7 +18,7 @@ type CountryTableProps = {
 export function CountryTable({ countries }: CountryTableProps) {
   return (
     <TableContainer component={Paper} variant="outlined">
-      <Table aria-label="Countries table">
+      <Table aria-label="Countries table" stickyHeader>
         <TableHead>
           <TableRow>
             <TableCell>Country</TableCell>

@@ -1,6 +1,8 @@
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { Box, IconButton, Stack } from '@mui/material';
-import { useMemo } from 'react';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Box, Collapse, IconButton, Stack } from '@mui/material';
+import { useMemo, useState } from 'react';
 import { JsonAdvancedEditor } from './JsonAdvancedEditor';
 
 type JsonMonacoPanelProps = {
@@ -12,6 +14,7 @@ type JsonMonacoPanelProps = {
   showCopy?: boolean;
   helperText?: string;
   onCopyError?: (error: unknown) => void;
+  defaultExpanded?: boolean;
 };
 
 function stringifyValue(value: unknown) {
@@ -26,8 +29,10 @@ export function JsonMonacoPanel({
   pretty,
   showCopy = true,
   helperText,
-  onCopyError
+  onCopyError,
+  defaultExpanded = true
 }: JsonMonacoPanelProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const serializedValue = useMemo(() => {
     if (typeof value === 'string') {
       if (readOnly && (pretty ?? true)) {
@@ -52,23 +57,31 @@ export function JsonMonacoPanel({
 
   return (
     <Stack spacing={1}>
-      {showCopy ? (
-        <Stack direction="row" justifyContent="flex-end">
+      <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
+        {showCopy ? (
           <IconButton aria-label="Copy JSON" onClick={() => void handleCopy()}>
             <ContentCopyIcon fontSize="small" />
           </IconButton>
-        </Stack>
-      ) : null}
-      <Box>
-        <JsonAdvancedEditor
-          ariaLabel={ariaLabel}
-          value={serializedValue}
-          onChange={readOnly ? undefined : onChange}
-          readOnly={readOnly}
-          helperText={helperText}
-          hideHelper={!helperText}
-        />
-      </Box>
+        ) : null}
+        <IconButton
+          aria-label={expanded ? 'Collapse JSON panel' : 'Expand JSON panel'}
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+        </IconButton>
+      </Stack>
+      <Collapse in={expanded}>
+        <Box>
+          <JsonAdvancedEditor
+            ariaLabel={ariaLabel}
+            value={serializedValue}
+            onChange={readOnly ? undefined : onChange}
+            readOnly={readOnly}
+            helperText={helperText}
+            hideHelper={!helperText}
+          />
+        </Box>
+      </Collapse>
     </Stack>
   );
 }

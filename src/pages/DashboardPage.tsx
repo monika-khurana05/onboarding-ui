@@ -7,10 +7,12 @@ import {
   Button,
   Grid,
   InputAdornment,
+  Paper,
   Stack,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -151,53 +153,55 @@ export function DashboardPage() {
           ) : filteredSnapshots.length === 0 ? (
             <Alert severity="warning">No snapshots match your search.</Alert>
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Country Code</TableCell>
-                  <TableCell>Snapshot ID</TableCell>
-                  <TableCell>Version</TableCell>
-                  <TableCell>Created At</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredSnapshots.map((snapshot) => (
-                  <TableRow key={snapshot.snapshotId}>
-                    <TableCell>{snapshot.countryCode}</TableCell>
-                    <TableCell>{snapshot.snapshotId}</TableCell>
-                    <TableCell>{typeof snapshot.version === 'number' ? snapshot.version : '-'}</TableCell>
-                    <TableCell>
-                      {snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString() : 'n/a'}
-                    </TableCell>
-                    <TableCell>
-                      <Stack direction="row" spacing={1}>
-                        <Button
-                          component={RouterLink}
-                          to={`/snapshots/${encodeURIComponent(snapshot.snapshotId)}`}
-                          size="small"
-                          variant="outlined"
-                          startIcon={<LaunchIcon />}
-                        >
-                          View Snapshot
-                        </Button>
-                        <Button
-                          component={RouterLink}
-                          to={`/generate/preview?snapshotId=${encodeURIComponent(snapshot.snapshotId)}${
-                            typeof snapshot.version === 'number' ? `&version=${snapshot.version}` : ''
-                          }`}
-                          size="small"
-                          variant="text"
-                          startIcon={<PlayArrowOutlinedIcon />}
-                        >
-                          Preview Generation
-                        </Button>
-                      </Stack>
-                    </TableCell>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Country Code</TableCell>
+                    <TableCell>Snapshot ID</TableCell>
+                    <TableCell>Version</TableCell>
+                    <TableCell>Created At</TableCell>
+                    <TableCell>Actions</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {filteredSnapshots.map((snapshot) => (
+                    <TableRow key={snapshot.snapshotId}>
+                      <TableCell>{snapshot.countryCode}</TableCell>
+                      <TableCell>{snapshot.snapshotId}</TableCell>
+                      <TableCell>{typeof snapshot.version === 'number' ? snapshot.version : '-'}</TableCell>
+                      <TableCell>
+                        {snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString() : 'n/a'}
+                      </TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={1}>
+                          <Button
+                            component={RouterLink}
+                            to={`/snapshots/${encodeURIComponent(snapshot.snapshotId)}`}
+                            size="small"
+                            variant="outlined"
+                            startIcon={<LaunchIcon />}
+                          >
+                            View Snapshot
+                          </Button>
+                          <Button
+                            component={RouterLink}
+                            to={`/generate/preview?snapshotId=${encodeURIComponent(snapshot.snapshotId)}${
+                              typeof snapshot.version === 'number' ? `&version=${snapshot.version}` : ''
+                            }`}
+                            size="small"
+                            variant="text"
+                            startIcon={<PlayArrowOutlinedIcon />}
+                          >
+                            Preview Generation
+                          </Button>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </Stack>
       </CardSection>

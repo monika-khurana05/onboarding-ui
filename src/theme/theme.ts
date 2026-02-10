@@ -124,7 +124,24 @@ export const darkTheme = createTheme({
         root: {
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: enterpriseDesign.borderRadius,
-          backgroundColor: '#171B21'
+          backgroundColor: '#171B21',
+          maxHeight: 'min(60vh, 560px)',
+          overflow: 'auto'
+        }
+      }
+    },
+    MuiTable: {
+      defaultProps: {
+        stickyHeader: true
+      },
+      styleOverrides: {
+        root: {
+          '& tbody .MuiTableRow-root:nth-of-type(odd)': {
+            backgroundColor: 'rgba(255,255,255,0.02)'
+          },
+          '& tbody .MuiTableRow-root:hover': {
+            backgroundColor: 'rgba(255,255,255,0.05)'
+          }
         }
       }
     },
@@ -132,7 +149,7 @@ export const darkTheme = createTheme({
       styleOverrides: {
         root: {
           '&.MuiTableRow-hover:hover': {
-            backgroundColor: 'rgba(230,237,243,0.04)'
+            backgroundColor: 'rgba(255,255,255,0.05)'
           }
         }
       }
@@ -144,6 +161,11 @@ export const darkTheme = createTheme({
           color: '#E6EDF3',
           fontWeight: 600,
           borderBottomColor: 'rgba(255,255,255,0.16)'
+        },
+        stickyHeader: {
+          backgroundColor: '#20242D',
+          color: '#E6EDF3',
+          zIndex: 2
         },
         root: {
           color: '#E6EDF3',

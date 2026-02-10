@@ -113,7 +113,20 @@ export function createAppTheme(mode: AppThemeMode) {
           root: {
             border: isDark ? '1px solid rgba(255,255,255,0.1)' : undefined,
             borderRadius: enterpriseDesign.borderRadius,
-            backgroundColor: isDark ? '#171B21' : undefined
+            backgroundColor: isDark ? '#171B21' : undefined,
+            overflow: 'auto'
+          }
+        }
+      },
+      MuiTable: {
+        styleOverrides: {
+          root: {
+            '& tbody .MuiTableRow-root:nth-of-type(odd)': {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : undefined
+            },
+            '& tbody .MuiTableRow-root:hover': {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : undefined
+            }
           }
         }
       },
@@ -121,7 +134,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: {
             '&.MuiTableRow-hover:hover': {
-              backgroundColor: isDark ? 'rgba(230,237,243,0.04)' : undefined
+              backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : undefined
             }
           }
         }
@@ -133,6 +146,11 @@ export function createAppTheme(mode: AppThemeMode) {
             color: isDark ? '#E6EDF3' : '#1f2a44',
             fontWeight: 600,
             borderBottomColor: isDark ? 'rgba(255,255,255,0.16)' : '#e2e8f0'
+          },
+          stickyHeader: {
+            backgroundColor: isDark ? '#20242D' : '#e9f1f9',
+            color: isDark ? '#E6EDF3' : '#1f2a44',
+            zIndex: 2
           },
           root: {
             color: isDark ? '#E6EDF3' : undefined,

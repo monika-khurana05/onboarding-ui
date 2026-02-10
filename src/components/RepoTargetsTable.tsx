@@ -6,11 +6,13 @@ import {
   FormControlLabel,
   IconButton,
   MenuItem,
+  Paper,
   Stack,
   Switch,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -146,128 +148,130 @@ export function RepoTargetsTable({
 
   return (
     <Stack spacing={2}>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            {showTargetColumn ? <TableCell>Target</TableCell> : null}
-            <TableCell>Repo Slug</TableCell>
-            <TableCell>Base Branch</TableCell>
-            <TableCell>Pack Version</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {targets.map((target, index) => {
-            const enabled = target.enabled !== false;
-            const repoSlugRequired = enabled && Boolean(target.repoSlug.trim());
-            const baseBranchError = enabled && target.repoSlug.trim() && !target.baseBranch.trim();
-            return (
-              <TableRow key={target.id}>
-                {showTargetColumn ? (
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small" stickyHeader>
+          <TableHead>
+            <TableRow>
+              {showTargetColumn ? <TableCell>Target</TableCell> : null}
+              <TableCell>Repo Slug</TableCell>
+              <TableCell>Base Branch</TableCell>
+              <TableCell>Pack Version</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {targets.map((target, index) => {
+              const enabled = target.enabled !== false;
+              const repoSlugRequired = enabled && Boolean(target.repoSlug.trim());
+              const baseBranchError = enabled && target.repoSlug.trim() && !target.baseBranch.trim();
+              return (
+                <TableRow key={target.id}>
+                  {showTargetColumn ? (
+                    <TableCell>
+                      <Stack spacing={0.5}>
+                        {enableToggle ? (
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={enabled}
+                                onChange={(_, checked) => handleUpdate(index, { enabled: checked })}
+                              />
+                            }
+                            label={target.label ?? 'Target'}
+                          />
+                        ) : (
+                          <Typography variant="subtitle2">{target.label ?? 'Target'}</Typography>
+                        )}
+                        {target.description ? (
+                          <Typography variant="caption" color="text.secondary">
+                            {target.description}
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                    </TableCell>
+                  ) : null}
                   <TableCell>
-                    <Stack spacing={0.5}>
-                      {enableToggle ? (
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={enabled}
-                              onChange={(_, checked) => handleUpdate(index, { enabled: checked })}
-                            />
-                          }
-                          label={target.label ?? 'Target'}
-                        />
+                    <TextField
+                      size="small"
+                      fullWidth
+                      placeholder={target.label ?? 'repo-slug'}
+                      value={target.repoSlug}
+                      onChange={(event) => handleRepoSlugChange(index, event.target.value)}
+                      disabled={!enabled}
+                      error={shouldShowErrors && enabled && !repoSlugRequired}
+                      helperText={shouldShowErrors && enabled && !repoSlugRequired ? 'Required' : ' '}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      value={target.baseBranch}
+                      onChange={(event) => handleUpdate(index, { baseBranch: event.target.value })}
+                      disabled={!enabled}
+                      error={shouldShowErrors && baseBranchError}
+                      helperText={shouldShowErrors && baseBranchError ? 'Required' : ' '}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      {target.packOptions && target.packOptions.length > 0 ? (
+                        <TextField
+                          select
+                          size="small"
+                          fullWidth
+                          value={target.packVersion}
+                          onChange={(event) => handleUpdate(index, { packVersion: event.target.value })}
+                          disabled={!enabled}
+                        >
+                          {target.packOptions.map((option) => (
+                            <MenuItem key={option} value={option}>
+                              {option}
+                            </MenuItem>
+                          ))}
+                        </TextField>
                       ) : (
-                        <Typography variant="subtitle2">{target.label ?? 'Target'}</Typography>
+                        <TextField
+                          size="small"
+                          fullWidth
+                          value={target.packVersion}
+                          onChange={(event) => handleUpdate(index, { packVersion: event.target.value })}
+                          disabled={!enabled}
+                          placeholder="Optional"
+                        />
                       )}
-                      {target.description ? (
-                        <Typography variant="caption" color="text.secondary">
-                          {target.description}
-                        </Typography>
+                      {onDiscoverPacks ? (
+                        <Tooltip title="Discover packs">
+                          <span>
+                            <IconButton
+                              aria-label="Discover packs"
+                              onClick={() => void handleDiscoverPacks(index)}
+                              disabled={!enabled || target.loadingPacks}
+                            >
+                              <SearchIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      ) : null}
+                      {allowRemove ? (
+                        <IconButton
+                          aria-label="Remove repo target"
+                          onClick={() =>
+                            onRemoveTarget
+                              ? onRemoveTarget(index)
+                              : onChange(targets.filter((_, rowIndex) => rowIndex !== index))
+                          }
+                        >
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
                       ) : null}
                     </Stack>
                   </TableCell>
-                ) : null}
-                <TableCell>
-                  <TextField
-                    size="small"
-                    fullWidth
-                    placeholder={target.label ?? 'repo-slug'}
-                    value={target.repoSlug}
-                    onChange={(event) => handleRepoSlugChange(index, event.target.value)}
-                    disabled={!enabled}
-                    error={shouldShowErrors && enabled && !repoSlugRequired}
-                    helperText={shouldShowErrors && enabled && !repoSlugRequired ? 'Required' : ' '}
-                  />
-                </TableCell>
-                <TableCell>
-                  <TextField
-                    size="small"
-                    fullWidth
-                    value={target.baseBranch}
-                    onChange={(event) => handleUpdate(index, { baseBranch: event.target.value })}
-                    disabled={!enabled}
-                    error={shouldShowErrors && baseBranchError}
-                    helperText={shouldShowErrors && baseBranchError ? 'Required' : ' '}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    {target.packOptions && target.packOptions.length > 0 ? (
-                      <TextField
-                        select
-                        size="small"
-                        fullWidth
-                        value={target.packVersion}
-                        onChange={(event) => handleUpdate(index, { packVersion: event.target.value })}
-                        disabled={!enabled}
-                      >
-                        {target.packOptions.map((option) => (
-                          <MenuItem key={option} value={option}>
-                            {option}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-                    ) : (
-                      <TextField
-                        size="small"
-                        fullWidth
-                        value={target.packVersion}
-                        onChange={(event) => handleUpdate(index, { packVersion: event.target.value })}
-                        disabled={!enabled}
-                        placeholder="Optional"
-                      />
-                    )}
-                    {onDiscoverPacks ? (
-                      <Tooltip title="Discover packs">
-                        <span>
-                          <IconButton
-                            aria-label="Discover packs"
-                            onClick={() => void handleDiscoverPacks(index)}
-                            disabled={!enabled || target.loadingPacks}
-                          >
-                            <SearchIcon />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    ) : null}
-                    {allowRemove ? (
-                      <IconButton
-                        aria-label="Remove repo target"
-                        onClick={() =>
-                          onRemoveTarget
-                            ? onRemoveTarget(index)
-                            : onChange(targets.filter((_, rowIndex) => rowIndex !== index))
-                        }
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    ) : null}
-                  </Stack>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
       {allowAdd ? (
         <Button variant="outlined" onClick={handleAddRow}>
           {addLabel ?? 'Add Repo Target'}

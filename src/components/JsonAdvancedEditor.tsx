@@ -27,6 +27,7 @@ export function JsonAdvancedEditor({
 }: JsonAdvancedEditorProps) {
   const theme = useTheme();
   const monacoTheme = theme.palette.mode === 'dark' ? 'vs-dark' : 'light';
+  const monacoFontFamily = '"IBM Plex Mono", "Cascadia Mono", "Courier New", monospace';
   const fallbackEditor = useMemo(
     () => (
       <TextField
@@ -36,11 +37,18 @@ export function JsonAdvancedEditor({
         value={value}
         label={label ?? 'JSON'}
         onChange={(event) => onChange?.(event.target.value)}
-        InputProps={{ readOnly }}
+        InputProps={{
+          readOnly,
+          sx: {
+            fontFamily: monacoFontFamily,
+            fontSize: 13,
+            lineHeight: 1.45
+          }
+        }}
         inputProps={{ 'aria-label': ariaLabel }}
       />
     ),
-    [ariaLabel, label, onChange, readOnly, value]
+    [ariaLabel, label, monacoFontFamily, onChange, readOnly, value]
   );
 
   return (
@@ -54,7 +62,9 @@ export function JsonAdvancedEditor({
           theme={monacoTheme}
           options={{
             minimap: { enabled: false },
+            fontFamily: monacoFontFamily,
             fontSize: 13,
+            lineHeight: 20,
             scrollBeyondLastLine: false,
             automaticLayout: true,
             tabSize: 2,

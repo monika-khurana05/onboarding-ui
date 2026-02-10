@@ -96,7 +96,7 @@ export function WorkflowRunsPage() {
       >
         {filteredRuns.length ? (
           <TableContainer component={Paper} variant="outlined">
-            <Table aria-label="Workflow runs table">
+            <Table aria-label="Workflow runs table" stickyHeader>
               <TableHead>
                 <TableRow>
                   <TableCell>Run ID</TableCell>

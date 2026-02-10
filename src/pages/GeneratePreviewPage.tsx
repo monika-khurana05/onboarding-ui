@@ -15,6 +15,7 @@ import {
   Paper,
   Stack,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -629,20 +630,21 @@ export function GeneratePreviewPage() {
                                           <AccordionDetails>
                                             <Stack spacing={1}>
                                               <Stack direction="row" justifyContent="flex-end">
-                                                <Button
-                                                  size="small"
-                                                  variant="text"
-                                                  startIcon={<ContentCopyIcon fontSize="small" />}
-                                                  onClick={async () => {
-                                                    try {
-                                                      await navigator.clipboard.writeText(file.previewText ?? '');
-                                                    } catch {
-                                                      showError('Copy failed for preview text.');
-                                                    }
-                                                  }}
-                                                >
-                                                  Copy Preview
-                                                </Button>
+                                                <Tooltip title="Copy preview text">
+                                                  <IconButton
+                                                    size="small"
+                                                    aria-label={`Copy preview for ${file.path}`}
+                                                    onClick={async () => {
+                                                      try {
+                                                        await navigator.clipboard.writeText(file.previewText ?? '');
+                                                      } catch {
+                                                        showError('Copy failed for preview text.');
+                                                      }
+                                                    }}
+                                                  >
+                                                    <ContentCopyIcon fontSize="small" />
+                                                  </IconButton>
+                                                </Tooltip>
                                               </Stack>
                                               <Box
                                                 component="pre"
@@ -658,6 +660,8 @@ export function GeneratePreviewPage() {
                                                   borderRadius: '8px',
                                                   fontSize: 12,
                                                   fontFamily: '"IBM Plex Mono", "Courier New", monospace',
+                                                  lineHeight: 1.5,
+                                                  color: 'text.primary',
                                                   whiteSpace: 'pre-wrap'
                                                 }}
                                               >
