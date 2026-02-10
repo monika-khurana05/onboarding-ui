@@ -1,6 +1,18 @@
 import FilterAltOffOutlinedIcon from '@mui/icons-material/FilterAltOffOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
+import {
+  Button,
+  MenuItem,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField
+} from '@mui/material';
 import { useMemo, useState } from 'react';
 import { CardSection } from '../components/CardSection';
 import { EmptyState } from '../components/EmptyState';
@@ -10,9 +22,6 @@ import { SkeletonState } from '../components/SkeletonState';
 import { StatusChip } from '../components/StatusChip';
 import { useWorkflowRunsQuery } from '../features/countries/hooks';
 
-import { Button } from '@ui/Button';
-import { Input } from '@ui/Input';
-import { Card } from '@ui/Card';
 type RunFilter = 'all' | 'running' | 'success' | 'failed';
 
 export function WorkflowRunsPage() {
@@ -69,7 +78,7 @@ export function WorkflowRunsPage() {
         subtitle="Filter pipeline executions by current status."
         actions={
           <Stack direction="row" spacing={1}>
-            <Input
+            <TextField
               select
               size="small"
               value={statusFilter}
@@ -82,7 +91,7 @@ export function WorkflowRunsPage() {
               <MenuItem value="running">Running</MenuItem>
               <MenuItem value="success">Success</MenuItem>
               <MenuItem value="failed">Failed</MenuItem>
-            </Input>
+            </TextField>
             <Button
               variant="outlined"
               startIcon={<RefreshIcon />}
@@ -95,7 +104,7 @@ export function WorkflowRunsPage() {
         }
       >
         {filteredRuns.length ? (
-          <TableContainer component={Card} variant="outlined">
+          <TableContainer component={Paper} variant="outlined">
             <Table aria-label="Workflow runs table" stickyHeader>
               <TableHead>
                 <TableRow>
@@ -140,5 +149,3 @@ export function WorkflowRunsPage() {
     </PageContainer>
   );
 }
-
-

@@ -3,7 +3,23 @@ import DownloadIcon from '@mui/icons-material/Download';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FolderOffOutlinedIcon from '@mui/icons-material/FolderOffOutlined';
 import PreviewIcon from '@mui/icons-material/Preview';
-import { Accordion, AccordionDetails, AccordionSummary, Alert, AlertTitle, Box, Grid, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Alert,
+  AlertTitle,
+  Box,
+  Button,
+  Chip,
+  Grid,
+  IconButton,
+  Paper,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography
+} from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -24,10 +40,6 @@ import { SkeletonState } from '../components/SkeletonState';
 import type { RepoDefaultsEntry, RepoTarget } from '../components/RepoTargetsTable';
 import { useGlobalError } from '../app/GlobalErrorContext';
 
-import { Button } from '@ui/Button';
-import { Input } from '@ui/Input';
-import { Card } from '@ui/Card';
-import { Badge } from '@ui/Badge';
 type PreviewFile = {
   path: string;
   sizeBytes?: number;
@@ -567,12 +579,12 @@ export function GeneratePreviewPage() {
         }
       >
         <Stack spacing={3}>
-          <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
             <Stack spacing={2.5}>
               <Typography variant="subtitle1">Snapshot Reference</Typography>
               <Grid container spacing={2}>
                 <Grid size={{ xs: 12, md: 4 }}>
-                  <Input
+                  <TextField
                     fullWidth
                     label="Snapshot ID"
                     placeholder="snap-gb-2026-01"
@@ -587,7 +599,7 @@ export function GeneratePreviewPage() {
                   />
                 </Grid>
                 <Grid size={{ xs: 12, md: 3 }}>
-                  <Input
+                  <TextField
                     fullWidth
                     label="Version (optional)"
                     placeholder="3"
@@ -600,8 +612,8 @@ export function GeneratePreviewPage() {
                 </Grid>
               </Grid>
             </Stack>
-          </Card>
-          <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+          </Paper>
+          <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
             <Stack spacing={1.5}>
               <Typography variant="subtitle1">Purpose</Typography>
               <InlineHelpText>
@@ -613,7 +625,7 @@ export function GeneratePreviewPage() {
                 <Alert severity="warning">Snapshot could not be loaded. Repo targets can be filled manually.</Alert>
               ) : null}
             </Stack>
-          </Card>
+          </Paper>
         </Stack>
       </CardSection>
 
@@ -622,7 +634,7 @@ export function GeneratePreviewPage() {
         subtitle="Map repository slugs, branches, and optional pack versions for this preview run."
       >
         <Stack spacing={3}>
-          <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
             <Stack spacing={2}>
               <Typography variant="subtitle1">Target Mapping</Typography>
               <Typography variant="body2" color="text.secondary">
@@ -639,7 +651,7 @@ export function GeneratePreviewPage() {
                 showErrors={false}
               />
             </Stack>
-          </Card>
+          </Paper>
           {!repoTargetsValid ? (
             <Alert severity="warning">Add at least one repo slug before generating preview.</Alert>
           ) : null}
@@ -670,7 +682,7 @@ export function GeneratePreviewPage() {
               {normalizedPreview.repoResults.length ? (
                 normalizedPreview.repoResults.map((repo) => (
                   <Grid key={repo.repoSlug} size={{ xs: 12, md: 6 }}>
-                    <Card variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+                    <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
                       <Stack spacing={1.5}>
                         <Stack direction="row" justifyContent="space-between" alignItems="center">
                           <Stack spacing={0.5}>
@@ -681,9 +693,9 @@ export function GeneratePreviewPage() {
                               Pack: {repo.packVersion ?? 'n/a'} | Files: {repo.files.length}
                             </InlineHelpText>
                           </Stack>
-                          <Badge
+                          <Chip
                             label={repo.status}
-                            tone={repo.status === 'FAILED' ? 'error' : repo.status === 'SUCCESS' ? 'success' : 'muted'}
+                            color={repo.status === 'FAILED' ? 'error' : repo.status === 'SUCCESS' ? 'success' : 'default'}
                             variant={repo.status === 'UNKNOWN' ? 'outlined' : 'filled'}
                             size="small"
                           />
@@ -696,7 +708,7 @@ export function GeneratePreviewPage() {
                             <Stack spacing={1.5}>
                               {repo.files.length ? (
                                 repo.files.map((file, fileIndex) => (
-                                  <Card
+                                  <Paper
                                     key={`${repo.repoSlug}-${file.path}-${fileIndex}`}
                                     variant="outlined"
                                     sx={{ p: 1.5, borderRadius: 1 }}
@@ -759,8 +771,12 @@ export function GeneratePreviewPage() {
                                                 sx={{
                                                   m: 0,
                                                   p: 1.5,
-                                                  backgroundColor: 'var(--surface2)',
-                                                  border: '1px solid var(--border)',
+                                                  backgroundColor: (theme) =>
+                                                    theme.palette.mode === 'dark'
+                                                      ? 'rgba(15, 23, 42, 0.6)'
+                                                      : 'grey.100',
+                                                  border: '1px solid',
+                                                  borderColor: 'divider',
                                                   borderRadius: 1,
                                                   fontSize: 12,
                                                   fontFamily: '"IBM Plex Mono", "Courier New", monospace',
@@ -778,7 +794,7 @@ export function GeneratePreviewPage() {
                                         <InlineHelpText>No preview text returned.</InlineHelpText>
                                       )}
                                     </Stack>
-                                  </Card>
+                                  </Paper>
                                 ))
                               ) : (
                                 <InlineHelpText>No files returned for this repo.</InlineHelpText>
@@ -787,7 +803,7 @@ export function GeneratePreviewPage() {
                           </AccordionDetails>
                         </Accordion>
                       </Stack>
-                    </Card>
+                    </Paper>
                   </Grid>
                 ))
               ) : (
@@ -808,7 +824,7 @@ export function GeneratePreviewPage() {
             {normalizedPreview.errorGroups.length ? (
               <Stack spacing={1.5}>
                 {normalizedPreview.errorGroups.map((group) => (
-                  <Card key={group.repoSlug} variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
+                  <Paper key={group.repoSlug} variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
                     <Typography variant="body1" sx={{ fontWeight: 600 }}>
                       {group.repoSlug}
                     </Typography>
@@ -828,7 +844,7 @@ export function GeneratePreviewPage() {
                         </Alert>
                       ))}
                     </Stack>
-                  </Card>
+                  </Paper>
                 ))}
               </Stack>
             ) : (
@@ -868,6 +884,3 @@ export function GeneratePreviewPage() {
     </PageContainer>
   );
 }
-
-
-

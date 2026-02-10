@@ -1,11 +1,9 @@
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
-import { Box, Stack, Typography } from '@mui/material';
+import { Box, Button, Paper, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { enterpriseDesign, spacingScale } from '../theme/designSystem';
 import { InlineHelpText } from './InlineHelpText';
 
-import { Button } from '@ui/Button';
-import { Card } from '@ui/Card';
 type EmptyStateProps = {
   title: string;
   description: string;
@@ -24,30 +22,40 @@ export function EmptyState({
   action
 }: EmptyStateProps) {
   return (
-    <Card
+    <Paper
       role="status"
       variant="outlined"
-      className="border-2 border-dashed border-border"
       sx={{
         p: `${enterpriseDesign.cardPadding.mobile}px`,
+        borderStyle: 'dashed',
+        borderWidth: 2,
+        borderColor: 'divider',
         borderRadius: `${enterpriseDesign.borderRadius}px`
       }}
     >
       <Stack spacing={spacingScale.s12} alignItems="center" textAlign="center">
-        <Box className="flex h-11 w-11 items-center justify-center rounded-full bg-surface2">
+        <Box
+          sx={{
+            width: 44,
+            height: 44,
+            borderRadius: '50%',
+            backgroundColor: 'action.hover',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
           {icon}
         </Box>
         <Typography variant="h5">{title}</Typography>
-        <InlineHelpText className="!text-muted">{description}</InlineHelpText>
+        <InlineHelpText>{description}</InlineHelpText>
         {action ?? null}
         {!action && actionLabel && onAction ? (
-          <Button variant="primary" onClick={onAction} aria-label={actionLabel}>
+          <Button variant="outlined" onClick={onAction} aria-label={actionLabel}>
             {actionLabel}
           </Button>
         ) : null}
       </Stack>
-    </Card>
+    </Paper>
   );
 }
-
-

@@ -1,9 +1,8 @@
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { Alert, AlertTitle, Stack, Typography } from '@mui/material';
+import { Alert, AlertTitle, Button, Stack, Typography } from '@mui/material';
 import { enterpriseDesign, spacingScale } from '../theme/designSystem';
 
-import { Button } from '@ui/Button';
 type ErrorStateProps = {
   title?: string;
   message?: string;
@@ -42,5 +41,3 @@ export function ErrorState({
     </Alert>
   );
 }
-
-

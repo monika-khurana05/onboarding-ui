@@ -77,5 +77,3 @@ export function useGlobalError() {
   }
   return context;
 }
-
-

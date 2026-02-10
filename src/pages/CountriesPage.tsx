@@ -2,7 +2,7 @@ import PublicOffOutlinedIcon from '@mui/icons-material/PublicOffOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
 import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
-import { InputAdornment, Stack } from '@mui/material';
+import { Button, InputAdornment, Stack, TextField } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { CardSection } from '../components/CardSection';
 import { EmptyState } from '../components/EmptyState';
@@ -12,8 +12,6 @@ import { SkeletonState } from '../components/SkeletonState';
 import { CountryTable } from '../features/countries/CountryTable';
 import { useCountriesQuery } from '../features/countries/hooks';
 
-import { Button } from '@ui/Button';
-import { Input } from '@ui/Input';
 export function CountriesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const countriesQuery = useCountriesQuery();
@@ -84,7 +82,7 @@ export function CountriesPage() {
         }
       >
         <Stack spacing={2}>
-          <Input
+          <TextField
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             label="Search countries"
@@ -114,5 +112,3 @@ export function CountriesPage() {
     </PageContainer>
   );
 }
-
-

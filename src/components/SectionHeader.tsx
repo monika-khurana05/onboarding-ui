@@ -28,5 +28,3 @@ export function SectionHeader({ title, subtitle, actions, level = 'section' }: S
     </Stack>
   );
 }
-
-

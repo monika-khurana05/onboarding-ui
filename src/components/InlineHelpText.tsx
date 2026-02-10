@@ -5,12 +5,12 @@ type InlineHelpTextProps = Omit<TypographyProps, 'variant' | 'color' | 'children
   children: ReactNode;
 };
 
-export function InlineHelpText({ children, sx, className, ...rest }: InlineHelpTextProps) {
+export function InlineHelpText({ children, sx, ...rest }: InlineHelpTextProps) {
   return (
     <Typography
       variant="caption"
+      color="text.secondary"
       {...rest}
-      className={['text-muted', className].filter(Boolean).join(' ')}
       sx={{
         display: 'block',
         ...sx
@@ -20,5 +20,3 @@ export function InlineHelpText({ children, sx, className, ...rest }: InlineHelpT
     </Typography>
   );
 }
-
-

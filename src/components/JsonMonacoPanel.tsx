@@ -85,5 +85,3 @@ export function JsonMonacoPanel({
     </Stack>
   );
 }
-
-

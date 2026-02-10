@@ -1,12 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import AddIcon from '@mui/icons-material/Add';
-import { Alert, CircularProgress, Stack } from '@mui/material';
+import { Alert, Button, CircularProgress, Stack, TextField } from '@mui/material';
 import { useForm } from 'react-hook-form';
 import { snapshotVersionDefaults } from './defaultValues';
 import { snapshotVersionSchema, type SnapshotVersionValues } from './schema';
 
-import { Button } from '@ui/Button';
-import { Input } from '@ui/Input';
 type SnapshotVersionFormProps = {
   disabled: boolean;
   loading: boolean;
@@ -43,7 +41,7 @@ export function SnapshotVersionForm({
       aria-label="Snapshot version form"
     >
       {error ? <Alert severity="error">{error}</Alert> : null}
-      <Input
+      <TextField
         fullWidth
         label="Version Reason"
         placeholder="Example: Added sanctions fallback path for local regulator controls."
@@ -64,5 +62,3 @@ export function SnapshotVersionForm({
     </Stack>
   );
 }
-
-

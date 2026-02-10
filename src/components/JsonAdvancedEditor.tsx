@@ -1,8 +1,7 @@
 import { lazy, Suspense, useMemo } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, TextField, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
-import { Input } from '@ui/Input';
 const MonacoEditor = lazy(() => import('@monaco-editor/react'));
 
 type JsonAdvancedEditorProps = {
@@ -31,7 +30,7 @@ export function JsonAdvancedEditor({
   const monacoFontFamily = '"IBM Plex Mono", "Cascadia Mono", "Courier New", monospace';
   const fallbackEditor = useMemo(
     () => (
-      <Input
+      <TextField
         fullWidth
         minRows={10}
         multiline
@@ -53,7 +52,7 @@ export function JsonAdvancedEditor({
   );
 
   return (
-    <Box className="border border-border rounded-[var(--radius-md)] overflow-hidden">
+    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
       <Suspense fallback={fallbackEditor}>
         <MonacoEditor
           height={height}
@@ -81,5 +80,3 @@ export function JsonAdvancedEditor({
     </Box>
   );
 }
-
-

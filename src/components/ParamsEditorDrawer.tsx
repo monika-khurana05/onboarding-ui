@@ -1,11 +1,21 @@
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { Alert, Box, Divider, Drawer, IconButton, Stack, Tab, Tabs, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Divider,
+  Drawer,
+  IconButton,
+  Stack,
+  Tab,
+  Tabs,
+  TextField,
+  Typography
+} from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { JsonAdvancedEditor } from './JsonAdvancedEditor';
 
-import { Button } from '@ui/Button';
-import { Input } from '@ui/Input';
 type ParamsEditorDrawerProps = {
   open: boolean;
   title?: string;
@@ -112,7 +122,7 @@ export function ParamsEditorDrawer({
             <Stack spacing={1.5}>
               {entries.map((entry, index) => (
                 <Stack key={`${entry.key}-${index}`} direction="row" spacing={1}>
-                  <Input
+                  <TextField
                     label="Key"
                     size="small"
                     value={entry.key}
@@ -123,7 +133,7 @@ export function ParamsEditorDrawer({
                     }}
                     fullWidth
                   />
-                  <Input
+                  <TextField
                     label="Value"
                     size="small"
                     value={entry.value}
@@ -188,5 +198,3 @@ export function ParamsEditorDrawer({
     </Drawer>
   );
 }
-
-

@@ -4,14 +4,34 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import QueryStatsIcon from '@mui/icons-material/QueryStats';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { Alert, AppBar, Box, Breadcrumbs, Container, Drawer, IconButton, Link, List, ListItemButton, ListItemIcon, ListItemText, Slide, Snackbar, Stack, Toolbar, Typography, useMediaQuery, useTheme } from '@mui/material';
+import {
+  Alert,
+  AppBar,
+  Box,
+  Breadcrumbs,
+  Chip,
+  Container,
+  Drawer,
+  IconButton,
+  Link,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Slide,
+  Snackbar,
+  Stack,
+  Toolbar,
+  Typography,
+  useMediaQuery,
+  useTheme
+} from '@mui/material';
 import { type ReactElement, useMemo, useState } from 'react';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useGlobalError } from './GlobalErrorContext';
 import { env } from '../lib/env';
 import { deriveEnvironmentFromApiUrl, environmentChipColor } from '../lib/environment';
 
-import { Badge } from '@ui/Badge';
 type NavItem = {
   label: string;
   to: string;
@@ -65,10 +85,10 @@ export function AppShell() {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Toolbar>
         <Stack spacing={0.25}>
-          <Typography variant="h6" className="text-primary">
+          <Typography variant="h6" sx={{ color: 'primary.main' }}>
             CPX
           </Typography>
-          <Typography variant="caption" className="text-muted">
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             Country Onboarding
           </Typography>
         </Stack>
@@ -95,18 +115,22 @@ export function AppShell() {
               selected={selected}
               aria-label={`Navigate to ${item.label}`}
               onClick={() => setMobileOpen(false)}
-              sx={{
+              sx={(themeValue) => ({
                 mx: 1,
                 my: 0.5,
                 borderRadius: 1,
                 '&.Mui-selected': {
-                  backgroundColor: 'var(--selection)',
-                  color: 'var(--text)',
+                  backgroundColor:
+                    themeValue.palette.mode === 'dark' ? 'rgba(75,132,255,0.24)' : themeValue.palette.primary.light,
+                  color: themeValue.palette.mode === 'dark' ? themeValue.palette.text.primary : themeValue.palette.primary.contrastText,
                   '& .MuiListItemIcon-root': {
-                    color: 'var(--text)'
+                    color:
+                      themeValue.palette.mode === 'dark'
+                        ? themeValue.palette.text.primary
+                        : themeValue.palette.primary.contrastText
                   }
                 }
-              }}
+              })}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
               <ListItemText primary={item.label} />
@@ -137,10 +161,11 @@ export function AppShell() {
             </Typography>
           </Stack>
           <Box sx={{ ml: 'auto' }}>
-            <Badge
+            <Chip
               label={deploymentEnvironment}
               size="small"
-              tone={environmentColor}
+              color={environmentColor}
+              variant="filled"
               aria-label={`Environment ${deploymentEnvironment}`}
             />
           </Box>
@@ -157,7 +182,8 @@ export function AppShell() {
             '& .MuiDrawer-paper': {
               width: drawerWidth,
               boxSizing: 'border-box',
-              borderRight: '1px solid var(--border)'
+              borderRight: '1px solid',
+              borderColor: 'divider'
             }
           }}
         >
@@ -170,9 +196,12 @@ export function AppShell() {
         sx={{
           flexGrow: 1,
           px: { xs: 2, md: 3 },
-          py: { xs: 2, md: 3 }
+          py: { xs: 2, md: 3 },
+          background: (themeValue) =>
+            themeValue.palette.mode === 'dark'
+              ? 'radial-gradient(circle at 100% 0, rgba(75,132,255,0.15) 0, rgba(15,17,21,1) 46%)'
+              : 'radial-gradient(circle at 100% 0, rgba(63,131,189,0.12) 0, rgba(243,247,251,1) 40%)'
         }}
-        className="bg-background"
       >
         <Toolbar />
         <Container maxWidth="xl" disableGutters>
@@ -217,5 +246,3 @@ export function AppShell() {
     </Box>
   );
 }
-
-

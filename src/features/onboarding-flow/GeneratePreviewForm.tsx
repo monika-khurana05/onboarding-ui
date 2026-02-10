@@ -1,14 +1,20 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import PreviewIcon from '@mui/icons-material/Preview';
-import { Alert, Autocomplete, CircularProgress, Stack, Typography } from '@mui/material';
+import {
+  Alert,
+  Autocomplete,
+  Button,
+  CircularProgress,
+  Stack,
+  TextField,
+  Typography
+} from '@mui/material';
 import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import type { RepoDefault } from './types';
 import { generatePreviewDefaults } from './defaultValues';
 import { generatePreviewSchema, type GeneratePreviewValues } from './schema';
 
-import { Button } from '@ui/Button';
-import { Input } from '@ui/Input';
 type GeneratePreviewFormProps = {
   repos: RepoDefault[];
   defaultSnapshotId?: string;
@@ -58,7 +64,7 @@ export function GeneratePreviewForm({
       aria-label="Generate preview form"
     >
       {error ? <Alert severity="error">{error}</Alert> : null}
-      <Input
+      <TextField
         label="Snapshot ID"
         fullWidth
         placeholder="snap-gb-2026-01"
@@ -66,7 +72,7 @@ export function GeneratePreviewForm({
         helperText={helperText(errors.snapshotId?.message, 'Identifies which persisted snapshot to generate from.')}
         {...register('snapshotId')}
       />
-      <Input
+      <TextField
         label="Version (optional)"
         fullWidth
         placeholder="3"
@@ -85,7 +91,7 @@ export function GeneratePreviewForm({
             value={field.value}
             onChange={(_, values) => field.onChange(values.map((value) => value.trim()).filter(Boolean))}
             renderInput={(params) => (
-              <Input
+              <TextField
                 {...params}
                 label="Target Repositories"
                 placeholder="cpx-state-manager, cpx-routing-config"
@@ -111,5 +117,3 @@ export function GeneratePreviewForm({
     </Stack>
   );
 }
-
-

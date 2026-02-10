@@ -6,13 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "prebuild": "npm run lint:theme && npm run lint:contrast",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "npm run lint:theme && npm run lint:contrast && eslint . --max-warnings=0",
+    "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
-    "lint:theme": "node scripts/lint-theme.mjs",
-    "lint:contrast": "node scripts/lint-contrast.mjs",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "test": "vitest run",
@@ -57,9 +54,6 @@
     "typescript": "^5.9.3",
     "vite": "^7.1.12",
     "vitest": "^4.0.8",
-    "@vitest/coverage-v8": "^4.0.8",
-    "tailwindcss": "^3.4.17",
-    "postcss": "^8.4.38",
-    "autoprefixer": "^10.4.19"
+    "@vitest/coverage-v8": "^4.0.8"
   }
 }

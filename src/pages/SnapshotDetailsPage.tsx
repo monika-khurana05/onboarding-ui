@@ -1,7 +1,20 @@
 import LaunchIcon from '@mui/icons-material/Launch';
 import ManageSearchOutlinedIcon from '@mui/icons-material/ManageSearchOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { Accordion, AccordionDetails, AccordionSummary, Alert, Dialog, DialogContent, DialogTitle, Grid, Stack, Typography } from '@mui/material';
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Alert,
+  Button,
+  Chip,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Grid,
+  Stack,
+  Typography
+} from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -19,8 +32,6 @@ import { useGlobalError } from '../app/GlobalErrorContext';
 import type { SnapshotModel } from '../models/snapshot';
 import { CreateSnapshotWizard } from '../features/onboarding-flow/CreateSnapshotWizard';
 
-import { Button } from '@ui/Button';
-import { Badge } from '@ui/Badge';
 function extractSnapshotPayload(detail?: SnapshotDetailDto): SnapshotModel | null {
   if (!detail) {
     return null;
@@ -194,7 +205,7 @@ export function SnapshotDetailsPage() {
         {enabledCapabilities.length ? (
           <Stack direction="row" gap={1} flexWrap="wrap">
             {enabledCapabilities.map((capability) => (
-              <Badge key={capability.capabilityKey} label={capability.capabilityKey} tone="primary" />
+              <Chip key={capability.capabilityKey} label={capability.capabilityKey} color="primary" />
             ))}
           </Stack>
         ) : (
@@ -232,9 +243,9 @@ export function SnapshotDetailsPage() {
       <CardSection title="Workflow Summary" subtitle="State Manager FSM configured for this snapshot.">
         <Stack spacing={1.5}>
           <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-            <Badge label={`Workflow: ${workflow.workflowKey || 'N/A'}`} tone="muted" variant="outlined" />
-            <Badge label={`States: ${workflow.states.length}`} tone="muted" variant="outlined" />
-            <Badge label={`Transitions: ${workflow.transitions.length}`} tone="muted" variant="outlined" />
+            <Chip label={`Workflow: ${workflow.workflowKey || 'N/A'}`} variant="outlined" />
+            <Chip label={`States: ${workflow.states.length}`} variant="outlined" />
+            <Chip label={`Transitions: ${workflow.transitions.length}`} variant="outlined" />
           </Stack>
           {workflow.states.length ? (
             <Typography variant="body2" color="text.secondary">
@@ -287,5 +298,3 @@ export function SnapshotDetailsPage() {
     </PageContainer>
   );
 }
-
-

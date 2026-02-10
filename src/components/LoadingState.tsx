@@ -27,5 +27,3 @@ export function LoadingState({ message = 'Loading...', minHeight = 180 }: Loadin
     </Box>
   );
 }
-
-

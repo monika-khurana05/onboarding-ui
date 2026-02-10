@@ -8,16 +8,23 @@ import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
 import {
   Alert,
   Box,
+  Button,
   Divider,
   FormControlLabel,
   Grid,
   MenuItem,
+  Paper,
   Stack,
+  Step,
+  StepLabel,
+  Stepper,
   Switch,
   Tab,
   Tabs,
+  TextField,
   Typography
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -40,10 +47,6 @@ import {
   validateTransitionsReferToValidStates
 } from '../../models/snapshot';
 
-import { Button } from '@ui/Button';
-import { Card } from '@ui/Card';
-import { Input } from '@ui/Input';
-import { WizardStepper } from '@ui/Stepper';
 type CapabilityDefinition = {
   key: CapabilityKey;
   label: string;
@@ -348,18 +351,6 @@ export function CreateSnapshotWizard({
   const { showError } = useGlobalError();
   const [activeStep, setActiveStep] = useState(0);
   const [stepAnimationDirection, setStepAnimationDirection] = useState<'forward' | 'backward'>('forward');
-  const advancedToggleStyles = {
-    '& .MuiSwitch-switchBase.Mui-checked': {
-      color: 'var(--accent)'
-    },
-    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-      backgroundColor: 'var(--accent)'
-    },
-    '& .MuiSwitch-track': {
-      backgroundColor: 'var(--border)',
-      opacity: 1
-    }
-  } as const;
   const [advancedJson, setAdvancedJson] = useState(false);
   const jsonUpdateSource = useRef<'form' | 'editor' | null>(null);
   const isVersionMode = mode === 'version';
@@ -601,7 +592,7 @@ export function CreateSnapshotWizard({
       case 0:
         return (
           <Stack spacing={3}>
-            <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2.5}>
                 <Stack spacing={0.5}>
                   <Typography variant="subtitle1">Country Identity</Typography>
@@ -611,7 +602,7 @@ export function CreateSnapshotWizard({
                 </Stack>
                 <Grid container spacing={2}>
                   <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                    <Input
+                    <TextField
                       fullWidth
                       label="Country Code"
                       placeholder="GB, SG, AE"
@@ -632,7 +623,7 @@ export function CreateSnapshotWizard({
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                    <Input
+                    <TextField
                       fullWidth
                       select
                       label="Region (optional)"
@@ -650,19 +641,19 @@ export function CreateSnapshotWizard({
                       <MenuItem value="Americas">Americas</MenuItem>
                       <MenuItem value="EMEA">EMEA</MenuItem>
                       <MenuItem value="APAC">APAC</MenuItem>
-                    </Input>
+                    </TextField>
                   </Grid>
                 </Grid>
               </Stack>
-            </Card>
-            <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={1.5}>
                 <Typography variant="subtitle1">Lifecycle Notes</Typography>
                 <Alert severity="info">
                   Snapshot data is versioned and persisted so workflow changes can be audited without re-entry.
                 </Alert>
               </Stack>
-            </Card>
+            </Paper>
           </Stack>
         );
       case 1:
@@ -676,7 +667,7 @@ export function CreateSnapshotWizard({
             ) : null}
             <Stack spacing={2.5}>
               {capabilityGroups.map((group) => (
-                <Card key={group.id} variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+                <Paper key={group.id} variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
                   <Stack spacing={2}>
                     <Stack spacing={0.5}>
                       <Typography variant="subtitle1">{group.title}</Typography>
@@ -691,30 +682,42 @@ export function CreateSnapshotWizard({
                         const icon = getCapabilityIcon(item.key);
                         return (
                           <Grid key={item.key} size={{ xs: 12, md: 6 }}>
-                            <Card
+                            <Paper
                               variant="outlined"
-                              className={
-                                enabled
-                                  ? 'border-2 border-primary bg-surface2 transition-colors hover:shadow-[var(--shadow-subtle)]'
-                                  : 'border border-border bg-surface transition-colors hover:border-primary hover:shadow-[var(--shadow-subtle)]'
-                              }
-                              sx={{ p: 2, height: '100%' }}
+                              sx={(theme) => ({
+                                p: 2,
+                                height: '100%',
+                                borderWidth: enabled ? 2 : 1,
+                                borderColor: enabled ? theme.palette.primary.main : theme.palette.divider,
+                                backgroundColor: enabled
+                                  ? alpha(theme.palette.primary.main, 0.06)
+                                  : theme.palette.background.paper,
+                                transition: theme.transitions.create(
+                                  ['transform', 'box-shadow', 'border-color', 'background-color'],
+                                  { duration: theme.transitions.duration.shorter }
+                                ),
+                                '&:hover': {
+                                  transform: 'translateY(-2px)',
+                                  boxShadow: theme.shadows[3],
+                                  borderColor: theme.palette.primary.main
+                                }
+                              })}
                             >
                               <Stack spacing={2}>
                                 <Stack direction="row" spacing={1.25} alignItems="flex-start">
                                   <Stack
                                     alignItems="center"
                                     justifyContent="center"
-                                    className={
-                                      enabled
-                                        ? 'rounded-[var(--radius-sm)] text-primary bg-selection'
-                                        : 'rounded-[var(--radius-sm)] text-muted bg-surface2'
-                                    }
-                                    sx={{
+                                    sx={(theme) => ({
                                       width: 34,
                                       height: 34,
+                                      borderRadius: 1,
+                                      color: enabled ? theme.palette.primary.main : theme.palette.text.secondary,
+                                      backgroundColor: enabled
+                                        ? alpha(theme.palette.primary.main, 0.14)
+                                        : alpha(theme.palette.text.secondary, 0.08),
                                       flexShrink: 0
-                                    }}
+                                    })}
                                   >
                                     {icon}
                                   </Stack>
@@ -783,13 +786,13 @@ export function CreateSnapshotWizard({
                                   {item.helper}
                                 </Typography>
                               </Stack>
-                            </Card>
+                            </Paper>
                           </Grid>
                         );
                       })}
                     </Grid>
                   </Stack>
-                </Card>
+                </Paper>
               ))}
             </Stack>
           </Stack>
@@ -797,7 +800,7 @@ export function CreateSnapshotWizard({
       case 2:
         return (
           <Stack spacing={3}>
-            <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2}>
                 <Stack spacing={0.5}>
                   <Typography variant="subtitle1">Rule Scope</Typography>
@@ -814,8 +817,8 @@ export function CreateSnapshotWizard({
                   <Tab value="enrichments" label="Enrichments" />
                 </Tabs>
               </Stack>
-            </Card>
-            <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2.5}>
                 <Stack spacing={0.5}>
                   <Typography variant="subtitle1">
@@ -873,7 +876,7 @@ export function CreateSnapshotWizard({
                   />
                 )}
               </Stack>
-            </Card>
+            </Paper>
             {ruleKeyErrors.length ? (
               <Stack spacing={1}>
                 {ruleKeyErrors.map((error) => (
@@ -888,7 +891,7 @@ export function CreateSnapshotWizard({
       case 3:
         return (
           <Stack spacing={3}>
-            <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2.5}>
                 <Stack spacing={0.5}>
                   <Typography variant="subtitle1">Workflow Definition</Typography>
@@ -902,7 +905,7 @@ export function CreateSnapshotWizard({
                   helperText="Define a clean lifecycle path with explicit states and events."
                 />
               </Stack>
-            </Card>
+            </Paper>
             {transitionErrors.length || !transitionsValid ? (
               <Alert severity="warning">Transitions must refer to valid states and include events.</Alert>
             ) : null}
@@ -911,7 +914,7 @@ export function CreateSnapshotWizard({
       case 4:
         return (
           <Stack spacing={3}>
-            <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={1.5}>
                 <Typography variant="subtitle1">Targeting Guidance</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -922,8 +925,8 @@ export function CreateSnapshotWizard({
                   <Alert severity="warning">Repo defaults unavailable. Enter repo slugs manually.</Alert>
                 ) : null}
               </Stack>
-            </Card>
-            <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2}>
                 <Typography variant="subtitle1">Active Repo Targets</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -945,7 +948,7 @@ export function CreateSnapshotWizard({
                   onError={showError}
                 />
               </Stack>
-            </Card>
+            </Paper>
           </Stack>
         );
       case 5: {
@@ -965,7 +968,7 @@ export function CreateSnapshotWizard({
 
         return (
           <Stack spacing={3}>
-            <Card variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2.5}>
                 <Stack spacing={0.5}>
                   <Typography variant="subtitle1">Snapshot Summary</Typography>
@@ -975,25 +978,25 @@ export function CreateSnapshotWizard({
                 </Stack>
                 <Grid container spacing={2}>
                   <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Card variant="outlined" sx={{ p: 2.5 }}>
+                    <Paper variant="outlined" sx={{ p: 2.5 }}>
                       <Typography variant="caption" color="text.secondary">
                         Enabled Capabilities
                       </Typography>
                       <Typography variant="h5">{enabledCapabilities.length}</Typography>
-                    </Card>
+                    </Paper>
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Card variant="outlined" sx={{ p: 2.5 }}>
+                    <Paper variant="outlined" sx={{ p: 2.5 }}>
                       <Typography variant="caption" color="text.secondary">
                         Rule Count
                       </Typography>
                       <Typography variant="h5">
                         {snapshot.validations.length + snapshot.enrichments.length}
                       </Typography>
-                    </Card>
+                    </Paper>
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Card variant="outlined" sx={{ p: 2.5 }}>
+                    <Paper variant="outlined" sx={{ p: 2.5 }}>
                       <Typography variant="caption" color="text.secondary">
                         Workflow
                       </Typography>
@@ -1001,19 +1004,19 @@ export function CreateSnapshotWizard({
                       <Typography variant="body2" color="text.secondary">
                         {snapshot.workflow.transitions.length} transitions
                       </Typography>
-                    </Card>
+                    </Paper>
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Card variant="outlined" sx={{ p: 2.5 }}>
+                    <Paper variant="outlined" sx={{ p: 2.5 }}>
                       <Typography variant="caption" color="text.secondary">
                         Target Repos
                       </Typography>
                       <Typography variant="h5">{enabledTargets.length}</Typography>
-                    </Card>
+                    </Paper>
                   </Grid>
                 </Grid>
               </Stack>
-            </Card>
+            </Paper>
             <SectionCard title="Snapshot JSON Preview" subtitle="Payload that will be persisted to CPX backend.">
               <JsonMonacoPanel
                 ariaLabel="Snapshot JSON preview"
@@ -1036,20 +1039,11 @@ export function CreateSnapshotWizard({
         title="Create Snapshot Wizard"
         subtitle="Complete the CPX onboarding snapshot in guided steps with clear validation at each stage."
         actions={
-          <Box className="flex items-center rounded-[var(--radius-md)] border border-border bg-surface2 px-3 py-1">
-            <FormControlLabel
-              className="text-foreground"
-              sx={{ m: 0, '& .MuiFormControlLabel-label': { textAlign: 'left' } }}
-              control={
-                <Switch
-                  checked={advancedJson}
-                  onChange={(_, checked) => setAdvancedJson(checked)}
-                  sx={advancedToggleStyles}
-                />
-              }
-              label="Advanced JSON"
-            />
-          </Box>
+          <FormControlLabel
+            sx={{ m: 0, '& .MuiFormControlLabel-label': { textAlign: 'left' } }}
+            control={<Switch checked={advancedJson} onChange={(_, checked) => setAdvancedJson(checked)} />}
+            label="Advanced JSON"
+          />
         }
       >
         <Typography variant="body2" color="text.secondary">
@@ -1079,9 +1073,15 @@ export function CreateSnapshotWizard({
         subtitle={stepSubtitles[activeStep]}
       >
         <Stack spacing={3}>
-          <Card variant="outlined" className="bg-surface border-border" sx={{ p: { xs: 1.5, md: 2 } }}>
-            <WizardStepper steps={stepLabels} activeStep={activeStep} />
-          </Card>
+          <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 2 } }}>
+            <Stepper activeStep={activeStep} alternativeLabel aria-label="Snapshot wizard steps">
+              {stepLabels.map((label) => (
+                <Step key={label}>
+                  <StepLabel>{label}</StepLabel>
+                </Step>
+              ))}
+            </Stepper>
+          </Paper>
 
           <Box
             key={activeStep}
@@ -1103,21 +1103,17 @@ export function CreateSnapshotWizard({
           </Box>
 
           <Divider />
-          <Stack
-            direction={{ xs: 'column-reverse', sm: 'row' }}
-            spacing={2}
-            justifyContent="space-between"
-            alignItems={{ xs: 'stretch', sm: 'center' }}
-          >
-            <Button variant="secondary" onClick={goBack} disabled={activeStep === 0}>
+          <Stack direction={{ xs: 'column-reverse', sm: 'row' }} spacing={2} justifyContent="space-between">
+            <Button variant="outlined" onClick={goBack} disabled={activeStep === 0}>
               Back
             </Button>
             {activeStep < stepLabels.length - 1 ? (
-              <Button onClick={goNext} disabled={!canProceed}>
+              <Button variant="contained" onClick={goNext} disabled={!canProceed}>
                 Next
               </Button>
             ) : (
               <Button
+                variant="contained"
                 startIcon={<SaveIcon />}
                 disabled={
                   !stepValidations.slice(0, 5).every(Boolean) ||
@@ -1150,5 +1146,3 @@ export function CreateSnapshotWizard({
     </Stack>
   );
 }
-
-

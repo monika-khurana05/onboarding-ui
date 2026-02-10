@@ -10,5 +10,3 @@ type SectionCardProps = PropsWithChildren<{
 export function SectionCard({ title, subtitle, actions, children }: SectionCardProps) {
   return <CardSection title={title} subtitle={subtitle} actions={actions}>{children}</CardSection>;
 }
-
-

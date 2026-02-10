@@ -1,5 +1,5 @@
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { Alert, Slide, Snackbar } from '@mui/material';
+import { Alert, Button, Slide, Snackbar } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { CardSection } from '../components/CardSection';
 import { PageContainer } from '../components/PageContainer';
@@ -9,7 +9,6 @@ import { CountryOnboardingForm } from '../features/onboarding/CountryOnboardingF
 import type { CountryOnboardingInput } from '../features/onboarding/schema';
 import { env } from '../lib/env';
 
-import { Button } from '@ui/Button';
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -58,7 +57,7 @@ export function OnboardingPage() {
         <Alert
           severity="warning"
           action={
-            <Button variant="ghost" size="small" onClick={() => void templatesQuery.refetch()}>
+            <Button color="inherit" size="small" onClick={() => void templatesQuery.refetch()}>
               Retry
             </Button>
           }
@@ -102,5 +101,3 @@ export function OnboardingPage() {
     </PageContainer>
   );
 }
-
-

@@ -1,11 +1,26 @@
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { Alert, FormControlLabel, IconButton, MenuItem, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, Typography } from '@mui/material';
+import {
+  Alert,
+  Button,
+  FormControlLabel,
+  IconButton,
+  MenuItem,
+  Paper,
+  Stack,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Tooltip,
+  Typography
+} from '@mui/material';
 import { useMemo } from 'react';
 
-import { Button } from '@ui/Button';
-import { Input } from '@ui/Input';
-import { Card } from '@ui/Card';
 export type RepoDefaultsEntry = {
   slug: string;
   label?: string;
@@ -133,7 +148,7 @@ export function RepoTargetsTable({
 
   return (
     <Stack spacing={2}>
-      <TableContainer component={Card} variant="outlined">
+      <TableContainer component={Paper} variant="outlined">
         <Table size="small" stickyHeader aria-label="Repository targets table">
           <TableHead>
             <TableRow>
@@ -175,7 +190,7 @@ export function RepoTargetsTable({
                     </TableCell>
                   ) : null}
                   <TableCell>
-                    <Input
+                    <TextField
                       size="small"
                       fullWidth
                       placeholder={target.label ?? 'repo-slug'}
@@ -190,7 +205,7 @@ export function RepoTargetsTable({
                     />
                   </TableCell>
                   <TableCell>
-                    <Input
+                    <TextField
                       size="small"
                       fullWidth
                       value={target.baseBranch}
@@ -206,7 +221,7 @@ export function RepoTargetsTable({
                   <TableCell>
                     <Stack direction="row" alignItems="center" spacing={1}>
                       {target.packOptions && target.packOptions.length > 0 ? (
-                        <Input
+                        <TextField
                           select
                           size="small"
                           fullWidth
@@ -224,9 +239,9 @@ export function RepoTargetsTable({
                               {option}
                             </MenuItem>
                           ))}
-                        </Input>
+                        </TextField>
                       ) : (
-                        <Input
+                        <TextField
                           size="small"
                           fullWidth
                           value={target.packVersion}
@@ -282,5 +297,3 @@ export function RepoTargetsTable({
     </Stack>
   );
 }
-
-

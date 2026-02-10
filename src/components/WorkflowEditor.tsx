@@ -1,13 +1,24 @@
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { IconButton, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
+import {
+  Button,
+  Chip,
+  IconButton,
+  MenuItem,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography
+} from '@mui/material';
 import { useMemo, useState } from 'react';
 import type { SnapshotWorkflow, SnapshotWorkflowTransition } from '../models/snapshot';
 
-import { Button } from '@ui/Button';
-import { Input } from '@ui/Input';
-import { Card } from '@ui/Card';
-import { Badge } from '@ui/Badge';
 type WorkflowEditorProps = {
   value: SnapshotWorkflow;
   onChange: (next: SnapshotWorkflow) => void;
@@ -89,7 +100,7 @@ export function WorkflowEditor({ value, onChange, helperText, showErrors = true 
         </Typography>
       ) : null}
 
-      <Input
+      <TextField
         label="Workflow Key"
         value={value.workflowKey}
         onChange={(event) => onChange({ ...value, workflowKey: event.target.value })}
@@ -100,7 +111,7 @@ export function WorkflowEditor({ value, onChange, helperText, showErrors = true 
       <Stack spacing={1}>
         <Typography variant="subtitle2">States</Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <Input
+          <TextField
             label="Add State"
             size="small"
             value={stateInput}
@@ -119,7 +130,7 @@ export function WorkflowEditor({ value, onChange, helperText, showErrors = true 
         </Stack>
         <Stack direction="row" gap={1} flexWrap="wrap">
           {states.map((state) => (
-            <Badge key={state} label={state} onDelete={() => handleRemoveState(state)} />
+            <Chip key={state} label={state} onDelete={() => handleRemoveState(state)} />
           ))}
         </Stack>
         {showErrors && states.length === 0 ? (
@@ -131,7 +142,7 @@ export function WorkflowEditor({ value, onChange, helperText, showErrors = true 
 
       <Stack spacing={1}>
         <Typography variant="subtitle2">Transitions</Typography>
-        <TableContainer component={Card} variant="outlined">
+        <TableContainer component={Paper} variant="outlined">
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
@@ -150,7 +161,7 @@ export function WorkflowEditor({ value, onChange, helperText, showErrors = true 
                 return (
                   <TableRow key={`${transition.from}-${transition.to}-${index}`}>
                     <TableCell>
-                      <Input
+                      <TextField
                         select
                         size="small"
                         value={transition.from}
@@ -164,10 +175,10 @@ export function WorkflowEditor({ value, onChange, helperText, showErrors = true 
                             {state}
                           </MenuItem>
                         ))}
-                      </Input>
+                      </TextField>
                     </TableCell>
                     <TableCell>
-                      <Input
+                      <TextField
                         select
                         size="small"
                         value={transition.to}
@@ -181,10 +192,10 @@ export function WorkflowEditor({ value, onChange, helperText, showErrors = true 
                             {state}
                           </MenuItem>
                         ))}
-                      </Input>
+                      </TextField>
                     </TableCell>
                     <TableCell>
-                      <Input
+                      <TextField
                         size="small"
                         value={transition.onEvent}
                         onChange={(event) => handleUpdateTransition(index, { onEvent: event.target.value })}
@@ -233,5 +244,3 @@ export function WorkflowEditor({ value, onChange, helperText, showErrors = true 
     </Stack>
   );
 }
-
-
