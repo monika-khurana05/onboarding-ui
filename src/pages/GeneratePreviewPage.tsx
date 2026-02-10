@@ -8,6 +8,7 @@ import {
   AccordionDetails,
   AccordionSummary,
   Alert,
+  AlertTitle,
   Box,
   Button,
   Chip,
@@ -56,7 +57,16 @@ type PreviewRepoResult = {
 
 type PreviewErrorGroup = {
   repoSlug: string;
-  errors: { message: string; severity: 'error' | 'warning' | 'info' | 'success' }[];
+  errors: PreviewErrorDetail[];
+};
+
+type PreviewErrorDetail = {
+  message: string;
+  severity: 'error' | 'warning' | 'info' | 'success';
+  code: string;
+  summary: string;
+  action: string;
+  details?: string;
 };
 
 const baseRepoTargets: RepoTarget[] = [
@@ -283,6 +293,105 @@ function toSeverity(value: unknown): 'error' | 'warning' | 'info' | 'success' {
   return 'error';
 }
 
+type ErrorPattern = {
+  test: (message: string) => boolean;
+  code: string;
+  summary: string;
+  action: string;
+};
+
+const errorPatterns: ErrorPattern[] = [
+  {
+    test: (message) =>
+      message.includes('template pack') && (message.includes('missing') || message.includes('not found')),
+    code: 'PACK_MISSING',
+    summary: 'Template pack missing in repository.',
+    action: 'Check pack version or repo access.'
+  },
+  {
+    test: (message) => message.includes('pack version') && (message.includes('invalid') || message.includes('not found')),
+    code: 'PACK_VERSION_INVALID',
+    summary: 'Pack version is unavailable for this repository.',
+    action: 'Select a valid pack version and retry.'
+  },
+  {
+    test: (message) => message.includes('snapshot') && (message.includes('missing') || message.includes('not found')),
+    code: 'SNAPSHOT_NOT_FOUND',
+    summary: 'Snapshot reference was not found.',
+    action: 'Verify snapshot ID and version, then retry.'
+  },
+  {
+    test: (message) => (message.includes('repo') || message.includes('repository')) && message.includes('not found'),
+    code: 'REPO_NOT_FOUND',
+    summary: 'Repository target could not be resolved.',
+    action: 'Confirm repo slug and access permissions.'
+  },
+  {
+    test: (message) =>
+      message.includes('permission') ||
+      message.includes('unauthorized') ||
+      message.includes('forbidden') ||
+      message.includes('access denied'),
+    code: 'ACCESS_DENIED',
+    summary: 'Access denied for repository or pack.',
+    action: 'Check credentials and repository access.'
+  },
+  {
+    test: (message) => message.includes('timeout') || message.includes('timed out'),
+    code: 'REQUEST_TIMEOUT',
+    summary: 'Preview generation timed out.',
+    action: 'Retry the request or reduce repo scope.'
+  },
+  {
+    test: (message) => message.includes('validation') || message.includes('invalid'),
+    code: 'INVALID_INPUT',
+    summary: 'Input validation failed.',
+    action: 'Review snapshot ID, repo targets, and pack versions.'
+  },
+  {
+    test: (message) =>
+      message.includes('network') ||
+      message.includes('connection') ||
+      message.includes('econn') ||
+      message.includes('enotfound'),
+    code: 'NETWORK_ERROR',
+    summary: 'Network error during preview.',
+    action: 'Check connectivity and retry.'
+  }
+];
+
+function buildErrorPresentation(message: string): Pick<PreviewErrorDetail, 'code' | 'summary' | 'action' | 'details'> {
+  const normalized = message.replace(/\s+/g, ' ').trim();
+  const lower = normalized.toLowerCase();
+  const matched = errorPatterns.find((pattern) => pattern.test(lower));
+  const codeMatch = normalized.match(/\b[A-Z]{2,}(?:_[A-Z0-9]{2,})+\b/);
+
+  if (matched) {
+    return {
+      code: matched.code,
+      summary: matched.summary,
+      action: matched.action,
+      details: normalized && normalized !== matched.summary ? normalized : undefined
+    };
+  }
+
+  if (codeMatch) {
+    return {
+      code: codeMatch[0],
+      summary: 'Preview error reported.',
+      action: 'Review the details and retry the preview.',
+      details: normalized || undefined
+    };
+  }
+
+  return {
+    code: 'PREVIEW_ERROR',
+    summary: 'Unexpected preview error.',
+    action: 'Retry the preview or inspect the payload JSON.',
+    details: normalized || undefined
+  };
+}
+
 function groupErrorsByRepo(errors: (PreviewErrorDto | string)[], repoSlugs: string[]): PreviewErrorGroup[] {
   const grouped = new Map<string, PreviewErrorGroup>();
 
@@ -290,7 +399,8 @@ function groupErrorsByRepo(errors: (PreviewErrorDto | string)[], repoSlugs: stri
     if (typeof error === 'string') {
       const repoSlug = guessRepoFromMessage(error, repoSlugs);
       const entry = grouped.get(repoSlug) ?? { repoSlug, errors: [] };
-      entry.errors.push({ message: error, severity: 'error' });
+      const presentation = buildErrorPresentation(error);
+      entry.errors.push({ message: error, severity: 'error', ...presentation });
       grouped.set(repoSlug, entry);
       return;
     }
@@ -302,7 +412,8 @@ function groupErrorsByRepo(errors: (PreviewErrorDto | string)[], repoSlugs: stri
       record.repo ??
       guessRepoFromMessage(message, repoSlugs);
     const entry = grouped.get(repoSlug) ?? { repoSlug, errors: [] };
-    entry.errors.push({ message, severity: toSeverity(record.severity) });
+    const presentation = buildErrorPresentation(message);
+    entry.errors.push({ message, severity: toSeverity(record.severity), ...presentation });
     grouped.set(repoSlug, entry);
   });
 
@@ -571,7 +682,7 @@ export function GeneratePreviewPage() {
               {normalizedPreview.repoResults.length ? (
                 normalizedPreview.repoResults.map((repo) => (
                   <Grid key={repo.repoSlug} size={{ xs: 12, md: 6 }}>
-                    <Paper variant="outlined" sx={{ p: 2, borderRadius: '8px' }}>
+                    <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
                       <Stack spacing={1.5}>
                         <Stack direction="row" justifyContent="space-between" alignItems="center">
                           <Stack spacing={0.5}>
@@ -600,7 +711,7 @@ export function GeneratePreviewPage() {
                                   <Paper
                                     key={`${repo.repoSlug}-${file.path}-${fileIndex}`}
                                     variant="outlined"
-                                    sx={{ p: 1.5, borderRadius: '8px' }}
+                                    sx={{ p: 1.5, borderRadius: 1 }}
                                   >
                                     <Stack spacing={1}>
                                       <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -666,7 +777,7 @@ export function GeneratePreviewPage() {
                                                       : 'grey.100',
                                                   border: '1px solid',
                                                   borderColor: 'divider',
-                                                  borderRadius: '8px',
+                                                  borderRadius: 1,
                                                   fontSize: 12,
                                                   fontFamily: '"IBM Plex Mono", "Courier New", monospace',
                                                   lineHeight: 1.5,
@@ -713,14 +824,23 @@ export function GeneratePreviewPage() {
             {normalizedPreview.errorGroups.length ? (
               <Stack spacing={1.5}>
                 {normalizedPreview.errorGroups.map((group) => (
-                  <Paper key={group.repoSlug} variant="outlined" sx={{ p: 1.5, borderRadius: '8px' }}>
+                  <Paper key={group.repoSlug} variant="outlined" sx={{ p: 1.5, borderRadius: 1 }}>
                     <Typography variant="body1" sx={{ fontWeight: 600 }}>
                       {group.repoSlug}
                     </Typography>
                     <Stack spacing={1} sx={{ mt: 1 }}>
                       {group.errors.map((error, index) => (
-                        <Alert key={`${group.repoSlug}-${index}`} severity={error.severity}>
-                          {error.message}
+                        <Alert
+                          key={`${group.repoSlug}-${index}`}
+                          severity={error.severity}
+                          sx={{ alignItems: 'flex-start' }}
+                        >
+                          <AlertTitle>{error.code}</AlertTitle>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {error.summary}
+                          </Typography>
+                          <InlineHelpText>Next action: {error.action}</InlineHelpText>
+                          {error.details ? <InlineHelpText>Details: {error.details}</InlineHelpText> : null}
                         </Alert>
                       ))}
                     </Stack>

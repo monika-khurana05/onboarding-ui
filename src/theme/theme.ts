@@ -22,7 +22,7 @@ export const darkTheme = createTheme({
     },
     text: {
       primary: '#E6EDF3',
-      secondary: '#9DA7B3'
+      secondary: '#A8B3BF'
     },
     divider: 'rgba(255,255,255,0.12)',
     error: {
@@ -70,6 +70,25 @@ export const darkTheme = createTheme({
     caption: {
       fontSize: enterpriseDesign.typography.caption,
       lineHeight: 1.4
+    },
+    subtitle1: {
+      fontSize: 16,
+      fontWeight: 600,
+      lineHeight: 1.45
+    },
+    subtitle2: {
+      fontSize: 14,
+      fontWeight: 600,
+      lineHeight: 1.45
+    },
+    overline: {
+      fontSize: 11,
+      fontWeight: 600,
+      letterSpacing: '0.08em'
+    },
+    button: {
+      fontWeight: 600,
+      letterSpacing: '0.01em'
     }
   },
   components: {
@@ -86,6 +105,10 @@ export const darkTheme = createTheme({
         body: {
           backgroundColor: '#0F1115',
           color: '#E6EDF3'
+        },
+        ':focus-visible': {
+          outline: '2px solid #4B84FF',
+          outlineOffset: 2
         }
       }
     },
@@ -97,8 +120,8 @@ export const darkTheme = createTheme({
           borderRadius: enterpriseDesign.borderRadius
         },
         outlined: {
-          border: '1px solid rgba(255,255,255,0.06)',
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.24)'
+          border: '1px solid rgba(255,255,255,0.12)',
+          boxShadow: 'none'
         }
       }
     },
@@ -122,7 +145,7 @@ export const darkTheme = createTheme({
     MuiTableContainer: {
       styleOverrides: {
         root: {
-          border: '1px solid rgba(255,255,255,0.1)',
+          border: '1px solid rgba(255,255,255,0.12)',
           borderRadius: enterpriseDesign.borderRadius,
           backgroundColor: '#171B21',
           maxHeight: 'min(60vh, 560px)',
@@ -196,6 +219,24 @@ export const darkTheme = createTheme({
         }
       }
     },
+    MuiButtonBase: {
+      styleOverrides: {
+        root: {
+          '&.Mui-focusVisible': {
+            outline: '2px solid #4B84FF',
+            outlineOffset: 2
+          }
+        }
+      }
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: enterpriseDesign.borderRadius,
+          transition: 'background-color 150ms ease, color 150ms ease'
+        }
+      }
+    },
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
@@ -219,9 +260,26 @@ export const darkTheme = createTheme({
             borderColor: '#E66B61'
           },
           '& input::placeholder, & textarea::placeholder': {
-            color: '#9DA7B3',
+            color: '#A8B3BF',
             opacity: 1
           }
+        }
+      }
+    },
+    MuiTabs: {
+      styleOverrides: {
+        root: {
+          minHeight: 40
+        }
+      }
+    },
+    MuiTab: {
+      styleOverrides: {
+        root: {
+          minHeight: 40,
+          textTransform: 'none',
+          fontWeight: 600,
+          letterSpacing: '0.01em'
         }
       }
     },
@@ -232,7 +290,9 @@ export const darkTheme = createTheme({
       styleOverrides: {
         root: {
           textAlign: 'left',
-          color: '#9DA7B3',
+          color: '#A8B3BF',
+          fontSize: 12,
+          fontWeight: 500,
           '&.Mui-focused': {
             color: '#82A9FF'
           }
@@ -242,7 +302,8 @@ export const darkTheme = createTheme({
     MuiFormHelperText: {
       styleOverrides: {
         root: {
-          color: '#9DA7B3',
+          color: '#A8B3BF',
+          fontSize: 12,
           minHeight: 20
         }
       }
@@ -300,7 +361,7 @@ export const darkTheme = createTheme({
         {
           props: { variant: 'caption' },
           style: {
-            color: '#9DA7B3'
+            color: '#A8B3BF'
           }
         }
       ]

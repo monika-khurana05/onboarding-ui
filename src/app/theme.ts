@@ -34,7 +34,7 @@ export function createAppTheme(mode: AppThemeMode) {
     },
     text: {
       primary: isDark ? '#E6EDF3' : '#111827',
-      secondary: isDark ? '#9DA7B3' : '#4b5563'
+      secondary: isDark ? '#A8B3BF' : '#374151'
     },
     divider: isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0',
     action: {
@@ -42,6 +42,8 @@ export function createAppTheme(mode: AppThemeMode) {
       selected: isDark ? 'rgba(75,132,255,0.24)' : 'rgba(0, 90, 156, 0.12)'
     }
   };
+  const focusRing = palette.primary.main;
+  const secondaryText = palette.text.secondary;
 
   return createTheme({
     palette,
@@ -76,9 +78,36 @@ export function createAppTheme(mode: AppThemeMode) {
       caption: {
         fontSize: enterpriseDesign.typography.caption,
         lineHeight: 1.4
+      },
+      subtitle1: {
+        fontSize: 16,
+        fontWeight: 600,
+        lineHeight: 1.45
+      },
+      subtitle2: {
+        fontSize: 14,
+        fontWeight: 600,
+        lineHeight: 1.45
+      },
+      overline: {
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: '0.08em'
+      },
+      button: {
+        fontWeight: 600,
+        letterSpacing: '0.01em'
       }
     },
     components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          ':focus-visible': {
+            outline: `2px solid ${focusRing}`,
+            outlineOffset: 2
+          }
+        }
+      },
       MuiAppBar: {
         styleOverrides: {
           root: {
@@ -103,17 +132,18 @@ export function createAppTheme(mode: AppThemeMode) {
             backgroundColor: isDark ? '#1A1D23' : '#ffffff'
           },
           outlined: {
-            border: isDark ? '1px solid rgba(255,255,255,0.06)' : undefined,
-            boxShadow: isDark ? '0 8px 24px rgba(0, 0, 0, 0.24)' : undefined
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`,
+            boxShadow: 'none'
           }
         }
       },
       MuiTableContainer: {
         styleOverrides: {
           root: {
-            border: isDark ? '1px solid rgba(255,255,255,0.1)' : undefined,
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`,
             borderRadius: enterpriseDesign.borderRadius,
-            backgroundColor: isDark ? '#171B21' : undefined,
+            backgroundColor: isDark ? '#171B21' : palette.background.paper,
+            maxHeight: 'min(60vh, 560px)',
             overflow: 'auto'
           }
         }
@@ -168,13 +198,34 @@ export function createAppTheme(mode: AppThemeMode) {
             borderRadius: enterpriseDesign.borderRadius,
             minHeight: enterpriseDesign.buttonHeight,
             fontWeight: 500,
+            paddingInline: '14px',
             transition: 'background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease'
           },
           sizeSmall: {
-            minHeight: 32
+            minHeight: 32,
+            paddingInline: '10px'
           },
           sizeLarge: {
-            minHeight: 40
+            minHeight: 40,
+            paddingInline: '18px'
+          }
+        }
+      },
+      MuiButtonBase: {
+        styleOverrides: {
+          root: {
+            '&.Mui-focusVisible': {
+              outline: `2px solid ${focusRing}`,
+              outlineOffset: 2
+            }
+          }
+        }
+      },
+      MuiIconButton: {
+        styleOverrides: {
+          root: {
+            borderRadius: enterpriseDesign.borderRadius,
+            transition: 'background-color 150ms ease, color 150ms ease'
           }
         }
       },
@@ -198,9 +249,26 @@ export function createAppTheme(mode: AppThemeMode) {
               borderWidth: 1
             },
             '& input::placeholder, & textarea::placeholder': {
-              color: isDark ? '#9DA7B3' : undefined,
+              color: secondaryText,
               opacity: 1
             }
+          }
+        }
+      },
+      MuiTabs: {
+        styleOverrides: {
+          root: {
+            minHeight: 40
+          }
+        }
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            minHeight: 40,
+            textTransform: 'none',
+            fontWeight: 600,
+            letterSpacing: '0.01em'
           }
         }
       },
@@ -211,7 +279,9 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: {
             textAlign: 'left',
-            color: isDark ? '#9DA7B3' : undefined,
+            color: secondaryText,
+            fontSize: 12,
+            fontWeight: 500,
             '&.Mui-focused': {
               color: isDark ? '#82A9FF' : undefined
             }
@@ -221,7 +291,8 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiFormHelperText: {
         styleOverrides: {
           root: {
-            color: isDark ? '#9DA7B3' : undefined,
+            color: secondaryText,
+            fontSize: 12,
             minHeight: 20
           }
         }
@@ -259,6 +330,30 @@ export function createAppTheme(mode: AppThemeMode) {
             borderTop: isDark ? '1px solid rgba(255,255,255,0.08)' : undefined
           }
         }
+      },
+      MuiAlert: {
+        styleOverrides: {
+          root: {
+            borderRadius: enterpriseDesign.borderRadius
+          }
+        }
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: {
+            borderRadius: enterpriseDesign.borderRadius
+          }
+        }
+      },
+      MuiTypography: {
+        variants: [
+          {
+            props: { variant: 'caption' },
+            style: {
+              color: secondaryText
+            }
+          }
+        ]
       }
     }
   });

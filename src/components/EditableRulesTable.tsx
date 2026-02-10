@@ -78,7 +78,7 @@ export function EditableRulesTable({
         ) : null}
       </Stack>
       <TableContainer component={Paper} variant="outlined">
-        <Table size="small" stickyHeader>
+        <Table size="small" stickyHeader aria-label={`${title} rules table`}>
           <TableHead>
             <TableRow>
               <TableCell>Key</TableCell>
@@ -105,6 +105,9 @@ export function EditableRulesTable({
                       onChange={(event) => handleUpdate(index, { key: event.target.value })}
                       error={Boolean(keyError)}
                       helperText={keyError || ' '}
+                      inputProps={{
+                        'aria-label': `${title} rule key row ${index + 1}`
+                      }}
                     />
                   </TableCell>
                   {showSeverity ? (
@@ -117,6 +120,11 @@ export function EditableRulesTable({
                           handleUpdate(index, { severity: event.target.value || undefined })
                         }
                         helperText="Optional"
+                        SelectProps={{
+                          inputProps: {
+                            'aria-label': `${title} rule severity row ${index + 1}`
+                          }
+                        }}
                       >
                         <MenuItem value="">None</MenuItem>
                         {severityOptions.map((option) => (
@@ -131,6 +139,9 @@ export function EditableRulesTable({
                     <Switch
                       checked={rule.enabled}
                       onChange={(_, checked) => handleUpdate(index, { enabled: checked })}
+                      inputProps={{
+                        'aria-label': `${title} rule ${rule.key.trim() || `row ${index + 1}`} enabled`
+                      }}
                     />
                   </TableCell>
                   <TableCell>

@@ -32,6 +32,8 @@ type RecentSnapshot = {
   createdAt: string;
 };
 
+const DEFAULT_REPOS = ['state-manager', 'payment-initiation', 'country-container'];
+
 function loadRecentSnapshots(): RecentSnapshot[] {
   try {
     const stored = localStorage.getItem('cpx.snapshot.refs');
@@ -59,6 +61,17 @@ function loadRecentSnapshots(): RecentSnapshot[] {
 export function DashboardPage() {
   const [search, setSearch] = useState('');
   const snapshots = useMemo(() => loadRecentSnapshots(), []);
+  const totalSnapshots = snapshots.length;
+  const recentWindowDays = 7;
+  const recentCutoff = new Date();
+  recentCutoff.setDate(recentCutoff.getDate() - recentWindowDays);
+  const recentActivityCount = snapshots.filter((snapshot) => {
+    if (!snapshot.createdAt) {
+      return false;
+    }
+    const timestamp = Date.parse(snapshot.createdAt);
+    return !Number.isNaN(timestamp) && timestamp >= recentCutoff.getTime();
+  }).length;
   const filteredSnapshots = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) {
@@ -75,37 +88,121 @@ export function DashboardPage() {
 
   return (
     <PageContainer title="Dashboard" subtitle="Monitor recent snapshots and launch onboarding workflows.">
-      <CardSection title="Quick Start" subtitle="Three-step CPX onboarding flow.">
+      <CardSection title="Summary" subtitle="Snapshot activity at a glance.">
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Stack spacing={1}>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                1) Create snapshot
-              </Typography>
-              <InlineHelpText>
-                Capture country, capabilities, and workflow into a versioned snapshot.
-              </InlineHelpText>
-            </Stack>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 1,
+                borderColor: 'divider',
+                background: (theme) =>
+                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
+              }}
+            >
+              <Stack spacing={0.5}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Total snapshots
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  {totalSnapshots}
+                </Typography>
+                <InlineHelpText>Stored locally</InlineHelpText>
+              </Stack>
+            </Paper>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Stack spacing={1}>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                2) Preview generation
-              </Typography>
-              <InlineHelpText>
-                Validate generated files repo-by-repo before automation.
-              </InlineHelpText>
-            </Stack>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 1,
+                borderColor: 'divider',
+                background: (theme) =>
+                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
+              }}
+            >
+              <Stack spacing={0.5}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Recent onboarding activity
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  {recentActivityCount}
+                </Typography>
+                <InlineHelpText>Last {recentWindowDays} days</InlineHelpText>
+              </Stack>
+            </Paper>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Stack spacing={1}>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                3) (Later) Create PRs + deploy
-              </Typography>
-              <InlineHelpText>
-                Future phase: open PRs, approvals, and deploy.
-              </InlineHelpText>
-            </Stack>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 1,
+                borderColor: 'divider',
+                background: (theme) =>
+                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
+              }}
+            >
+              <Stack spacing={0.5}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Repos impacted
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  {DEFAULT_REPOS.length}
+                </Typography>
+                <InlineHelpText>{DEFAULT_REPOS.join(', ')}</InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+        </Grid>
+      </CardSection>
+
+      <CardSection title="Quick Start" subtitle="Create, preview, then automate.">
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 1
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Create Snapshot
+                </Typography>
+                <InlineHelpText>
+                  Capture country, capabilities, and workflow into a versioned snapshot.
+                </InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 2
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Preview Generation
+                </Typography>
+                <InlineHelpText>
+                  Validate generated files repo-by-repo before automation.
+                </InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 3
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Create PR (future)
+                </Typography>
+                <InlineHelpText>Open PRs, approvals, and deploy when automation ships.</InlineHelpText>
+              </Stack>
+            </Paper>
           </Grid>
         </Grid>
       </CardSection>
@@ -158,28 +255,58 @@ export function DashboardPage() {
               onAction={() => setSearch('')}
             />
           ) : (
-            <TableContainer component={Paper} variant="outlined">
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Country Code</TableCell>
-                    <TableCell>Snapshot ID</TableCell>
-                    <TableCell>Version</TableCell>
-                    <TableCell>Created At</TableCell>
-                    <TableCell>Actions</TableCell>
+                    <TableCell
+                      sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.72rem', color: 'text.secondary' }}
+                    >
+                      Country
+                    </TableCell>
+                    <TableCell
+                      sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.72rem', color: 'text.secondary' }}
+                    >
+                      Snapshot
+                    </TableCell>
+                    <TableCell
+                      sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.72rem', color: 'text.secondary' }}
+                    >
+                      Created
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.72rem', color: 'text.secondary' }}
+                    >
+                      Actions
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {filteredSnapshots.map((snapshot) => (
-                    <TableRow key={snapshot.snapshotId}>
-                      <TableCell>{snapshot.countryCode}</TableCell>
-                      <TableCell>{snapshot.snapshotId}</TableCell>
-                      <TableCell>{typeof snapshot.version === 'number' ? snapshot.version : '-'}</TableCell>
+                    <TableRow key={snapshot.snapshotId} hover>
                       <TableCell>
-                        {snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString() : 'n/a'}
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          {snapshot.countryCode}
+                        </Typography>
                       </TableCell>
                       <TableCell>
-                        <Stack direction="row" spacing={1}>
+                        <Stack spacing={0.5}>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {snapshot.snapshotId}
+                          </Typography>
+                          <InlineHelpText>
+                            Version {typeof snapshot.version === 'number' ? snapshot.version : 'n/a'}
+                          </InlineHelpText>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString() : 'n/a'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
                           <Button
                             component={RouterLink}
                             to={`/snapshots/${encodeURIComponent(snapshot.snapshotId)}`}

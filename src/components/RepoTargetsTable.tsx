@@ -149,7 +149,7 @@ export function RepoTargetsTable({
   return (
     <Stack spacing={2}>
       <TableContainer component={Paper} variant="outlined">
-        <Table size="small" stickyHeader>
+        <Table size="small" stickyHeader aria-label="Repository targets table">
           <TableHead>
             <TableRow>
               {showTargetColumn ? <TableCell>Target</TableCell> : null}
@@ -199,6 +199,9 @@ export function RepoTargetsTable({
                       disabled={!enabled}
                       error={shouldShowErrors && enabled && !repoSlugRequired}
                       helperText={shouldShowErrors && enabled && !repoSlugRequired ? 'Required' : ' '}
+                      inputProps={{
+                        'aria-label': `${target.label ?? 'Repo target'} repo slug`
+                      }}
                     />
                   </TableCell>
                   <TableCell>
@@ -210,6 +213,9 @@ export function RepoTargetsTable({
                       disabled={!enabled}
                       error={shouldShowErrors && baseBranchError}
                       helperText={shouldShowErrors && baseBranchError ? 'Required' : ' '}
+                      inputProps={{
+                        'aria-label': `${target.label ?? 'Repo target'} base branch`
+                      }}
                     />
                   </TableCell>
                   <TableCell>
@@ -222,6 +228,11 @@ export function RepoTargetsTable({
                           value={target.packVersion}
                           onChange={(event) => handleUpdate(index, { packVersion: event.target.value })}
                           disabled={!enabled}
+                          SelectProps={{
+                            inputProps: {
+                              'aria-label': `${target.label ?? 'Repo target'} pack version`
+                            }
+                          }}
                         >
                           {target.packOptions.map((option) => (
                             <MenuItem key={option} value={option}>
@@ -237,6 +248,9 @@ export function RepoTargetsTable({
                           onChange={(event) => handleUpdate(index, { packVersion: event.target.value })}
                           disabled={!enabled}
                           placeholder="Optional"
+                          inputProps={{
+                            'aria-label': `${target.label ?? 'Repo target'} pack version`
+                          }}
                         />
                       )}
                       {onDiscoverPacks ? (

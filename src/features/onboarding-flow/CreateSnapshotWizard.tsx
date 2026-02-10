@@ -711,7 +711,7 @@ export function CreateSnapshotWizard({
                                     sx={(theme) => ({
                                       width: 34,
                                       height: 34,
-                                      borderRadius: 1.5,
+                                      borderRadius: 1,
                                       color: enabled ? theme.palette.primary.main : theme.palette.text.secondary,
                                       backgroundColor: enabled
                                         ? alpha(theme.palette.primary.main, 0.14)
@@ -808,7 +808,11 @@ export function CreateSnapshotWizard({
                     Choose which rule set to edit and keep each set focused on one purpose.
                   </Typography>
                 </Stack>
-                <Tabs value={ruleTab} onChange={(_, value) => setRuleTab(value as RuleType)}>
+                <Tabs
+                  value={ruleTab}
+                  onChange={(_, value) => setRuleTab(value as RuleType)}
+                  aria-label="Rule type tabs"
+                >
                   <Tab value="validations" label="Validations" />
                   <Tab value="enrichments" label="Enrichments" />
                 </Tabs>
@@ -1070,7 +1074,7 @@ export function CreateSnapshotWizard({
       >
         <Stack spacing={3}>
           <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 2 } }}>
-            <Stepper activeStep={activeStep} alternativeLabel>
+            <Stepper activeStep={activeStep} alternativeLabel aria-label="Snapshot wizard steps">
               {stepLabels.map((label) => (
                 <Step key={label}>
                   <StepLabel>{label}</StepLabel>
