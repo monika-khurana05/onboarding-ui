@@ -167,7 +167,8 @@ export function createAppTheme(mode: AppThemeMode) {
             textTransform: 'none',
             borderRadius: enterpriseDesign.borderRadius,
             minHeight: enterpriseDesign.buttonHeight,
-            fontWeight: 500
+            fontWeight: 500,
+            transition: 'background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease'
           },
           sizeSmall: {
             minHeight: 32

@@ -1,8 +1,9 @@
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { Alert, Button, Snackbar } from '@mui/material';
+import { Alert, Button, Slide, Snackbar } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { CardSection } from '../components/CardSection';
 import { PageContainer } from '../components/PageContainer';
+import { SkeletonState } from '../components/SkeletonState';
 import { useCreateOnboardingMutation, useTemplatesQuery } from '../features/countries/hooks';
 import { CountryOnboardingForm } from '../features/onboarding/CountryOnboardingForm';
 import type { CountryOnboardingInput } from '../features/onboarding/schema';
@@ -73,12 +74,16 @@ export function OnboardingPage() {
         title="Country Onboarding Request"
         subtitle="Create and validate onboarding payloads through guided fields or advanced JSON."
       >
-        <CountryOnboardingForm
-          templates={templatesQuery.data ?? []}
-          submitting={createMutation.isPending}
-          submitError={submitError}
-          onSubmit={submit}
-        />
+        {templateLoadState === 'loading' ? (
+          <SkeletonState variant="form" rows={8} />
+        ) : (
+          <CountryOnboardingForm
+            templates={templatesQuery.data ?? []}
+            submitting={createMutation.isPending}
+            submitError={submitError}
+            onSubmit={submit}
+          />
+        )}
       </CardSection>
 
       <Snackbar
@@ -86,6 +91,8 @@ export function OnboardingPage() {
         autoHideDuration={5000}
         onClose={() => setSuccessMessage(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        TransitionComponent={Slide}
+        TransitionProps={{ direction: 'left' }}
       >
         <Alert severity="success" onClose={() => setSuccessMessage(null)} sx={{ width: '100%' }}>
           {successMessage}

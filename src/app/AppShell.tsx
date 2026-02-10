@@ -18,6 +18,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Slide,
   Snackbar,
   Stack,
   Toolbar,
@@ -26,7 +27,7 @@ import {
   useTheme
 } from '@mui/material';
 import { type ReactElement, useMemo, useState } from 'react';
-import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
+import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useGlobalError } from './GlobalErrorContext';
 import { env } from '../lib/env';
 import { deriveEnvironmentFromApiUrl, environmentChipColor } from '../lib/environment';
@@ -233,8 +234,10 @@ export function AppShell() {
         open={Boolean(globalErrorMessage)}
         autoHideDuration={7000}
         onClose={clearError}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        sx={{ mt: { xs: 7, md: 8 } }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        TransitionComponent={Slide}
+        TransitionProps={{ direction: 'left' }}
+        sx={{ mb: { xs: 2, md: 3 } }}
       >
         <Alert onClose={clearError} severity="error" variant="filled" sx={{ width: '100%' }}>
           {globalErrorMessage}

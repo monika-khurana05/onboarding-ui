@@ -1,6 +1,7 @@
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FolderOffOutlinedIcon from '@mui/icons-material/FolderOffOutlined';
 import PreviewIcon from '@mui/icons-material/Preview';
 import {
   Accordion,
@@ -30,10 +31,11 @@ import type {
 } from '../api/types';
 import { JsonMonacoPanel } from '../components/JsonMonacoPanel';
 import { CardSection } from '../components/CardSection';
+import { EmptyState } from '../components/EmptyState';
 import { InlineHelpText } from '../components/InlineHelpText';
-import { LoadingState } from '../components/LoadingState';
 import { PageContainer } from '../components/PageContainer';
 import { RepoTargetsTable } from '../components/RepoTargetsTable';
+import { SkeletonState } from '../components/SkeletonState';
 import type { RepoDefaultsEntry, RepoTarget } from '../components/RepoTargetsTable';
 import { useGlobalError } from '../app/GlobalErrorContext';
 
@@ -545,7 +547,14 @@ export function GeneratePreviewPage() {
         </Stack>
       </CardSection>
 
-      {previewMutation.isPending ? <LoadingState message="Generating preview..." minHeight={160} /> : null}
+      {previewMutation.isPending ? (
+        <CardSection title="Step 3: Preview Results" subtitle="Preparing repository output and file manifests.">
+          <Stack spacing={2.5}>
+            <SkeletonState variant="card" />
+            <SkeletonState variant="table" rows={6} />
+          </Stack>
+        </CardSection>
+      ) : null}
 
       {previewMutation.data ? (
         <Stack spacing={3}>
@@ -688,7 +697,13 @@ export function GeneratePreviewPage() {
                 ))
               ) : (
                 <Grid size={{ xs: 12 }}>
-                  <Alert severity="info">No repo outputs were returned in the preview response.</Alert>
+                  <EmptyState
+                    title="No repo outputs returned"
+                    description="Run preview again after confirming repository targets."
+                    icon={<FolderOffOutlinedIcon color="action" />}
+                    actionLabel="Run Preview Again"
+                    onAction={() => void handlePreview()}
+                  />
                 </Grid>
               )}
             </Grid>
@@ -738,9 +753,13 @@ export function GeneratePreviewPage() {
           </CardSection>
         </Stack>
       ) : (
-        <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
-          <InlineHelpText>Run a preview generation to see repo-by-repo outputs and file manifests.</InlineHelpText>
-        </Paper>
+        <EmptyState
+          title="No preview yet"
+          description="Run preview generation to inspect repo-by-repo outputs and file manifests."
+          icon={<PreviewIcon color="action" />}
+          actionLabel="Run Preview"
+          onAction={() => void handlePreview()}
+        />
       )}
     </PageContainer>
   );

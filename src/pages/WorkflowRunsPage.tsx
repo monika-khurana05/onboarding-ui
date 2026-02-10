@@ -1,3 +1,4 @@
+import FilterAltOffOutlinedIcon from '@mui/icons-material/FilterAltOffOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import {
   Button,
@@ -10,16 +11,14 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
-  Typography
+  TextField
 } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { CardSection } from '../components/CardSection';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
-import { InlineHelpText } from '../components/InlineHelpText';
-import { LoadingState } from '../components/LoadingState';
 import { PageContainer } from '../components/PageContainer';
+import { SkeletonState } from '../components/SkeletonState';
 import { StatusChip } from '../components/StatusChip';
 import { useWorkflowRunsQuery } from '../features/countries/hooks';
 
@@ -38,7 +37,16 @@ export function WorkflowRunsPage() {
   }, [runsQuery.data, statusFilter]);
 
   if (runsQuery.isLoading) {
-    return <LoadingState message="Loading workflow executions..." minHeight={260} />;
+    return (
+      <PageContainer title="Workflow Runs" subtitle="Inspect execution status and failure points across onboarding pipelines.">
+        <CardSection title="Execution Timeline" subtitle="Filter pipeline executions by current status.">
+          <Stack spacing={2.5}>
+            <SkeletonState variant="form" rows={2} />
+            <SkeletonState variant="table" rows={8} />
+          </Stack>
+        </CardSection>
+      </PageContainer>
+    );
   }
 
   if (runsQuery.isError) {
@@ -54,8 +62,9 @@ export function WorkflowRunsPage() {
   if (!(runsQuery.data ?? []).length) {
     return (
       <EmptyState
-        title="No workflow runs found"
-        description="Workflow execution history will appear after onboarding requests are submitted."
+        title="No workflow runs yet"
+        description="Run onboarding once to start building execution history."
+        icon={<FilterAltOffOutlinedIcon color="action" />}
         actionLabel="Refresh"
         onAction={() => void runsQuery.refetch()}
       />
@@ -128,12 +137,13 @@ export function WorkflowRunsPage() {
             </Table>
           </TableContainer>
         ) : (
-          <Stack sx={{ py: 5 }} spacing={1} alignItems="center" textAlign="center">
-            <Typography variant="body1" sx={{ fontWeight: 600 }}>
-              No runs for selected filter
-            </Typography>
-            <InlineHelpText>Choose another status filter or refresh the data.</InlineHelpText>
-          </Stack>
+          <EmptyState
+            title="No runs for this filter"
+            description="Try another status or reset the filter to view all runs."
+            icon={<FilterAltOffOutlinedIcon color="action" />}
+            actionLabel="Reset Filter"
+            onAction={() => setStatusFilter('all')}
+          />
         )}
       </CardSection>
     </PageContainer>

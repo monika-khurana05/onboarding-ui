@@ -1,5 +1,6 @@
-import InboxIcon from '@mui/icons-material/Inbox';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import { Box, Button, Paper, Stack, Typography } from '@mui/material';
+import type { ReactNode } from 'react';
 import { enterpriseDesign, spacingScale } from '../theme/designSystem';
 import { InlineHelpText } from './InlineHelpText';
 
@@ -8,9 +9,18 @@ type EmptyStateProps = {
   description: string;
   actionLabel?: string;
   onAction?: () => void;
+  icon?: ReactNode;
+  action?: ReactNode;
 };
 
-export function EmptyState({ title, description, actionLabel, onAction }: EmptyStateProps) {
+export function EmptyState({
+  title,
+  description,
+  actionLabel,
+  onAction,
+  icon = <Inventory2OutlinedIcon color="action" />,
+  action
+}: EmptyStateProps) {
   return (
     <Paper
       role="status"
@@ -35,11 +45,12 @@ export function EmptyState({ title, description, actionLabel, onAction }: EmptyS
             justifyContent: 'center'
           }}
         >
-          <InboxIcon color="action" />
+          {icon}
         </Box>
         <Typography variant="h5">{title}</Typography>
         <InlineHelpText>{description}</InlineHelpText>
-        {actionLabel && onAction ? (
+        {action ?? null}
+        {!action && actionLabel && onAction ? (
           <Button variant="outlined" onClick={onAction} aria-label={actionLabel}>
             {actionLabel}
           </Button>

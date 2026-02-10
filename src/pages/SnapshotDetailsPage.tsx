@@ -1,4 +1,5 @@
 import LaunchIcon from '@mui/icons-material/Launch';
+import ManageSearchOutlinedIcon from '@mui/icons-material/ManageSearchOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import {
   Accordion,
@@ -25,8 +26,8 @@ import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { CardSection } from '../components/CardSection';
 import { InlineHelpText } from '../components/InlineHelpText';
-import { LoadingState } from '../components/LoadingState';
 import { PageContainer } from '../components/PageContainer';
+import { SkeletonState } from '../components/SkeletonState';
 import { useGlobalError } from '../app/GlobalErrorContext';
 import type { SnapshotModel } from '../models/snapshot';
 import { CreateSnapshotWizard } from '../features/onboarding-flow/CreateSnapshotWizard';
@@ -72,7 +73,20 @@ export function SnapshotDetailsPage() {
   }
 
   if (snapshotQuery.isLoading) {
-    return <LoadingState message="Loading snapshot details..." minHeight={240} />;
+    return (
+      <PageContainer
+        title={`Snapshot ${snapshotId}`}
+        subtitle="Review payload composition, capability coverage, and generation-readiness."
+      >
+        <CardSection title="Snapshot Summary" subtitle="Primary identifiers and controls for this snapshot version.">
+          <SkeletonState variant="form" rows={4} />
+        </CardSection>
+        <SkeletonState variant="card" />
+        <CardSection title="Workflow Summary" subtitle="State Manager FSM configured for this snapshot.">
+          <SkeletonState variant="table" rows={4} />
+        </CardSection>
+      </PageContainer>
+    );
   }
 
   if (snapshotQuery.isError) {
@@ -86,7 +100,15 @@ export function SnapshotDetailsPage() {
   }
 
   if (!snapshotQuery.data) {
-    return <EmptyState title="Snapshot unavailable" description="No data was returned for this snapshot ID." />;
+    return (
+      <EmptyState
+        title="Snapshot unavailable"
+        description="No data was returned for this snapshot ID."
+        icon={<ManageSearchOutlinedIcon color="action" />}
+        actionLabel="Reload"
+        onAction={() => void snapshotQuery.refetch()}
+      />
+    );
   }
 
   const capabilities = snapshotPayload?.capabilities ?? [];

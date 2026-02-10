@@ -1,4 +1,5 @@
-import { Paper, Stack, type PaperProps } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { Paper, type PaperProps, Stack } from '@mui/material';
 import type { PropsWithChildren, ReactNode } from 'react';
 import { enterpriseDesign, spacingScale } from '../theme/designSystem';
 import { SectionHeader } from './SectionHeader';
@@ -32,7 +33,12 @@ export function CardSection({
             xs: `${enterpriseDesign.cardPadding.mobile}px`,
             md: `${enterpriseDesign.cardPadding.desktop}px`
           },
-          borderRadius: `${enterpriseDesign.borderRadius}px`
+          borderRadius: `${enterpriseDesign.borderRadius}px`,
+          transition: 'box-shadow 150ms ease, border-color 150ms ease',
+          '&:hover': {
+            boxShadow: (theme) => theme.shadows[2],
+            borderColor: (theme) => alpha(theme.palette.primary.main, 0.34)
+          }
         },
         paperSx
       ]}

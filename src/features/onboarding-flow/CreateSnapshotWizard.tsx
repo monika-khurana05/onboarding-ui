@@ -7,6 +7,7 @@ import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
 import {
   Alert,
+  Box,
   Button,
   Divider,
   FormControlLabel,
@@ -349,6 +350,7 @@ export function CreateSnapshotWizard({
   const navigate = useNavigate();
   const { showError } = useGlobalError();
   const [activeStep, setActiveStep] = useState(0);
+  const [stepAnimationDirection, setStepAnimationDirection] = useState<'forward' | 'backward'>('forward');
   const [advancedJson, setAdvancedJson] = useState(false);
   const jsonUpdateSource = useRef<'form' | 'editor' | null>(null);
   const isVersionMode = mode === 'version';
@@ -491,12 +493,14 @@ export function CreateSnapshotWizard({
 
   const goNext = () => {
     if (activeStep < stepLabels.length - 1) {
+      setStepAnimationDirection('forward');
       setActiveStep((prev) => prev + 1);
     }
   };
 
   const goBack = () => {
     if (activeStep > 0) {
+      setStepAnimationDirection('backward');
       setActiveStep((prev) => prev - 1);
     }
   };
@@ -1075,7 +1079,24 @@ export function CreateSnapshotWizard({
             </Stepper>
           </Paper>
 
-          {renderStepContent()}
+          <Box
+            key={activeStep}
+            sx={{
+              animation: 'wizardStepIn 180ms ease-out',
+              '@keyframes wizardStepIn': {
+                from: {
+                  opacity: 0,
+                  transform: stepAnimationDirection === 'forward' ? 'translateX(10px)' : 'translateX(-10px)'
+                },
+                to: {
+                  opacity: 1,
+                  transform: 'translateX(0)'
+                }
+              }
+            }}
+          >
+            {renderStepContent()}
+          </Box>
 
           <Divider />
           <Stack direction={{ xs: 'column-reverse', sm: 'row' }} spacing={2} justifyContent="space-between">

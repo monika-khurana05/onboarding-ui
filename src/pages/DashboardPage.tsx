@@ -2,8 +2,8 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import LaunchIcon from '@mui/icons-material/Launch';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import SearchIcon from '@mui/icons-material/Search';
+import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
 import {
-  Alert,
   Button,
   Grid,
   InputAdornment,
@@ -21,6 +21,7 @@ import {
 import { useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { CardSection } from '../components/CardSection';
+import { EmptyState } from '../components/EmptyState';
 import { InlineHelpText } from '../components/InlineHelpText';
 import { PageContainer } from '../components/PageContainer';
 
@@ -139,19 +140,23 @@ export function DashboardPage() {
           />
 
           {snapshots.length === 0 ? (
-            <Stack spacing={1.5} sx={{ p: 2, border: '1px dashed', borderColor: 'divider', borderRadius: '8px' }}>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                No snapshots yet
-              </Typography>
-              <InlineHelpText>
-                Start by creating a snapshot to capture country, capability, and workflow details.
-              </InlineHelpText>
-              <Button component={RouterLink} to="/snapshots/new" variant="contained">
-                Create Snapshot
-              </Button>
-            </Stack>
+            <EmptyState
+              title="No snapshots yet"
+              description="Create one to start onboarding."
+              action={
+                <Button component={RouterLink} to="/snapshots/new" variant="contained">
+                  Create Snapshot
+                </Button>
+              }
+            />
           ) : filteredSnapshots.length === 0 ? (
-            <Alert severity="warning">No snapshots match your search.</Alert>
+            <EmptyState
+              title="No snapshots match this search"
+              description="Try a broader keyword or clear the filter."
+              icon={<SearchOffOutlinedIcon color="action" />}
+              actionLabel="Clear Search"
+              onAction={() => setSearch('')}
+            />
           ) : (
             <TableContainer component={Paper} variant="outlined">
               <Table size="small" stickyHeader>

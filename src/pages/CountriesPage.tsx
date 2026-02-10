@@ -1,13 +1,14 @@
+import PublicOffOutlinedIcon from '@mui/icons-material/PublicOffOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { Button, InputAdornment, Stack, TextField, Typography } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
+import { Button, InputAdornment, Stack, TextField } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { CardSection } from '../components/CardSection';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
-import { InlineHelpText } from '../components/InlineHelpText';
-import { LoadingState } from '../components/LoadingState';
 import { PageContainer } from '../components/PageContainer';
+import { SkeletonState } from '../components/SkeletonState';
 import { CountryTable } from '../features/countries/CountryTable';
 import { useCountriesQuery } from '../features/countries/hooks';
 
@@ -30,7 +31,16 @@ export function CountriesPage() {
   }, [countriesQuery.data, searchTerm]);
 
   if (countriesQuery.isLoading) {
-    return <LoadingState message="Loading country portfolio..." minHeight={280} />;
+    return (
+      <PageContainer title="Countries" subtitle="Track country readiness and filter by ownership or region.">
+        <CardSection title="Country Portfolio" subtitle="Operational country records used by onboarding workflows.">
+          <Stack spacing={2.5}>
+            <SkeletonState variant="form" rows={2} />
+            <SkeletonState variant="table" rows={7} />
+          </Stack>
+        </CardSection>
+      </PageContainer>
+    );
   }
 
   if (countriesQuery.isError) {
@@ -46,8 +56,9 @@ export function CountriesPage() {
   if (!(countriesQuery.data ?? []).length) {
     return (
       <EmptyState
-        title="No countries configured"
-        description="Create your first onboarding request to populate country records."
+        title="No countries configured yet"
+        description="Country records will appear after your first onboarding submission."
+        icon={<PublicOffOutlinedIcon color="action" />}
         actionLabel="Reload"
         onAction={() => void countriesQuery.refetch()}
       />
@@ -88,12 +99,13 @@ export function CountriesPage() {
           {filteredCountries.length ? (
             <CountryTable countries={filteredCountries} />
           ) : (
-            <Stack sx={{ py: 4 }} spacing={1} alignItems="center">
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                No matching countries
-              </Typography>
-              <InlineHelpText>Try a broader filter or reset the search field.</InlineHelpText>
-            </Stack>
+            <EmptyState
+              title="No matching countries"
+              description="Try a broader filter or clear the search."
+              icon={<SearchOffOutlinedIcon color="action" />}
+              actionLabel="Clear Search"
+              onAction={() => setSearchTerm('')}
+            />
           )}
         </Stack>
       </CardSection>

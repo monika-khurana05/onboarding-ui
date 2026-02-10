@@ -183,7 +183,8 @@ export const darkTheme = createTheme({
           borderRadius: enterpriseDesign.borderRadius,
           minHeight: enterpriseDesign.buttonHeight,
           fontWeight: 500,
-          paddingInline: '14px'
+          paddingInline: '14px',
+          transition: 'background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease'
         },
         sizeSmall: {
           minHeight: 32,
