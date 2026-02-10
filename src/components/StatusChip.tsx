@@ -1,8 +1,7 @@
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
-import { Chip } from '@mui/material';
-
+import { Badge } from '@ui/Badge';
 type StatusChipProps = {
   status: 'active' | 'pending' | 'blocked' | 'success' | 'failed' | 'running';
 };
@@ -12,9 +11,9 @@ export function StatusChip({ status }: StatusChipProps) {
     case 'active':
     case 'success':
       return (
-        <Chip
+        <Badge
           size="small"
-          color="success"
+          tone="success"
           variant="outlined"
           icon={<CheckCircleOutlineIcon />}
           label={status}
@@ -23,9 +22,9 @@ export function StatusChip({ status }: StatusChipProps) {
     case 'pending':
     case 'running':
       return (
-        <Chip
+        <Badge
           size="small"
-          color="warning"
+          tone="warning"
           variant="outlined"
           icon={<HourglassBottomIcon />}
           label={status}
@@ -34,15 +33,17 @@ export function StatusChip({ status }: StatusChipProps) {
     case 'blocked':
     case 'failed':
       return (
-        <Chip
+        <Badge
           size="small"
-          color="error"
+          tone="error"
           variant="outlined"
           icon={<ReportProblemIcon />}
           label={status}
         />
       );
     default:
-      return <Chip size="small" label={status} />;
+      return <Badge size="small" label={status} />;
   }
 }
+
+

@@ -1,23 +1,15 @@
-import {
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography
-} from '@mui/material';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { StatusChip } from '../../components/StatusChip';
 import type { Country } from './types';
 
+import { Card } from '@ui/Card';
 type CountryTableProps = {
   countries: Country[];
 };
 
 export function CountryTable({ countries }: CountryTableProps) {
   return (
-    <TableContainer component={Paper} variant="outlined">
+    <TableContainer component={Card} variant="outlined">
       <Table aria-label="Countries table" stickyHeader>
         <TableHead>
           <TableRow>
@@ -55,3 +47,5 @@ export function CountryTable({ countries }: CountryTableProps) {
     </TableContainer>
   );
 }
+
+

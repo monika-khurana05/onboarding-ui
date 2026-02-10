@@ -36,3 +36,5 @@ describe('SnapshotRequestForm', () => {
     expect(await screen.findByText(/Advanced mode accepts strict JSON/i)).toBeInTheDocument();
   });
 });
+
+

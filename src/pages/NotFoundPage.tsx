@@ -1,9 +1,10 @@
-import { Button, Stack } from '@mui/material';
+import { Stack } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { CardSection } from '../components/CardSection';
 import { InlineHelpText } from '../components/InlineHelpText';
 import { PageContainer } from '../components/PageContainer';
 
+import { Button } from '@ui/Button';
 export function NotFoundPage() {
   return (
     <PageContainer title="Page Not Found" subtitle="The requested route does not exist in this onboarding console.">
@@ -18,3 +19,5 @@ export function NotFoundPage() {
     </PageContainer>
   );
 }
+
+

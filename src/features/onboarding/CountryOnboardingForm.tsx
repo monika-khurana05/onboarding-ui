@@ -1,19 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import CheckIcon from '@mui/icons-material/Check';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import {
-  Alert,
-  Button,
-  CircularProgress,
-  FormControlLabel,
-  Grid,
-  MenuItem,
-  Stack,
-  Switch,
-  Tab,
-  Tabs,
-  TextField
-} from '@mui/material';
+import { Alert, CircularProgress, FormControlLabel, Grid, MenuItem, Stack, Switch, Tab, Tabs } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { JsonAdvancedEditor } from '../../components/JsonAdvancedEditor';
@@ -23,6 +11,8 @@ import { onboardingDefaultValues } from './defaultValues';
 import { countryOnboardingSchema, workflowConfigSchema } from './schema';
 import type { CountryOnboardingInput } from './schema';
 
+import { Button } from '@ui/Button';
+import { Input } from '@ui/Input';
 type CountryOnboardingFormProps = {
   templates: OnboardingTemplate[];
   submitting: boolean;
@@ -128,7 +118,7 @@ export function CountryOnboardingForm({
       >
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
+            <Input
               fullWidth
               label="Country Name"
               placeholder="United Kingdom"
@@ -138,7 +128,7 @@ export function CountryOnboardingForm({
             />
           </Grid>
           <Grid size={{ xs: 12, md: 2 }}>
-            <TextField
+            <Input
               fullWidth
               label="ISO Code"
               placeholder="GB, SG, AE"
@@ -155,7 +145,7 @@ export function CountryOnboardingForm({
               name="region"
               control={control}
               render={({ field }) => (
-                <TextField
+                <Input
                   fullWidth
                   select
                   label="Region"
@@ -167,7 +157,7 @@ export function CountryOnboardingForm({
                   <MenuItem value="Americas">Americas</MenuItem>
                   <MenuItem value="EMEA">EMEA</MenuItem>
                   <MenuItem value="APAC">APAC</MenuItem>
-                </TextField>
+                </Input>
               )}
             />
           </Grid>
@@ -176,7 +166,7 @@ export function CountryOnboardingForm({
               name="regulatoryTier"
               control={control}
               render={({ field }) => (
-                <TextField
+                <Input
                   fullWidth
                   select
                   label="Regulatory Tier"
@@ -188,12 +178,12 @@ export function CountryOnboardingForm({
                   <MenuItem value="Tier 1">Tier 1</MenuItem>
                   <MenuItem value="Tier 2">Tier 2</MenuItem>
                   <MenuItem value="Tier 3">Tier 3</MenuItem>
-                </TextField>
+                </Input>
               )}
             />
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
+            <Input
               fullWidth
               type="date"
               label="Target Launch Date"
@@ -204,7 +194,7 @@ export function CountryOnboardingForm({
             />
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
+            <Input
               fullWidth
               label="Settlement Currency"
               placeholder="USD, EUR, AED"
@@ -217,7 +207,7 @@ export function CountryOnboardingForm({
             />
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField
+            <Input
               fullWidth
               type="number"
               label="Risk Threshold"
@@ -232,7 +222,7 @@ export function CountryOnboardingForm({
             />
           </Grid>
           <Grid size={{ xs: 12, md: 8 }}>
-            <TextField
+            <Input
               fullWidth
               select
               label="Template"
@@ -246,7 +236,7 @@ export function CountryOnboardingForm({
                   {template.name}
                 </MenuItem>
               ))}
-            </TextField>
+            </Input>
           </Grid>
           <Grid size={{ xs: 12, md: 2 }}>
             <Controller
@@ -296,7 +286,7 @@ export function CountryOnboardingForm({
                 name="workflowConfig.approvalMode"
                 control={control}
                 render={({ field }) => (
-                  <TextField
+                  <Input
                     select
                     fullWidth
                     label="Approval Mode"
@@ -311,7 +301,7 @@ export function CountryOnboardingForm({
                     <MenuItem value="single">Single approver</MenuItem>
                     <MenuItem value="dual">Dual control</MenuItem>
                     <MenuItem value="committee">Committee</MenuItem>
-                  </TextField>
+                  </Input>
                 )}
               />
             </Grid>
@@ -320,7 +310,7 @@ export function CountryOnboardingForm({
                 name="workflowConfig.alertChannel"
                 control={control}
                 render={({ field }) => (
-                  <TextField
+                  <Input
                     select
                     fullWidth
                     label="Alert Channel"
@@ -335,12 +325,12 @@ export function CountryOnboardingForm({
                     <MenuItem value="email">Email</MenuItem>
                     <MenuItem value="slack">Slack</MenuItem>
                     <MenuItem value="service-desk">Service Desk</MenuItem>
-                  </TextField>
+                  </Input>
                 )}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
-              <TextField
+              <Input
                 fullWidth
                 label="Settlement Cutoff"
                 placeholder="17:00"
@@ -353,7 +343,7 @@ export function CountryOnboardingForm({
               />
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
-              <TextField
+              <Input
                 fullWidth
                 type="number"
                 label="Escalation Hours"
@@ -421,3 +411,5 @@ export function CountryOnboardingForm({
     </Stack>
   );
 }
+
+

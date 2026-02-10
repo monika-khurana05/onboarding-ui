@@ -1,15 +1,15 @@
-import { alpha } from '@mui/material/styles';
-import { Paper, type PaperProps, Stack } from '@mui/material';
+import { Stack } from '@mui/material';
 import type { PropsWithChildren, ReactNode } from 'react';
 import { enterpriseDesign, spacingScale } from '../theme/designSystem';
 import { SectionHeader } from './SectionHeader';
 
+import { Card, type CardProps } from '@ui/Card';
 type CardSectionProps = PropsWithChildren<{
   title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
   contentSpacing?: number;
-  paperProps?: Omit<PaperProps, 'children'>;
+  paperProps?: Omit<CardProps, 'children'>;
 }>;
 
 export function CardSection({
@@ -23,10 +23,11 @@ export function CardSection({
   const { sx: paperSx, ...paperRest } = paperProps ?? {};
 
   return (
-    <Paper
+    <Card
       elevation={0}
       variant="outlined"
       {...paperRest}
+      className="transition-shadow hover:shadow-[var(--shadow-subtle)] hover:!border-accent"
       sx={[
         {
           p: {
@@ -34,11 +35,7 @@ export function CardSection({
             md: `${enterpriseDesign.cardPadding.desktop}px`
           },
           borderRadius: `${enterpriseDesign.borderRadius}px`,
-          transition: 'box-shadow 150ms ease, border-color 150ms ease',
-          '&:hover': {
-            boxShadow: (theme) => theme.shadows[2],
-            borderColor: (theme) => alpha(theme.palette.primary.main, 0.34)
-          }
+          transition: 'box-shadow 150ms ease, border-color 150ms ease'
         },
         paperSx
       ]}
@@ -47,6 +44,8 @@ export function CardSection({
         <SectionHeader title={title} subtitle={subtitle} actions={actions} />
         {children}
       </Stack>
-    </Paper>
+    </Card>
   );
 }
+
+

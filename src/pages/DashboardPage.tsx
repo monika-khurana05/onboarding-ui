@@ -3,21 +3,7 @@ import LaunchIcon from '@mui/icons-material/Launch';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
-import {
-  Button,
-  Grid,
-  InputAdornment,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography
-} from '@mui/material';
+import { Grid, InputAdornment, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { CardSection } from '../components/CardSection';
@@ -25,6 +11,9 @@ import { EmptyState } from '../components/EmptyState';
 import { InlineHelpText } from '../components/InlineHelpText';
 import { PageContainer } from '../components/PageContainer';
 
+import { Button } from '@ui/Button';
+import { Input } from '@ui/Input';
+import { Card } from '@ui/Card';
 type RecentSnapshot = {
   snapshotId: string;
   countryCode: string;
@@ -91,18 +80,13 @@ export function DashboardPage() {
       <CardSection title="Summary" subtitle="Snapshot activity at a glance.">
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Paper
+            <Card
               variant="outlined"
-              sx={{
-                p: 2,
-                borderRadius: 1,
-                borderColor: 'divider',
-                background: (theme) =>
-                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
-              }}
+              className="bg-surface border-border"
+              sx={{ p: 2, borderRadius: 1 }}
             >
               <Stack spacing={0.5}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                <Typography variant="overline" className="text-muted tracking-[0.08em]">
                   Total snapshots
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 700 }}>
@@ -110,21 +94,16 @@ export function DashboardPage() {
                 </Typography>
                 <InlineHelpText>Stored locally</InlineHelpText>
               </Stack>
-            </Paper>
+            </Card>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Paper
+            <Card
               variant="outlined"
-              sx={{
-                p: 2,
-                borderRadius: 1,
-                borderColor: 'divider',
-                background: (theme) =>
-                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
-              }}
+              className="bg-surface border-border"
+              sx={{ p: 2, borderRadius: 1 }}
             >
               <Stack spacing={0.5}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                <Typography variant="overline" className="text-muted tracking-[0.08em]">
                   Recent onboarding activity
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 700 }}>
@@ -132,21 +111,16 @@ export function DashboardPage() {
                 </Typography>
                 <InlineHelpText>Last {recentWindowDays} days</InlineHelpText>
               </Stack>
-            </Paper>
+            </Card>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Paper
+            <Card
               variant="outlined"
-              sx={{
-                p: 2,
-                borderRadius: 1,
-                borderColor: 'divider',
-                background: (theme) =>
-                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
-              }}
+              className="bg-surface border-border"
+              sx={{ p: 2, borderRadius: 1 }}
             >
               <Stack spacing={0.5}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                <Typography variant="overline" className="text-muted tracking-[0.08em]">
                   Repos impacted
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 700 }}>
@@ -154,7 +128,7 @@ export function DashboardPage() {
                 </Typography>
                 <InlineHelpText>{DEFAULT_REPOS.join(', ')}</InlineHelpText>
               </Stack>
-            </Paper>
+            </Card>
           </Grid>
         </Grid>
       </CardSection>
@@ -162,9 +136,9 @@ export function DashboardPage() {
       <CardSection title="Quick Start" subtitle="Create, preview, then automate.">
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+            <Card variant="outlined" className="bg-surface border-border" sx={{ p: 2, borderRadius: 1 }}>
               <Stack spacing={1}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                <Typography variant="overline" className="text-muted tracking-[0.08em]">
                   Step 1
                 </Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -174,12 +148,12 @@ export function DashboardPage() {
                   Capture country, capabilities, and workflow into a versioned snapshot.
                 </InlineHelpText>
               </Stack>
-            </Paper>
+            </Card>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+            <Card variant="outlined" className="bg-surface border-border" sx={{ p: 2, borderRadius: 1 }}>
               <Stack spacing={1}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                <Typography variant="overline" className="text-muted tracking-[0.08em]">
                   Step 2
                 </Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -189,12 +163,12 @@ export function DashboardPage() {
                   Validate generated files repo-by-repo before automation.
                 </InlineHelpText>
               </Stack>
-            </Paper>
+            </Card>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+            <Card variant="outlined" className="bg-surface border-border" sx={{ p: 2, borderRadius: 1 }}>
               <Stack spacing={1}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                <Typography variant="overline" className="text-muted tracking-[0.08em]">
                   Step 3
                 </Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -202,7 +176,7 @@ export function DashboardPage() {
                 </Typography>
                 <InlineHelpText>Open PRs, approvals, and deploy when automation ships.</InlineHelpText>
               </Stack>
-            </Paper>
+            </Card>
           </Grid>
         </Grid>
       </CardSection>
@@ -222,7 +196,7 @@ export function DashboardPage() {
         }
       >
         <Stack spacing={2}>
-          <TextField
+          <Input
             fullWidth
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -241,7 +215,7 @@ export function DashboardPage() {
               title="No snapshots yet"
               description="Create one to start onboarding."
               action={
-                <Button component={RouterLink} to="/snapshots/new" variant="contained">
+                <Button component={RouterLink} to="/snapshots/new" variant="primary">
                   Create Snapshot
                 </Button>
               }
@@ -255,28 +229,22 @@ export function DashboardPage() {
               onAction={() => setSearch('')}
             />
           ) : (
-            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+            <TableContainer component={Card} variant="outlined" className="border border-border" sx={{ borderRadius: 1 }}>
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell
-                      sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.72rem', color: 'text.secondary' }}
-                    >
+                    <TableCell className="text-muted uppercase tracking-[0.08em] text-[0.72rem]">
                       Country
                     </TableCell>
-                    <TableCell
-                      sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.72rem', color: 'text.secondary' }}
-                    >
+                    <TableCell className="text-muted uppercase tracking-[0.08em] text-[0.72rem]">
                       Snapshot
                     </TableCell>
-                    <TableCell
-                      sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.72rem', color: 'text.secondary' }}
-                    >
+                    <TableCell className="text-muted uppercase tracking-[0.08em] text-[0.72rem]">
                       Created
                     </TableCell>
                     <TableCell
                       align="right"
-                      sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.72rem', color: 'text.secondary' }}
+                      className="text-muted uppercase tracking-[0.08em] text-[0.72rem]"
                     >
                       Actions
                     </TableCell>
@@ -284,7 +252,7 @@ export function DashboardPage() {
                 </TableHead>
                 <TableBody>
                   {filteredSnapshots.map((snapshot) => (
-                    <TableRow key={snapshot.snapshotId} hover>
+                    <TableRow key={snapshot.snapshotId} hover className="hover:bg-surface2">
                       <TableCell>
                         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                           {snapshot.countryCode}
@@ -340,3 +308,5 @@ export function DashboardPage() {
     </PageContainer>
   );
 }
+
+

@@ -2,20 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveIcon from '@mui/icons-material/Save';
-import {
-  Alert,
-  Button,
-  CircularProgress,
-  FormControlLabel,
-  Grid,
-  MenuItem,
-  Stack,
-  Switch,
-  Tab,
-  Tabs,
-  TextField,
-  Typography
-} from '@mui/material';
+import { Alert, CircularProgress, FormControlLabel, Grid, MenuItem, Stack, Switch, Tab, Tabs, Typography } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { JsonAdvancedEditor } from '../../components/JsonAdvancedEditor';
@@ -24,6 +11,8 @@ import { capabilityDomains } from './domains';
 import { snapshotFormDefaults } from './defaultValues';
 import { snapshotFormSchema, type SnapshotFormValues } from './schema';
 
+import { Button } from '@ui/Button';
+import { Input } from '@ui/Input';
 type SnapshotRequestFormProps = {
   submitting: boolean;
   submitError?: string | null;
@@ -68,15 +57,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
             name={`domains.${domain.slug}`}
             control={control}
             render={({ field }) => (
-              <Stack
-                sx={{
-                  p: 1.5,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 1
-                }}
-                spacing={0.75}
-              >
+              <Stack className="border border-border rounded-[var(--radius-sm)] p-1.5" spacing={0.75}>
                 <FormControlLabel
                   control={
                     <Switch
@@ -146,7 +127,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
         {editorMode === 'form' ? (
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, md: 2 }}>
-              <TextField
+              <Input
                 fullWidth
                 label="Country Code"
                 placeholder="GB, SG, AE"
@@ -157,7 +138,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
               />
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
-              <TextField
+              <Input
                 fullWidth
                 label="Country Name"
                 placeholder="United Kingdom"
@@ -167,7 +148,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
               />
             </Grid>
             <Grid size={{ xs: 12, md: 3 }}>
-              <TextField
+              <Input
                 fullWidth
                 label="Legal Entity"
                 placeholder="CPX Markets Ltd"
@@ -181,7 +162,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                 name="region"
                 control={control}
                 render={({ field }) => (
-                  <TextField
+                  <Input
                     fullWidth
                     select
                     label="Region"
@@ -193,12 +174,12 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                     <MenuItem value="Americas">Americas</MenuItem>
                     <MenuItem value="EMEA">EMEA</MenuItem>
                     <MenuItem value="APAC">APAC</MenuItem>
-                  </TextField>
+                  </Input>
                 )}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
-              <TextField
+              <Input
                 fullWidth
                 label="Requested By"
                 placeholder="onboarding.ops@cpx.com"
@@ -212,7 +193,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                 name="commitStrategy"
                 control={control}
                 render={({ field }) => (
-                  <TextField
+                  <Input
                     fullWidth
                     select
                     label="Commit Strategy"
@@ -223,7 +204,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                   >
                     <MenuItem value="mono-repo">Mono Repo</MenuItem>
                     <MenuItem value="multi-repo">Multi Repo</MenuItem>
-                  </TextField>
+                  </Input>
                 )}
               />
             </Grid>
@@ -264,7 +245,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
               </Stack>
             </Grid>
             <Grid size={{ xs: 12 }}>
-              <TextField
+              <Input
                 fullWidth
                 multiline
                 minRows={3}
@@ -325,3 +306,5 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
     </Stack>
   );
 }
+
+

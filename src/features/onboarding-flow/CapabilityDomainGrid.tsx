@@ -1,6 +1,8 @@
-import { Chip, Grid, Paper, Stack, Typography } from '@mui/material';
+import { Grid, Stack, Typography } from '@mui/material';
 import { capabilityDomains } from './domains';
 
+import { Card } from '@ui/Card';
+import { Badge } from '@ui/Badge';
 type CapabilityDomainGridProps = {
   compact?: boolean;
 };
@@ -10,21 +12,20 @@ export function CapabilityDomainGrid({ compact = false }: CapabilityDomainGridPr
     <Grid container spacing={2}>
       {capabilityDomains.map((domain) => (
         <Grid key={domain.slug} size={{ xs: 12, md: compact ? 6 : 4 }}>
-          <Paper
+          <Card
             variant="outlined"
             sx={{
               p: 2,
-              height: '100%',
-              borderLeft: '4px solid',
-              borderLeftColor: 'primary.main'
+              height: '100%'
             }}
+            className="border-l-4 border-primary"
           >
             <Stack spacing={1}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                   {domain.label}
                 </Typography>
-                <Chip size="small" variant="outlined" label="Domain" color="primary" />
+                <Badge size="small" variant="outlined" label="Domain" tone="primary" />
               </Stack>
               <Typography variant="body2" color="text.secondary">
                 {domain.description}
@@ -33,9 +34,11 @@ export function CapabilityDomainGrid({ compact = false }: CapabilityDomainGridPr
                 Repo hint: {domain.repositoryHint}
               </Typography>
             </Stack>
-          </Paper>
+          </Card>
         </Grid>
       ))}
     </Grid>
   );
 }
+
+

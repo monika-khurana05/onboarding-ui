@@ -1,10 +1,12 @@
-import { Alert, Chip, Grid, List, ListItem, ListItemText, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Grid, List, ListItem, ListItemText, Stack, Typography } from '@mui/material';
 import { CardSection } from '../components/CardSection';
 import { InlineHelpText } from '../components/InlineHelpText';
 import { PageContainer } from '../components/PageContainer';
 import { env } from '../lib/env';
-import { deriveEnvironmentFromApiUrl } from '../lib/environment';
+import { deriveEnvironmentFromApiUrl, environmentChipColor } from '../lib/environment';
 
+import { Card } from '@ui/Card';
+import { Badge } from '@ui/Badge';
 export function SettingsPage() {
   const deploymentEnvironment = deriveEnvironmentFromApiUrl(env.apiBaseUrl);
 
@@ -16,18 +18,18 @@ export function SettingsPage() {
       >
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 6 }}>
-            <Paper variant="outlined" sx={{ p: 2 }}>
+            <Card variant="outlined" sx={{ p: 2 }}>
               <InlineHelpText>API Base URL</InlineHelpText>
               <Typography variant="body1">
                 {env.apiBaseUrl ?? 'Not configured (sample-data mode active)'}
               </Typography>
-            </Paper>
+            </Card>
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
-            <Paper variant="outlined" sx={{ p: 2 }}>
+            <Card variant="outlined" sx={{ p: 2 }}>
               <InlineHelpText>Auth Token</InlineHelpText>
               <Typography variant="body1">{env.authToken ? 'Configured' : 'Not configured'}</Typography>
-            </Paper>
+            </Card>
           </Grid>
         </Grid>
       </CardSection>
@@ -38,7 +40,12 @@ export function SettingsPage() {
           <Typography variant="body1">Build: Enterprise UI shell for snapshot and preview pipeline</Typography>
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography variant="body1">Environment:</Typography>
-            <Chip size="small" label={deploymentEnvironment} color="primary" variant="outlined" />
+            <Badge
+              size="small"
+              label={deploymentEnvironment}
+              tone={environmentChipColor(deploymentEnvironment)}
+              variant="outlined"
+            />
           </Stack>
         </Stack>
       </CardSection>
@@ -75,3 +82,5 @@ export function SettingsPage() {
     </PageContainer>
   );
 }
+
+

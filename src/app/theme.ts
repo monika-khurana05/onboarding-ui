@@ -3,46 +3,77 @@ import { enterpriseDesign } from '../theme/designSystem';
 
 export type AppThemeMode = 'light' | 'dark';
 
+const cssVar = (name: string) => `var(--${name})`;
+
+const tokens = {
+  bg: cssVar('bg'),
+  surface: cssVar('surface'),
+  surface2: cssVar('surface2'),
+  border: cssVar('border'),
+  text: cssVar('text'),
+  textMuted: cssVar('text-muted'),
+  primary: cssVar('primary'),
+  primaryHover: cssVar('primary-hover'),
+  primaryActive: cssVar('primary-active'),
+  primaryFg: cssVar('primary-fg'),
+  accent: cssVar('accent'),
+  accentHover: cssVar('accent-hover'),
+  accentFg: cssVar('accent-fg'),
+  success: cssVar('success'),
+  warning: cssVar('warning'),
+  error: cssVar('error'),
+  info: cssVar('info'),
+  focusRing: cssVar('focus-ring'),
+  selection: cssVar('selection'),
+  hover: cssVar('hover'),
+  overlay: cssVar('overlay'),
+  shadowSubtle: cssVar('shadow-subtle'),
+  shadowElevated: cssVar('shadow-elevated')
+} as const;
+
 export function createAppTheme(mode: AppThemeMode) {
-  const isDark = mode === 'dark';
+  const resolvedMode: AppThemeMode = mode === 'light' ? 'dark' : mode;
+
   const palette = {
-    mode,
+    mode: resolvedMode,
     primary: {
-      main: isDark ? '#4B84FF' : '#005a9c',
-      dark: isDark ? '#2F67DD' : '#003b68',
-      light: isDark ? '#82A9FF' : '#3f83bd',
-      contrastText: isDark ? '#0F1115' : '#ffffff'
+      main: tokens.primary,
+      dark: tokens.primaryActive,
+      light: tokens.primaryHover,
+      contrastText: tokens.primaryFg
     },
     secondary: {
-      main: isDark ? '#1FB6A9' : '#007a8a',
-      dark: isDark ? '#15887E' : '#005e6a',
-      light: isDark ? '#56CEC5' : '#3ea5b2',
-      contrastText: isDark ? '#0F1115' : '#ffffff'
+      main: tokens.accent,
+      dark: tokens.accent,
+      light: tokens.accentHover,
+      contrastText: tokens.accentFg
     },
     success: {
-      main: isDark ? '#1f9d6c' : '#13795b'
+      main: tokens.success
     },
     warning: {
-      main: isDark ? '#d4a037' : '#b7791f'
+      main: tokens.warning
     },
     error: {
-      main: isDark ? '#e05a4f' : '#b3261e'
+      main: tokens.error
+    },
+    info: {
+      main: tokens.info
     },
     background: {
-      default: isDark ? '#0F1115' : '#f3f7fb',
-      paper: isDark ? '#1A1D23' : '#ffffff'
+      default: tokens.bg,
+      paper: tokens.surface
     },
     text: {
-      primary: isDark ? '#E6EDF3' : '#111827',
-      secondary: isDark ? '#A8B3BF' : '#374151'
+      primary: tokens.text,
+      secondary: tokens.textMuted
     },
-    divider: isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0',
+    divider: tokens.border,
     action: {
-      hover: isDark ? 'rgba(230,237,243,0.06)' : 'rgba(15, 23, 42, 0.06)',
-      selected: isDark ? 'rgba(75,132,255,0.24)' : 'rgba(0, 90, 156, 0.12)'
+      hover: tokens.hover,
+      selected: tokens.selection
     }
   };
-  const focusRing = palette.primary.main;
   const secondaryText = palette.text.secondary;
 
   return createTheme({
@@ -100,27 +131,19 @@ export function createAppTheme(mode: AppThemeMode) {
       }
     },
     components: {
-      MuiCssBaseline: {
-        styleOverrides: {
-          ':focus-visible': {
-            outline: `2px solid ${focusRing}`,
-            outlineOffset: 2
-          }
-        }
-      },
       MuiAppBar: {
         styleOverrides: {
           root: {
-            background: isDark ? '#151821' : 'linear-gradient(90deg, #003b68 0%, #005a9c 55%, #007a8a 100%)',
+            backgroundColor: tokens.surface,
             backgroundImage: 'none',
-            borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : undefined
+            borderBottom: `1px solid ${tokens.border}`
           }
         }
       },
       MuiDrawer: {
         styleOverrides: {
           paper: {
-            backgroundColor: isDark ? '#12151B' : '#ffffff',
+            backgroundColor: tokens.surface,
             backgroundImage: 'none'
           }
         }
@@ -129,10 +152,11 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: {
             backgroundImage: 'none',
-            backgroundColor: isDark ? '#1A1D23' : '#ffffff'
+            backgroundColor: tokens.surface,
+            borderRadius: enterpriseDesign.borderRadius
           },
           outlined: {
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`,
+            border: `1px solid ${tokens.border}`,
             boxShadow: 'none'
           }
         }
@@ -140,9 +164,9 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiTableContainer: {
         styleOverrides: {
           root: {
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`,
+            border: `1px solid ${tokens.border}`,
             borderRadius: enterpriseDesign.borderRadius,
-            backgroundColor: isDark ? '#171B21' : palette.background.paper,
+            backgroundColor: tokens.surface,
             maxHeight: 'min(60vh, 560px)',
             overflow: 'auto'
           }
@@ -152,10 +176,10 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: {
             '& tbody .MuiTableRow-root:nth-of-type(odd)': {
-              backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : undefined
+              backgroundColor: tokens.surface2
             },
             '& tbody .MuiTableRow-root:hover': {
-              backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : undefined
+              backgroundColor: tokens.hover
             }
           }
         }
@@ -164,7 +188,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: {
             '&.MuiTableRow-hover:hover': {
-              backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : undefined
+              backgroundColor: tokens.hover
             }
           }
         }
@@ -172,19 +196,19 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiTableCell: {
         styleOverrides: {
           head: {
-            backgroundColor: isDark ? '#20242D' : '#e9f1f9',
-            color: isDark ? '#E6EDF3' : '#1f2a44',
+            backgroundColor: tokens.surface2,
+            color: tokens.text,
             fontWeight: 600,
-            borderBottomColor: isDark ? 'rgba(255,255,255,0.16)' : '#e2e8f0'
+            borderBottomColor: tokens.border
           },
           stickyHeader: {
-            backgroundColor: isDark ? '#20242D' : '#e9f1f9',
-            color: isDark ? '#E6EDF3' : '#1f2a44',
+            backgroundColor: tokens.surface2,
+            color: tokens.text,
             zIndex: 2
           },
           root: {
-            color: isDark ? '#E6EDF3' : undefined,
-            borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'
+            color: tokens.text,
+            borderBottomColor: tokens.border
           }
         }
       },
@@ -215,7 +239,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: {
             '&.Mui-focusVisible': {
-              outline: `2px solid ${focusRing}`,
+              outline: `2px solid ${tokens.focusRing}`,
               outlineOffset: 2
             }
           }
@@ -233,23 +257,26 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: {
             borderRadius: enterpriseDesign.borderRadius,
-            backgroundColor: isDark ? '#131821' : '#ffffff',
-            color: isDark ? '#E6EDF3' : undefined,
+            backgroundColor: tokens.surface2,
+            color: tokens.text,
             '&:not(.MuiInputBase-multiline)': {
               minHeight: 44
             },
             '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: isDark ? 'rgba(230,237,243,0.22)' : undefined
+              borderColor: tokens.border
             },
             '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: isDark ? 'rgba(230,237,243,0.34)' : undefined
+              borderColor: tokens.textMuted
             },
             '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderColor: isDark ? '#4B84FF' : undefined,
+              borderColor: tokens.primary,
               borderWidth: 1
             },
+            '&.Mui-error .MuiOutlinedInput-notchedOutline': {
+              borderColor: tokens.error
+            },
             '& input::placeholder, & textarea::placeholder': {
-              color: secondaryText,
+              color: tokens.textMuted,
               opacity: 1
             }
           }
@@ -283,7 +310,7 @@ export function createAppTheme(mode: AppThemeMode) {
             fontSize: 12,
             fontWeight: 500,
             '&.Mui-focused': {
-              color: isDark ? '#82A9FF' : undefined
+              color: tokens.primaryHover
             }
           }
         }
@@ -300,34 +327,41 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiDialog: {
         styleOverrides: {
           paper: {
-            backgroundColor: isDark ? '#1A1D23' : '#ffffff',
-            border: isDark ? '1px solid rgba(255,255,255,0.08)' : undefined,
-            boxShadow: isDark ? '0 20px 48px rgba(0, 0, 0, 0.45)' : undefined
+            backgroundColor: tokens.surface,
+            border: `1px solid ${tokens.border}`,
+            boxShadow: tokens.shadowElevated
           }
         }
       },
       MuiDialogTitle: {
         styleOverrides: {
           root: {
-            color: isDark ? '#E6EDF3' : undefined,
-            borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : undefined
+            color: tokens.text,
+            borderBottom: `1px solid ${tokens.border}`
           }
         }
       },
       MuiDialogContent: {
         styleOverrides: {
           root: {
-            color: isDark ? '#E6EDF3' : undefined
+            color: tokens.text
           },
           dividers: {
-            borderColor: isDark ? 'rgba(255,255,255,0.08)' : undefined
+            borderColor: tokens.border
           }
         }
       },
       MuiDialogActions: {
         styleOverrides: {
           root: {
-            borderTop: isDark ? '1px solid rgba(255,255,255,0.08)' : undefined
+            borderTop: `1px solid ${tokens.border}`
+          }
+        }
+      },
+      MuiBackdrop: {
+        styleOverrides: {
+          root: {
+            backgroundColor: tokens.overlay
           }
         }
       },

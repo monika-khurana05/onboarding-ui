@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { CssBaseline, ThemeProvider } from '@mui/material';
+import './styles/tailwind.css';
+import './styles/theme.css';
 import { QueryClientProvider } from '@tanstack/react-query';
 import App from './app/App';
 import { GlobalErrorProvider } from './app/GlobalErrorContext';
@@ -32,3 +34,7 @@ async function bootstrap() {
 }
 
 void bootstrap();
+
+
+
+

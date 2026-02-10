@@ -1,5 +1,4 @@
 import { Box, Skeleton, Stack } from '@mui/material';
-
 type SkeletonStateVariant = 'card' | 'form' | 'table';
 
 type SkeletonStateProps = {
@@ -68,3 +67,5 @@ export function SkeletonState({ variant = 'card', rows = 5 }: SkeletonStateProps
     </Box>
   );
 }
+
+

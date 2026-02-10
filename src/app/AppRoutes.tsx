@@ -7,8 +7,11 @@ import { JobsPage } from '../pages/JobsPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { SnapshotDetailsPage } from '../pages/SnapshotDetailsPage';
+import { ThemePreviewPage } from '../pages/ThemePreviewPage';
 
 export function AppRoutes() {
+  const showThemePreview = import.meta.env.DEV;
+
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -18,8 +21,11 @@ export function AppRoutes() {
         <Route path="/generate/preview" element={<GeneratePreviewPage />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        {showThemePreview ? <Route path="/theme-preview" element={<ThemePreviewPage />} /> : null}
       </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
+
+

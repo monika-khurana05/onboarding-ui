@@ -1,24 +1,12 @@
 import AddIcon from '@mui/icons-material/Add';
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import {
-  Button,
-  IconButton,
-  MenuItem,
-  Paper,
-  Stack,
-  Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography
-} from '@mui/material';
+import { IconButton, MenuItem, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { useMemo } from 'react';
 
+import { Button } from '@ui/Button';
+import { Input } from '@ui/Input';
+import { Card } from '@ui/Card';
 export type EditableRuleRow = {
   key: string;
   enabled: boolean;
@@ -77,7 +65,7 @@ export function EditableRulesTable({
           </Typography>
         ) : null}
       </Stack>
-      <TableContainer component={Paper} variant="outlined">
+      <TableContainer component={Card} variant="outlined">
         <Table size="small" stickyHeader aria-label={`${title} rules table`}>
           <TableHead>
             <TableRow>
@@ -99,7 +87,7 @@ export function EditableRulesTable({
               return (
                 <TableRow key={`${rule.key}-${index}`}>
                   <TableCell>
-                    <TextField
+                    <Input
                       size="small"
                       value={rule.key}
                       onChange={(event) => handleUpdate(index, { key: event.target.value })}
@@ -112,7 +100,7 @@ export function EditableRulesTable({
                   </TableCell>
                   {showSeverity ? (
                     <TableCell>
-                      <TextField
+                      <Input
                         select
                         size="small"
                         value={rule.severity ?? ''}
@@ -132,7 +120,7 @@ export function EditableRulesTable({
                             {option}
                           </MenuItem>
                         ))}
-                      </TextField>
+                      </Input>
                     </TableCell>
                   ) : null}
                   <TableCell>
@@ -188,3 +176,5 @@ export function EditableRulesTable({
     </Stack>
   );
 }
+
+
