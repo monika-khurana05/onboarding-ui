@@ -120,7 +120,7 @@ export function AppShell() {
                 borderRadius: '8px',
                 '&.Mui-selected': {
                   backgroundColor:
-                    themeValue.palette.mode === 'dark' ? 'rgba(79, 163, 255, 0.2)' : themeValue.palette.primary.light,
+                    themeValue.palette.mode === 'dark' ? 'rgba(75,132,255,0.24)' : themeValue.palette.primary.light,
                   color: themeValue.palette.mode === 'dark' ? themeValue.palette.text.primary : themeValue.palette.primary.contrastText,
                   '& .MuiListItemIcon-root': {
                     color:
@@ -198,7 +198,7 @@ export function AppShell() {
           py: { xs: 2, md: 3 },
           background: (themeValue) =>
             themeValue.palette.mode === 'dark'
-              ? 'radial-gradient(circle at 100% 0, rgba(79,163,255,0.12) 0, rgba(11,18,32,1) 45%)'
+              ? 'radial-gradient(circle at 100% 0, rgba(75,132,255,0.15) 0, rgba(15,17,21,1) 46%)'
               : 'radial-gradient(circle at 100% 0, rgba(63,131,189,0.12) 0, rgba(243,247,251,1) 40%)'
         }}
       >

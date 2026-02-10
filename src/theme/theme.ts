@@ -8,22 +8,23 @@ export const darkTheme = createTheme({
       main: '#4B84FF',
       dark: '#2F67DD',
       light: '#82A9FF',
-      contrastText: '#F8FAFC'
+      contrastText: '#0F1115'
     },
     secondary: {
       main: '#1FB6A9',
       dark: '#15887E',
-      light: '#56CEC5'
+      light: '#56CEC5',
+      contrastText: '#0F1115'
     },
     background: {
-      default: '#0B1322',
-      paper: '#121E33'
+      default: '#0F1115',
+      paper: '#1A1D23'
     },
     text: {
-      primary: '#E2E8F0',
-      secondary: '#96A4BC'
+      primary: '#E6EDF3',
+      secondary: '#9DA7B3'
     },
-    divider: 'rgba(148,163,184,0.25)',
+    divider: 'rgba(255,255,255,0.12)',
     error: {
       main: '#E66B61'
     },
@@ -35,6 +36,10 @@ export const darkTheme = createTheme({
     },
     info: {
       main: '#3AA7EA'
+    },
+    action: {
+      hover: 'rgba(230,237,243,0.06)',
+      selected: 'rgba(75,132,255,0.24)'
     }
   },
   shape: {
@@ -77,6 +82,10 @@ export const darkTheme = createTheme({
           '--space-16': '16px',
           '--space-24': '24px',
           '--space-32': '32px'
+        },
+        body: {
+          backgroundColor: '#0F1115',
+          color: '#E6EDF3'
         }
       }
     },
@@ -84,32 +93,61 @@ export const darkTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
+          backgroundColor: '#1A1D23',
           borderRadius: enterpriseDesign.borderRadius
+        },
+        outlined: {
+          border: '1px solid rgba(255,255,255,0.06)',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.24)'
         }
       }
     },
     MuiAppBar: {
       styleOverrides: {
         root: {
-          background: 'linear-gradient(90deg, #11264A 0%, #173365 55%, #1E3F72 100%)'
+          backgroundColor: '#151821',
+          backgroundImage: 'none',
+          borderBottom: '1px solid rgba(255,255,255,0.08)'
         }
       }
     },
     MuiDrawer: {
       styleOverrides: {
         paper: {
-          background: '#0F1A2D'
+          backgroundColor: '#12151B',
+          backgroundImage: 'none'
+        }
+      }
+    },
+    MuiTableContainer: {
+      styleOverrides: {
+        root: {
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: enterpriseDesign.borderRadius,
+          backgroundColor: '#171B21'
+        }
+      }
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          '&.MuiTableRow-hover:hover': {
+            backgroundColor: 'rgba(230,237,243,0.04)'
+          }
         }
       }
     },
     MuiTableCell: {
       styleOverrides: {
         head: {
-          color: '#C9D4E8',
-          fontWeight: 600
+          backgroundColor: '#20242D',
+          color: '#E6EDF3',
+          fontWeight: 600,
+          borderBottomColor: 'rgba(255,255,255,0.16)'
         },
         root: {
-          borderColor: 'rgba(148,163,184,0.25)'
+          color: '#E6EDF3',
+          borderBottomColor: 'rgba(255,255,255,0.1)'
         }
       }
     },
@@ -139,7 +177,76 @@ export const darkTheme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: enterpriseDesign.borderRadius,
-          backgroundColor: 'rgba(15, 23, 42, 0.5)'
+          backgroundColor: '#131821',
+          color: '#E6EDF3',
+          '& .MuiOutlinedInput-notchedOutline': {
+            borderColor: 'rgba(230,237,243,0.22)'
+          },
+          '&:hover .MuiOutlinedInput-notchedOutline': {
+            borderColor: 'rgba(230,237,243,0.34)'
+          },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            borderColor: '#4B84FF',
+            borderWidth: 1
+          },
+          '&.Mui-error .MuiOutlinedInput-notchedOutline': {
+            borderColor: '#E66B61'
+          },
+          '& input::placeholder, & textarea::placeholder': {
+            color: '#9DA7B3',
+            opacity: 1
+          }
+        }
+      }
+    },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: {
+          color: '#9DA7B3',
+          '&.Mui-focused': {
+            color: '#82A9FF'
+          }
+        }
+      }
+    },
+    MuiFormHelperText: {
+      styleOverrides: {
+        root: {
+          color: '#9DA7B3'
+        }
+      }
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          backgroundColor: '#1A1D23',
+          border: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: '0 20px 48px rgba(0, 0, 0, 0.45)'
+        }
+      }
+    },
+    MuiDialogTitle: {
+      styleOverrides: {
+        root: {
+          color: '#E6EDF3',
+          borderBottom: '1px solid rgba(255,255,255,0.08)'
+        }
+      }
+    },
+    MuiDialogContent: {
+      styleOverrides: {
+        root: {
+          color: '#E6EDF3'
+        },
+        dividers: {
+          borderColor: 'rgba(255,255,255,0.08)'
+        }
+      }
+    },
+    MuiDialogActions: {
+      styleOverrides: {
+        root: {
+          borderTop: '1px solid rgba(255,255,255,0.08)'
         }
       }
     },
@@ -162,7 +269,7 @@ export const darkTheme = createTheme({
         {
           props: { variant: 'caption' },
           style: {
-            color: '#96A4BC'
+            color: '#9DA7B3'
           }
         }
       ]
