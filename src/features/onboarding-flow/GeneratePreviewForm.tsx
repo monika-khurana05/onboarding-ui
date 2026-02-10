@@ -40,8 +40,12 @@ export function GeneratePreviewForm({
     formState: { errors }
   } = useForm<GeneratePreviewValues>({
     resolver: zodResolver(generatePreviewSchema),
-    defaultValues: generatePreviewDefaults
+    defaultValues: generatePreviewDefaults,
+    mode: 'onChange',
+    reValidateMode: 'onChange'
   });
+
+  const helperText = (errorMessage: string | undefined, guidance: string) => errorMessage ?? guidance;
 
   useEffect(() => {
     if (defaultSnapshotId) {
@@ -63,16 +67,17 @@ export function GeneratePreviewForm({
       <TextField
         label="Snapshot ID"
         fullWidth
+        placeholder="snap-gb-2026-01"
         error={Boolean(errors.snapshotId)}
-        helperText={errors.snapshotId?.message}
+        helperText={helperText(errors.snapshotId?.message, 'Identifies which persisted snapshot to generate from.')}
         {...register('snapshotId')}
       />
       <TextField
         label="Version (optional)"
         fullWidth
-        placeholder="Latest if blank"
+        placeholder="3"
         error={Boolean(errors.version)}
-        helperText={errors.version?.message}
+        helperText={helperText(errors.version?.message, 'Leave blank to use the latest saved version.')}
         {...register('version')}
       />
       <Controller
@@ -89,9 +94,9 @@ export function GeneratePreviewForm({
               <TextField
                 {...params}
                 label="Target Repositories"
-                placeholder="Select one or more repos"
+                placeholder="cpx-state-manager, cpx-routing-config"
                 error={Boolean(errors.repos)}
-                helperText={errors.repos?.message}
+                helperText={helperText(errors.repos?.message, 'Choose one or more repos to preview generated files.')}
               />
             )}
           />

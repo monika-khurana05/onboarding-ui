@@ -165,6 +165,9 @@ export function createAppTheme(mode: AppThemeMode) {
             borderRadius: enterpriseDesign.borderRadius,
             backgroundColor: isDark ? '#131821' : '#ffffff',
             color: isDark ? '#E6EDF3' : undefined,
+            '&:not(.MuiInputBase-multiline)': {
+              minHeight: 44
+            },
             '& .MuiOutlinedInput-notchedOutline': {
               borderColor: isDark ? 'rgba(230,237,243,0.22)' : undefined
             },
@@ -183,8 +186,12 @@ export function createAppTheme(mode: AppThemeMode) {
         }
       },
       MuiInputLabel: {
+        defaultProps: {
+          shrink: true
+        },
         styleOverrides: {
           root: {
+            textAlign: 'left',
             color: isDark ? '#9DA7B3' : undefined,
             '&.Mui-focused': {
               color: isDark ? '#82A9FF' : undefined
@@ -195,7 +202,8 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiFormHelperText: {
         styleOverrides: {
           root: {
-            color: isDark ? '#9DA7B3' : undefined
+            color: isDark ? '#9DA7B3' : undefined,
+            minHeight: 20
           }
         }
       },

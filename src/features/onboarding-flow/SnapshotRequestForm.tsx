@@ -45,7 +45,8 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
   } = useForm<SnapshotFormValues>({
     resolver: zodResolver(snapshotFormSchema),
     defaultValues: snapshotFormDefaults,
-    mode: 'onBlur'
+    mode: 'onChange',
+    reValidateMode: 'onChange'
   });
 
   const values = watch();
@@ -56,6 +57,8 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
       setJsonError(null);
     }
   }, [editorMode, values]);
+
+  const helperText = (errorMessage: string | undefined, guidance: string) => errorMessage ?? guidance;
 
   const domainRows = useMemo(
     () =>
@@ -146,10 +149,10 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
               <TextField
                 fullWidth
                 label="Country Code"
-                placeholder="GB"
+                placeholder="GB, SG, AE"
                 inputProps={{ maxLength: 2, style: { textTransform: 'uppercase' } }}
                 error={Boolean(errors.countryCode)}
-                helperText={errors.countryCode?.message}
+                helperText={helperText(errors.countryCode?.message, 'Used in routing, IDs, and generated repo payloads.')}
                 {...register('countryCode', { setValueAs: (value: string) => value.toUpperCase() })}
               />
             </Grid>
@@ -157,8 +160,9 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
               <TextField
                 fullWidth
                 label="Country Name"
+                placeholder="United Kingdom"
                 error={Boolean(errors.countryName)}
-                helperText={errors.countryName?.message}
+                helperText={helperText(errors.countryName?.message, 'Display name used in onboarding records and review screens.')}
                 {...register('countryName')}
               />
             </Grid>
@@ -168,7 +172,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                 label="Legal Entity"
                 placeholder="CPX Markets Ltd"
                 error={Boolean(errors.legalEntity)}
-                helperText={errors.legalEntity?.message}
+                helperText={helperText(errors.legalEntity?.message, 'Entity name used in generated approvals and config metadata.')}
                 {...register('legalEntity')}
               />
             </Grid>
@@ -184,7 +188,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                     value={field.value}
                     onChange={field.onChange}
                     error={Boolean(errors.region)}
-                    helperText={errors.region?.message}
+                    helperText={helperText(errors.region?.message, 'Controls regional defaults and operational ownership.')}
                   >
                     <MenuItem value="Americas">Americas</MenuItem>
                     <MenuItem value="EMEA">EMEA</MenuItem>
@@ -199,7 +203,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                 label="Requested By"
                 placeholder="onboarding.ops@cpx.com"
                 error={Boolean(errors.requestedBy)}
-                helperText={errors.requestedBy?.message}
+                helperText={helperText(errors.requestedBy?.message, 'Audit contact for approvals and follow-up questions.')}
                 {...register('requestedBy')}
               />
             </Grid>
@@ -215,7 +219,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                     value={field.value}
                     onChange={field.onChange}
                     error={Boolean(errors.commitStrategy)}
-                    helperText={errors.commitStrategy?.message}
+                    helperText={helperText(errors.commitStrategy?.message, 'Defines how generated output is grouped for commits.')}
                   >
                     <MenuItem value="mono-repo">Mono Repo</MenuItem>
                     <MenuItem value="multi-repo">Multi Repo</MenuItem>
@@ -267,7 +271,7 @@ export function SnapshotRequestForm({ submitting, submitError, onSubmit }: Snaps
                 label="Notes"
                 placeholder="Optional context for approvers and commit pipeline."
                 error={Boolean(errors.notes)}
-                helperText={errors.notes?.message}
+                helperText={helperText(errors.notes?.message, 'Context shared with reviewers and deployment operators.')}
                 {...register('notes')}
               />
             </Grid>

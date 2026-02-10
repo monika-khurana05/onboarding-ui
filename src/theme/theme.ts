@@ -179,6 +179,9 @@ export const darkTheme = createTheme({
           borderRadius: enterpriseDesign.borderRadius,
           backgroundColor: '#131821',
           color: '#E6EDF3',
+          '&:not(.MuiInputBase-multiline)': {
+            minHeight: 44
+          },
           '& .MuiOutlinedInput-notchedOutline': {
             borderColor: 'rgba(230,237,243,0.22)'
           },
@@ -200,8 +203,12 @@ export const darkTheme = createTheme({
       }
     },
     MuiInputLabel: {
+      defaultProps: {
+        shrink: true
+      },
       styleOverrides: {
         root: {
+          textAlign: 'left',
           color: '#9DA7B3',
           '&.Mui-focused': {
             color: '#82A9FF'
@@ -212,7 +219,8 @@ export const darkTheme = createTheme({
     MuiFormHelperText: {
       styleOverrides: {
         root: {
-          color: '#9DA7B3'
+          color: '#9DA7B3',
+          minHeight: 20
         }
       }
     },

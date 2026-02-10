@@ -11,7 +11,14 @@ type PageContainerProps = PropsWithChildren<{
 
 export function PageContainer({ title, subtitle, actions, children }: PageContainerProps) {
   return (
-    <Stack spacing={spacingScale.s24}>
+    <Stack
+      spacing={spacingScale.s32}
+      sx={{
+        width: '100%',
+        maxWidth: { xs: '100%', xl: '1180px' },
+        mx: 'auto'
+      }}
+    >
       <SectionHeader title={title} subtitle={subtitle} actions={actions} level="page" />
       {children}
     </Stack>

@@ -1,5 +1,10 @@
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import SaveIcon from '@mui/icons-material/Save';
+import SchemaOutlinedIcon from '@mui/icons-material/SchemaOutlined';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
 import {
   Alert,
   Button,
@@ -18,6 +23,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -70,6 +76,15 @@ const stepLabels = [
   'State Manager / Workflow',
   'Repo Targets',
   'Review & Save Snapshot'
+];
+
+const stepSubtitles = [
+  'Set the country identity and baseline routing details used across generated assets.',
+  'Enable only the CPX capabilities required for this onboarding rollout.',
+  'Define deterministic validation and enrichment rules before workflow execution.',
+  'Model the state machine that State Manager will enforce at runtime.',
+  'Map output packs to repos and branches for downstream delivery.',
+  'Confirm snapshot scope, then persist the final payload.'
 ];
 
 const capabilityGroups: CapabilityGroup[] = [
@@ -239,6 +254,23 @@ const repoTargetTemplates: RepoTarget[] = [
     loadingPacks: false
   }
 ];
+
+function getCapabilityIcon(key: CapabilityKey) {
+  switch (key) {
+    case 'GLS_CLEARING':
+      return <StorageOutlinedIcon fontSize="small" />;
+    case 'SANCTIONS_SCREENING':
+      return <ShieldOutlinedIcon fontSize="small" />;
+    case 'FLEXCUBE_POSTING':
+      return <AccountBalanceOutlinedIcon fontSize="small" />;
+    case 'REGIONAL_ROUTING':
+      return <AccountTreeOutlinedIcon fontSize="small" />;
+    case 'STATE_MANAGER':
+      return <SchemaOutlinedIcon fontSize="small" />;
+    default:
+      return <BuildOutlinedIcon fontSize="small" />;
+  }
+}
 
 function normalizeRepoDefaults(data?: RepoDefaultsResponseDto): RepoDefaultsEntry[] {
   if (!data) {
@@ -555,188 +587,288 @@ export function CreateSnapshotWizard({
     switch (activeStep) {
       case 0:
         return (
-          <Stack spacing={2}>
-            <Typography variant="body2" color="text.secondary">
-              Why this matters: the CPX runtime diagram treats snapshots as source-of-truth, versioned in ChronicleMap.
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 4, md: 3 }}>
-                <TextField
-                  fullWidth
-                  label="Country Code"
-                  placeholder="GB"
-                  value={snapshot.countryCode}
-                  onChange={(event) =>
-                    updateSnapshot((prev) => ({
-                      ...prev,
-                      countryCode: event.target.value.toUpperCase()
-                    }))
-                  }
-                  error={countryErrors.length > 0}
-                  helperText={countryErrors[0]?.message ?? ' '}
-                  inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Region (optional)"
-                  value={snapshot.region ?? ''}
-                  onChange={(event) =>
-                    updateSnapshot((prev) => ({
-                      ...prev,
-                      region: event.target.value || undefined
-                    }))
-                  }
-                  helperText="Aligns to routing domains in CPX runtime."
-                >
-                  <MenuItem value="">Unspecified</MenuItem>
-                  <MenuItem value="Americas">Americas</MenuItem>
-                  <MenuItem value="EMEA">EMEA</MenuItem>
-                  <MenuItem value="APAC">APAC</MenuItem>
-                </TextField>
-              </Grid>
-            </Grid>
-            <Alert severity="info">
-              Snapshot data is versioned and persisted so workflow changes can be audited without re-entry.
-            </Alert>
+          <Stack spacing={3}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={2.5}>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle1">Country Identity</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Capture the values every generated artifact uses to identify this snapshot.
+                  </Typography>
+                </Stack>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                    <TextField
+                      fullWidth
+                      label="Country Code"
+                      placeholder="GB, SG, AE"
+                      value={snapshot.countryCode}
+                      onChange={(event) =>
+                        updateSnapshot((prev) => ({
+                          ...prev,
+                          countryCode: event.target.value.toUpperCase()
+                        }))
+                      }
+                      error={countryErrors.length > 0}
+                      helperText={
+                        countryErrors[0]?.message ??
+                        'Two-letter ISO code used in snapshot IDs and runtime routing.'
+                      }
+                      inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
+                      InputLabelProps={{ sx: { textAlign: 'left' } }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                    <TextField
+                      fullWidth
+                      select
+                      label="Region (optional)"
+                      value={snapshot.region ?? ''}
+                      onChange={(event) =>
+                        updateSnapshot((prev) => ({
+                          ...prev,
+                          region: event.target.value || undefined
+                        }))
+                      }
+                      helperText="Aligns to routing domains in CPX runtime."
+                      InputLabelProps={{ sx: { textAlign: 'left' } }}
+                    >
+                      <MenuItem value="">Unspecified</MenuItem>
+                      <MenuItem value="Americas">Americas</MenuItem>
+                      <MenuItem value="EMEA">EMEA</MenuItem>
+                      <MenuItem value="APAC">APAC</MenuItem>
+                    </TextField>
+                  </Grid>
+                </Grid>
+              </Stack>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={1.5}>
+                <Typography variant="subtitle1">Lifecycle Notes</Typography>
+                <Alert severity="info">
+                  Snapshot data is versioned and persisted so workflow changes can be audited without re-entry.
+                </Alert>
+              </Stack>
+            </Paper>
           </Stack>
         );
       case 1:
         return (
-          <Stack spacing={2}>
+          <Stack spacing={3}>
             <Typography variant="body2" color="text.secondary">
               Why this matters: capability blocks map directly to CPX runtime domains and drive generated pipelines.
             </Typography>
             {!hasCapabilitiesEnabled ? (
               <Alert severity="warning">Enable at least one CPX capability to proceed.</Alert>
             ) : null}
-            <Stack spacing={2}>
+            <Stack spacing={2.5}>
               {capabilityGroups.map((group) => (
-                <Stack key={group.id} spacing={1.5}>
-                  <Stack>
-                    <Typography variant="subtitle1">{group.title}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {group.helper}
-                    </Typography>
-                  </Stack>
-                  <Grid container spacing={2}>
-                    {group.items.map((item) => {
-                      const capability = snapshot.capabilities.find((cap) => cap.capabilityKey === item.key);
-                      const enabled = capability?.enabled ?? false;
-                      return (
-                        <Grid key={item.key} size={{ xs: 12, md: 6 }}>
-                          <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-                            <Stack spacing={1}>
-                              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                                <FormControlLabel
-                                  control={
-                                    <Switch
-                                      checked={enabled}
-                                      onChange={(_, checked) =>
-                                        updateSnapshot((prev) => ({
-                                          ...prev,
-                                          capabilities: prev.capabilities.map((cap) =>
-                                            cap.capabilityKey === item.key ? { ...cap, enabled: checked } : cap
-                                          )
-                                        }))
-                                      }
-                                      aria-label={`Enable ${item.label}`}
-                                    />
-                                  }
-                                  label={item.label}
-                                />
-                                <Button
-                                  size="small"
-                                  variant="text"
-                                  startIcon={<BuildOutlinedIcon />}
-                                  disabled={!enabled}
-                                  onClick={() =>
-                                    openParamsDrawer(
-                                      `${item.label} Params`,
-                                      capability?.params,
-                                      (params) =>
-                                        updateSnapshot((prev) => ({
-                                          ...prev,
-                                          capabilities: prev.capabilities.map((cap) =>
-                                            cap.capabilityKey === item.key ? { ...cap, params } : cap
-                                          )
-                                        })),
-                                      item.helper
-                                    )
-                                  }
+                <Paper key={group.id} variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+                  <Stack spacing={2}>
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle1">{group.title}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {group.helper}
+                      </Typography>
+                    </Stack>
+                    <Grid container spacing={2}>
+                      {group.items.map((item) => {
+                        const capability = snapshot.capabilities.find((cap) => cap.capabilityKey === item.key);
+                        const enabled = capability?.enabled ?? false;
+                        const icon = getCapabilityIcon(item.key);
+                        return (
+                          <Grid key={item.key} size={{ xs: 12, md: 6 }}>
+                            <Paper
+                              variant="outlined"
+                              sx={(theme) => ({
+                                p: 2,
+                                height: '100%',
+                                borderWidth: enabled ? 2 : 1,
+                                borderColor: enabled ? theme.palette.primary.main : theme.palette.divider,
+                                backgroundColor: enabled
+                                  ? alpha(theme.palette.primary.main, 0.06)
+                                  : theme.palette.background.paper,
+                                transition: theme.transitions.create(
+                                  ['transform', 'box-shadow', 'border-color', 'background-color'],
+                                  { duration: theme.transitions.duration.shorter }
+                                ),
+                                '&:hover': {
+                                  transform: 'translateY(-2px)',
+                                  boxShadow: theme.shadows[3],
+                                  borderColor: theme.palette.primary.main
+                                }
+                              })}
+                            >
+                              <Stack spacing={2}>
+                                <Stack direction="row" spacing={1.25} alignItems="flex-start">
+                                  <Stack
+                                    alignItems="center"
+                                    justifyContent="center"
+                                    sx={(theme) => ({
+                                      width: 34,
+                                      height: 34,
+                                      borderRadius: 1.5,
+                                      color: enabled ? theme.palette.primary.main : theme.palette.text.secondary,
+                                      backgroundColor: enabled
+                                        ? alpha(theme.palette.primary.main, 0.14)
+                                        : alpha(theme.palette.text.secondary, 0.08),
+                                      flexShrink: 0
+                                    })}
+                                  >
+                                    {icon}
+                                  </Stack>
+                                  <Stack spacing={0.5}>
+                                    <Typography variant="subtitle2">{item.label}</Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                      {item.description}
+                                    </Typography>
+                                  </Stack>
+                                </Stack>
+                                <Stack
+                                  direction={{ xs: 'column', sm: 'row' }}
+                                  alignItems={{ xs: 'flex-start', sm: 'center' }}
+                                  justifyContent="space-between"
+                                  spacing={1}
                                 >
-                                  Configure
-                                </Button>
+                                  <FormControlLabel
+                                    sx={{
+                                      m: 0,
+                                      '& .MuiFormControlLabel-label': {
+                                        textAlign: 'left',
+                                        fontSize: 12,
+                                        color: 'text.secondary'
+                                      }
+                                    }}
+                                    control={
+                                      <Switch
+                                        checked={enabled}
+                                        onChange={(_, checked) =>
+                                          updateSnapshot((prev) => ({
+                                            ...prev,
+                                            capabilities: prev.capabilities.map((cap) =>
+                                              cap.capabilityKey === item.key ? { ...cap, enabled: checked } : cap
+                                            )
+                                          }))
+                                        }
+                                        aria-label={`Enable ${item.label}`}
+                                      />
+                                    }
+                                    label={enabled ? 'Enabled' : 'Disabled'}
+                                  />
+                                  <Button
+                                    size="small"
+                                    variant={enabled ? 'contained' : 'outlined'}
+                                    startIcon={<BuildOutlinedIcon />}
+                                    disabled={!enabled}
+                                    onClick={() =>
+                                      openParamsDrawer(
+                                        `${item.label} Params`,
+                                        capability?.params,
+                                        (params) =>
+                                          updateSnapshot((prev) => ({
+                                            ...prev,
+                                            capabilities: prev.capabilities.map((cap) =>
+                                              cap.capabilityKey === item.key ? { ...cap, params } : cap
+                                            )
+                                          })),
+                                        item.helper
+                                      )
+                                    }
+                                  >
+                                    Configure
+                                  </Button>
+                                </Stack>
+                                <Typography variant="caption" color="text.secondary">
+                                  {item.helper}
+                                </Typography>
                               </Stack>
-                              <Typography variant="body2" color="text.secondary">
-                                {item.description}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {item.helper}
-                              </Typography>
-                            </Stack>
-                          </Paper>
-                        </Grid>
-                      );
-                    })}
-                  </Grid>
-                </Stack>
+                            </Paper>
+                          </Grid>
+                        );
+                      })}
+                    </Grid>
+                  </Stack>
+                </Paper>
               ))}
             </Stack>
           </Stack>
         );
       case 2:
         return (
-          <Stack spacing={2}>
-            <Typography variant="body2" color="text.secondary">
-              Why this matters: CPX validation and enrichment rules must be deterministic to preserve flow integrity.
-            </Typography>
-            <Tabs value={ruleTab} onChange={(_, value) => setRuleTab(value as RuleType)}>
-              <Tab value="validations" label="Validations" />
-              <Tab value="enrichments" label="Enrichments" />
-            </Tabs>
-            {ruleTab === 'validations' ? (
-              <EditableRulesTable
-                title="Validations"
-                helperText="Validation rules gate onboarding before downstream processing."
-                rows={snapshot.validations}
-                showSeverity
-                addLabel="Add Validation"
-                onChange={(next) => updateSnapshot((prev) => ({ ...prev, validations: next }))}
-                onEditParams={(index, params) =>
-                  openParamsDrawer('Validation Params', params, (next) =>
-                    updateSnapshot((prev) => ({
-                      ...prev,
-                      validations: prev.validations.map((rule, ruleIndex) =>
-                        ruleIndex === index ? { ...rule, params: next } : rule
+          <Stack spacing={3}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={2}>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle1">Rule Scope</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Choose which rule set to edit and keep each set focused on one purpose.
+                  </Typography>
+                </Stack>
+                <Tabs value={ruleTab} onChange={(_, value) => setRuleTab(value as RuleType)}>
+                  <Tab value="validations" label="Validations" />
+                  <Tab value="enrichments" label="Enrichments" />
+                </Tabs>
+              </Stack>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={2.5}>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle1">
+                    {ruleTab === 'validations' ? 'Validation Rules' : 'Enrichment Rules'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Why this matters: CPX validation and enrichment rules must be deterministic to preserve flow
+                    integrity.
+                  </Typography>
+                </Stack>
+                {ruleTab === 'validations' ? (
+                  <EditableRulesTable
+                    title="Validations"
+                    helperText="Validation rules gate onboarding before downstream processing."
+                    rows={snapshot.validations}
+                    showSeverity
+                    addLabel="Add Validation"
+                    onChange={(next) => updateSnapshot((prev) => ({ ...prev, validations: next }))}
+                    onEditParams={(index, params) =>
+                      openParamsDrawer(
+                        'Validation Params',
+                        params,
+                        (next) =>
+                          updateSnapshot((prev) => ({
+                            ...prev,
+                            validations: prev.validations.map((rule, ruleIndex) =>
+                              ruleIndex === index ? { ...rule, params: next } : rule
+                            )
+                          })),
+                        'Tune validation params aligned to the CPX checks lane.'
                       )
-                    })),
-                  'Tune validation params aligned to the CPX checks lane.'
-                  )
-                }
-              />
-            ) : (
-              <EditableRulesTable
-                title="Enrichments"
-                helperText="Enrichment rules add contextual data to the CPX runtime payload."
-                rows={snapshot.enrichments}
-                addLabel="Add Enrichment"
-                onChange={(next) => updateSnapshot((prev) => ({ ...prev, enrichments: next }))}
-                onEditParams={(index, params) =>
-                  openParamsDrawer('Enrichment Params', params, (next) =>
-                    updateSnapshot((prev) => ({
-                      ...prev,
-                      enrichments: prev.enrichments.map((rule, ruleIndex) =>
-                        ruleIndex === index ? { ...rule, params: next } : rule
+                    }
+                  />
+                ) : (
+                  <EditableRulesTable
+                    title="Enrichments"
+                    helperText="Enrichment rules add contextual data to the CPX runtime payload."
+                    rows={snapshot.enrichments}
+                    addLabel="Add Enrichment"
+                    onChange={(next) => updateSnapshot((prev) => ({ ...prev, enrichments: next }))}
+                    onEditParams={(index, params) =>
+                      openParamsDrawer(
+                        'Enrichment Params',
+                        params,
+                        (next) =>
+                          updateSnapshot((prev) => ({
+                            ...prev,
+                            enrichments: prev.enrichments.map((rule, ruleIndex) =>
+                              ruleIndex === index ? { ...rule, params: next } : rule
+                            )
+                          })),
+                        'Configure enrichment params that augment the CPX runtime payload.'
                       )
-                    })),
-                  'Configure enrichment params that augment the CPX runtime payload.'
-                  )
-                }
-              />
-            )}
+                    }
+                  />
+                )}
+              </Stack>
+            </Paper>
             {ruleKeyErrors.length ? (
               <Stack spacing={1}>
                 {ruleKeyErrors.map((error) => (
@@ -750,12 +882,22 @@ export function CreateSnapshotWizard({
         );
       case 3:
         return (
-          <Stack spacing={2}>
-            <WorkflowEditor
-              value={snapshot.workflow}
-              onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
-              helperText="Why this matters: the CPX State Manager uses this FSM to enforce lifecycle guarantees."
-            />
+          <Stack spacing={3}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={2.5}>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle1">Workflow Definition</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Why this matters: the CPX State Manager uses this FSM to enforce lifecycle guarantees.
+                  </Typography>
+                </Stack>
+                <WorkflowEditor
+                  value={snapshot.workflow}
+                  onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
+                  helperText="Define a clean lifecycle path with explicit states and events."
+                />
+              </Stack>
+            </Paper>
             {transitionErrors.length || !transitionsValid ? (
               <Alert severity="warning">Transitions must refer to valid states and include events.</Alert>
             ) : null}
@@ -763,33 +905,46 @@ export function CreateSnapshotWizard({
         );
       case 4:
         return (
-          <Stack spacing={2}>
-            <Typography variant="body2" color="text.secondary">
-              Why this matters: repo targets map CPX outputs to the correct delivery pipelines.
-            </Typography>
-            {repoDefaultsQuery.isLoading ? <LoadingState message="Loading repo defaults..." minHeight={120} /> : null}
-            {repoDefaultsQuery.isError ? (
-              <Alert severity="warning">Repo defaults unavailable. Enter repo slugs manually.</Alert>
-            ) : null}
-            <RepoTargetsTable
-              variant="wizard"
-              targets={repoTargets}
-              onChange={setRepoTargets}
-              repoDefaults={repoDefaults}
-              showValidationHint
-              showErrors
-              onDiscoverPacks={async (repoSlug, baseBranch) => {
-                const packs = await listRepoPacks(repoSlug, baseBranch);
-                return packs
-                  .map((pack) => pack.packName ?? pack.name ?? pack.slug ?? '')
-                  .filter(Boolean);
-              }}
-              onError={showError}
-            />
+          <Stack spacing={3}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={1.5}>
+                <Typography variant="subtitle1">Targeting Guidance</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Why this matters: repo targets map CPX outputs to the correct delivery pipelines.
+                </Typography>
+                {repoDefaultsQuery.isLoading ? <LoadingState message="Loading repo defaults..." minHeight={120} /> : null}
+                {repoDefaultsQuery.isError ? (
+                  <Alert severity="warning">Repo defaults unavailable. Enter repo slugs manually.</Alert>
+                ) : null}
+              </Stack>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={2}>
+                <Typography variant="subtitle1">Active Repo Targets</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Enable each destination repo and confirm branch + pack mapping before save.
+                </Typography>
+                <RepoTargetsTable
+                  variant="wizard"
+                  targets={repoTargets}
+                  onChange={setRepoTargets}
+                  repoDefaults={repoDefaults}
+                  showValidationHint
+                  showErrors
+                  onDiscoverPacks={async (repoSlug, baseBranch) => {
+                    const packs = await listRepoPacks(repoSlug, baseBranch);
+                    return packs
+                      .map((pack) => pack.packName ?? pack.name ?? pack.slug ?? '')
+                      .filter(Boolean);
+                  }}
+                  onError={showError}
+                />
+              </Stack>
+            </Paper>
           </Stack>
         );
       case 5: {
-      const enabledTargets = repoTargets.filter((target) => target.enabled !== false);
+        const enabledTargets = repoTargets.filter((target) => target.enabled !== false);
         const templatePacks = enabledTargets.reduce<Record<string, string>>((acc, target) => {
           const version = target.packVersion.trim();
           if (target.repoSlug.trim() && version) {
@@ -804,49 +959,56 @@ export function CreateSnapshotWizard({
         };
 
         return (
-          <Stack spacing={2}>
-            <Typography variant="body2" color="text.secondary">
-              Why this matters: review aligns CPX runtime components with the saved snapshot before persisting.
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 3 }}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Enabled Capabilities
-                  </Typography>
-                  <Typography variant="h5">{enabledCapabilities.length}</Typography>
-                </Paper>
-              </Grid>
-              <Grid size={{ xs: 12, md: 3 }}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Rule Count
-                  </Typography>
-                  <Typography variant="h5">
-                    {snapshot.validations.length + snapshot.enrichments.length}
-                  </Typography>
-                </Paper>
-              </Grid>
-              <Grid size={{ xs: 12, md: 3 }}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Workflow
-                  </Typography>
-                  <Typography variant="h5">{snapshot.workflow.states.length} states</Typography>
+          <Stack spacing={3}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={2.5}>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle1">Snapshot Summary</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {snapshot.workflow.transitions.length} transitions
+                    Why this matters: review aligns CPX runtime components with the saved snapshot before persisting.
                   </Typography>
-                </Paper>
-              </Grid>
-              <Grid size={{ xs: 12, md: 3 }}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Target Repos
-                  </Typography>
-                  <Typography variant="h5">{enabledTargets.length}</Typography>
-                </Paper>
-              </Grid>
-            </Grid>
+                </Stack>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Paper variant="outlined" sx={{ p: 2.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Enabled Capabilities
+                      </Typography>
+                      <Typography variant="h5">{enabledCapabilities.length}</Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Paper variant="outlined" sx={{ p: 2.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Rule Count
+                      </Typography>
+                      <Typography variant="h5">
+                        {snapshot.validations.length + snapshot.enrichments.length}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Paper variant="outlined" sx={{ p: 2.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Workflow
+                      </Typography>
+                      <Typography variant="h5">{snapshot.workflow.states.length} states</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {snapshot.workflow.transitions.length} transitions
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Paper variant="outlined" sx={{ p: 2.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Target Repos
+                      </Typography>
+                      <Typography variant="h5">{enabledTargets.length}</Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </Stack>
+            </Paper>
             <SectionCard title="Snapshot JSON Preview" subtitle="Payload that will be persisted to CPX backend.">
               <JsonMonacoPanel
                 ariaLabel="Snapshot JSON preview"
@@ -864,19 +1026,20 @@ export function CreateSnapshotWizard({
   };
 
   return (
-    <Stack spacing={2.5}>
+    <Stack spacing={3}>
       <SectionCard
         title="Create Snapshot Wizard"
-        subtitle="Complete the CPX onboarding snapshot in minutes with guided steps."
+        subtitle="Complete the CPX onboarding snapshot in guided steps with clear validation at each stage."
         actions={
           <FormControlLabel
+            sx={{ m: 0, '& .MuiFormControlLabel-label': { textAlign: 'left' } }}
             control={<Switch checked={advancedJson} onChange={(_, checked) => setAdvancedJson(checked)} />}
             label="Advanced JSON"
           />
         }
       >
         <Typography variant="body2" color="text.secondary">
-          Defaults are prefilled so a minimal snapshot can be completed in under two minutes.
+          Defaults are prefilled so a minimal snapshot can be completed quickly without dense manual entry.
         </Typography>
       </SectionCard>
 
@@ -885,7 +1048,7 @@ export function CreateSnapshotWizard({
           title="Advanced JSON"
           subtitle="Edit the full snapshot payload; changes sync back into the wizard."
         >
-          <Stack spacing={1.5}>
+          <Stack spacing={2}>
             <JsonMonacoPanel
               ariaLabel="Snapshot JSON editor"
               value={jsonValue}
@@ -897,20 +1060,25 @@ export function CreateSnapshotWizard({
         </SectionCard>
       ) : null}
 
-      <SectionCard title={stepLabels[activeStep]}>
-        <Stack spacing={2}>
-          <Stepper activeStep={activeStep} alternativeLabel>
-            {stepLabels.map((label) => (
-              <Step key={label}>
-                <StepLabel>{label}</StepLabel>
-              </Step>
-            ))}
-          </Stepper>
+      <SectionCard
+        title={`Step ${activeStep + 1}: ${stepLabels[activeStep]}`}
+        subtitle={stepSubtitles[activeStep]}
+      >
+        <Stack spacing={3}>
+          <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 2 } }}>
+            <Stepper activeStep={activeStep} alternativeLabel>
+              {stepLabels.map((label) => (
+                <Step key={label}>
+                  <StepLabel>{label}</StepLabel>
+                </Step>
+              ))}
+            </Stepper>
+          </Paper>
 
           {renderStepContent()}
 
           <Divider />
-          <Stack direction={{ xs: 'column-reverse', sm: 'row' }} spacing={1.5} justifyContent="space-between">
+          <Stack direction={{ xs: 'column-reverse', sm: 'row' }} spacing={2} justifyContent="space-between">
             <Button variant="outlined" onClick={goBack} disabled={activeStep === 0}>
               Back
             </Button>

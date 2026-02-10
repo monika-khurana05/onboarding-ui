@@ -32,7 +32,8 @@ import { CardSection } from '../components/CardSection';
 import { InlineHelpText } from '../components/InlineHelpText';
 import { LoadingState } from '../components/LoadingState';
 import { PageContainer } from '../components/PageContainer';
-import { RepoTargetsTable, type RepoDefaultsEntry, type RepoTarget } from '../components/RepoTargetsTable';
+import { RepoTargetsTable } from '../components/RepoTargetsTable';
+import type { RepoDefaultsEntry, RepoTarget } from '../components/RepoTargetsTable';
 import { useGlobalError } from '../app/GlobalErrorContext';
 
 type PreviewFile = {
@@ -450,8 +451,8 @@ export function GeneratePreviewPage() {
       subtitle="Run pre-commit generation and inspect repo-level artifacts before automation."
     >
       <CardSection
-        title="Preview Request"
-        subtitle="Provide snapshot references and active target repositories."
+        title="Step 1: Snapshot Source"
+        subtitle="Select the snapshot and optional version that preview generation should use."
         actions={
           <Button
             variant="contained"
@@ -463,55 +464,80 @@ export function GeneratePreviewPage() {
           </Button>
         }
       >
-        <Stack spacing={2}>
-          <InlineHelpText>
-            Enter a snapshot and repo targets to render the generated files before PR automation exists.
-          </InlineHelpText>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <TextField
-                fullWidth
-                label="Snapshot ID"
-                value={snapshotId}
-                onChange={(event) => {
-                  setSnapshotId(event.target.value.trim());
-                  lastPrefilledSnapshotId.current = null;
-                }}
-                error={Boolean(snapshotError)}
-                helperText={snapshotError || ' '}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, md: 3 }}>
-              <TextField
-                fullWidth
-                label="Version (optional)"
-                value={version}
-                onChange={(event) => setVersion(event.target.value.trim())}
-                error={Boolean(versionError)}
-                helperText={versionError || ' '}
-              />
-            </Grid>
-          </Grid>
-          {snapshotQuery.isFetching ? (
-            <Alert severity="info">Loading snapshot to prefill template packs...</Alert>
-          ) : snapshotQuery.isError ? (
-            <Alert severity="warning">Snapshot could not be loaded. Repo targets can be filled manually.</Alert>
-          ) : null}
+        <Stack spacing={3}>
+          <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            <Stack spacing={2.5}>
+              <Typography variant="subtitle1">Snapshot Reference</Typography>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="Snapshot ID"
+                    placeholder="snap-gb-2026-01"
+                    value={snapshotId}
+                    onChange={(event) => {
+                      setSnapshotId(event.target.value.trim());
+                      lastPrefilledSnapshotId.current = null;
+                    }}
+                    error={Boolean(snapshotError)}
+                    helperText={snapshotError || 'Snapshot reference used to load payload + default repo packs.'}
+                    InputLabelProps={{ sx: { textAlign: 'left' } }}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, md: 3 }}>
+                  <TextField
+                    fullWidth
+                    label="Version (optional)"
+                    placeholder="3"
+                    value={version}
+                    onChange={(event) => setVersion(event.target.value.trim())}
+                    error={Boolean(versionError)}
+                    helperText={versionError || 'Leave blank to preview against the latest saved version.'}
+                    InputLabelProps={{ sx: { textAlign: 'left' } }}
+                  />
+                </Grid>
+              </Grid>
+            </Stack>
+          </Paper>
+          <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle1">Purpose</Typography>
+              <InlineHelpText>
+                Enter a snapshot and repo targets to render generated files before PR automation exists.
+              </InlineHelpText>
+              {snapshotQuery.isFetching ? (
+                <Alert severity="info">Loading snapshot to prefill template packs...</Alert>
+              ) : snapshotQuery.isError ? (
+                <Alert severity="warning">Snapshot could not be loaded. Repo targets can be filled manually.</Alert>
+              ) : null}
+            </Stack>
+          </Paper>
         </Stack>
       </CardSection>
 
-      <CardSection title="Repository Targets" subtitle="Review or override repo targets for preview generation.">
-        <Stack spacing={2}>
-          <RepoTargetsTable
-            variant="simple"
-            targets={repoTargets}
-            onChange={setRepoTargets}
-            repoDefaults={repoDefaults}
-            allowAdd
-            allowRemove
-            addLabel="Add Repo Target"
-            showErrors={false}
-          />
+      <CardSection
+        title="Step 2: Repository Targets"
+        subtitle="Map repository slugs, branches, and optional pack versions for this preview run."
+      >
+        <Stack spacing={3}>
+          <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+            <Stack spacing={2}>
+              <Typography variant="subtitle1">Target Mapping</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Each enabled row should point to one destination repo and base branch.
+              </Typography>
+              <RepoTargetsTable
+                variant="simple"
+                targets={repoTargets}
+                onChange={setRepoTargets}
+                repoDefaults={repoDefaults}
+                allowAdd
+                allowRemove
+                addLabel="Add Repo Target"
+                showErrors={false}
+              />
+            </Stack>
+          </Paper>
           {!repoTargetsValid ? (
             <Alert severity="warning">Add at least one repo slug before generating preview.</Alert>
           ) : null}
@@ -521,10 +547,10 @@ export function GeneratePreviewPage() {
       {previewMutation.isPending ? <LoadingState message="Generating preview..." minHeight={160} /> : null}
 
       {previewMutation.data ? (
-        <Stack spacing={2.5}>
+        <Stack spacing={3}>
           <CardSection
-            title="Preview Results"
-            subtitle="Each repo card shows the generated files and status for the preview run."
+            title="Step 3: Preview Results"
+            subtitle="Review generated files by repository before proceeding to automation."
             actions={
               <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExport}>
                 Export Preview JSON
@@ -664,7 +690,7 @@ export function GeneratePreviewPage() {
             </Grid>
           </CardSection>
 
-          <CardSection title="Errors" subtitle="Backend errors grouped by repo when possible.">
+          <CardSection title="Preview Errors" subtitle="Backend errors grouped by repository where possible.">
             {normalizedPreview.errorGroups.length ? (
               <Stack spacing={1.5}>
                 {normalizedPreview.errorGroups.map((group) => (
@@ -687,26 +713,30 @@ export function GeneratePreviewPage() {
             )}
           </CardSection>
 
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                Preview JSON
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Stack spacing={1.5}>
-                <JsonMonacoPanel
-                  ariaLabel="Preview JSON panel"
-                  value={previewMutation.data}
-                  readOnly
-                  onCopyError={() => showError('Copy failed. Select the JSON and copy manually.')}
-                />
-              </Stack>
-            </AccordionDetails>
-          </Accordion>
+          <CardSection title="Preview Payload JSON" subtitle="Raw preview response for deeper inspection or export.">
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                  Preview JSON
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Stack spacing={1.5}>
+                  <JsonMonacoPanel
+                    ariaLabel="Preview JSON panel"
+                    value={previewMutation.data}
+                    readOnly
+                    onCopyError={() => showError('Copy failed. Select the JSON and copy manually.')}
+                  />
+                </Stack>
+              </AccordionDetails>
+            </Accordion>
+          </CardSection>
         </Stack>
       ) : (
-        <InlineHelpText>Run a preview generation to see repo-by-repo outputs and file manifests.</InlineHelpText>
+        <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+          <InlineHelpText>Run a preview generation to see repo-by-repo outputs and file manifests.</InlineHelpText>
+        </Paper>
       )}
     </PageContainer>
   );

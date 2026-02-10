@@ -20,11 +20,8 @@ import { JsonAdvancedEditor } from '../../components/JsonAdvancedEditor';
 import { SectionCard } from '../../components/SectionCard';
 import type { OnboardingTemplate } from '../countries/types';
 import { onboardingDefaultValues } from './defaultValues';
-import {
-  countryOnboardingSchema,
-  type CountryOnboardingInput,
-  workflowConfigSchema
-} from './schema';
+import { countryOnboardingSchema, workflowConfigSchema } from './schema';
+import type { CountryOnboardingInput } from './schema';
 
 type CountryOnboardingFormProps = {
   templates: OnboardingTemplate[];
@@ -57,7 +54,8 @@ export function CountryOnboardingForm({
   } = useForm<CountryOnboardingInput>({
     resolver: zodResolver(countryOnboardingSchema),
     defaultValues: onboardingDefaultValues,
-    mode: 'onBlur'
+    mode: 'onChange',
+    reValidateMode: 'onChange'
   });
 
   const workflowConfig = watch('workflowConfig');
@@ -68,6 +66,8 @@ export function CountryOnboardingForm({
       setJsonEditorError(null);
     }
   }, [editorMode, workflowConfig]);
+
+  const helperText = (errorMessage: string | undefined, guidance: string) => errorMessage ?? guidance;
 
   const templateMap = useMemo(() => {
     const map = new Map<string, OnboardingTemplate>();
@@ -131,8 +131,9 @@ export function CountryOnboardingForm({
             <TextField
               fullWidth
               label="Country Name"
+              placeholder="United Kingdom"
               error={Boolean(errors.countryName)}
-              helperText={errors.countryName?.message}
+              helperText={helperText(errors.countryName?.message, 'Used in operations dashboards and approval records.')}
               {...register('countryName')}
             />
           </Grid>
@@ -140,8 +141,9 @@ export function CountryOnboardingForm({
             <TextField
               fullWidth
               label="ISO Code"
+              placeholder="GB, SG, AE"
               error={Boolean(errors.iso2)}
-              helperText={errors.iso2?.message}
+              helperText={helperText(errors.iso2?.message, 'Primary key for country routing and generated configs.')}
               inputProps={{ maxLength: 2, style: { textTransform: 'uppercase' } }}
               {...register('iso2', {
                 setValueAs: (value: string) => value.toUpperCase()
@@ -160,7 +162,7 @@ export function CountryOnboardingForm({
                   value={field.value}
                   onChange={field.onChange}
                   error={Boolean(errors.region)}
-                  helperText={errors.region?.message}
+                  helperText={helperText(errors.region?.message, 'Determines regulatory routing defaults and ownership.')}
                 >
                   <MenuItem value="Americas">Americas</MenuItem>
                   <MenuItem value="EMEA">EMEA</MenuItem>
@@ -181,7 +183,7 @@ export function CountryOnboardingForm({
                   value={field.value}
                   onChange={field.onChange}
                   error={Boolean(errors.regulatoryTier)}
-                  helperText={errors.regulatoryTier?.message}
+                  helperText={helperText(errors.regulatoryTier?.message, 'Sets baseline compliance controls and review depth.')}
                 >
                   <MenuItem value="Tier 1">Tier 1</MenuItem>
                   <MenuItem value="Tier 2">Tier 2</MenuItem>
@@ -197,7 +199,7 @@ export function CountryOnboardingForm({
               label="Target Launch Date"
               InputLabelProps={{ shrink: true }}
               error={Boolean(errors.launchDate)}
-              helperText={errors.launchDate?.message}
+              helperText={helperText(errors.launchDate?.message, 'Target date used for launch readiness and tracking.')}
               {...register('launchDate')}
             />
           </Grid>
@@ -205,8 +207,9 @@ export function CountryOnboardingForm({
             <TextField
               fullWidth
               label="Settlement Currency"
+              placeholder="USD, EUR, AED"
               error={Boolean(errors.settlementCurrency)}
-              helperText={errors.settlementCurrency?.message}
+              helperText={helperText(errors.settlementCurrency?.message, 'Default currency for settlement and posting flows.')}
               inputProps={{ maxLength: 3, style: { textTransform: 'uppercase' } }}
               {...register('settlementCurrency', {
                 setValueAs: (value: string) => value.toUpperCase()
@@ -218,8 +221,12 @@ export function CountryOnboardingForm({
               fullWidth
               type="number"
               label="Risk Threshold"
+              placeholder="40"
               error={Boolean(errors.riskThreshold)}
-              helperText={errors.riskThreshold?.message ?? 'Scale: 1 (low risk) to 100 (high risk)'}
+              helperText={helperText(
+                errors.riskThreshold?.message,
+                'Scale: 1 (low risk) to 100 (high risk) for escalation logic.'
+              )}
               inputProps={{ min: 1, max: 100 }}
               {...register('riskThreshold', { valueAsNumber: true })}
             />
@@ -296,7 +303,10 @@ export function CountryOnboardingForm({
                     value={field.value}
                     onChange={field.onChange}
                     error={Boolean(errors.workflowConfig?.approvalMode)}
-                    helperText={errors.workflowConfig?.approvalMode?.message}
+                    helperText={helperText(
+                      errors.workflowConfig?.approvalMode?.message,
+                      'Defines how many approvals are needed before progression.'
+                    )}
                   >
                     <MenuItem value="single">Single approver</MenuItem>
                     <MenuItem value="dual">Dual control</MenuItem>
@@ -317,7 +327,10 @@ export function CountryOnboardingForm({
                     value={field.value}
                     onChange={field.onChange}
                     error={Boolean(errors.workflowConfig?.alertChannel)}
-                    helperText={errors.workflowConfig?.alertChannel?.message}
+                    helperText={helperText(
+                      errors.workflowConfig?.alertChannel?.message,
+                      'Primary channel used for escalation and status alerts.'
+                    )}
                   >
                     <MenuItem value="email">Email</MenuItem>
                     <MenuItem value="slack">Slack</MenuItem>
@@ -332,7 +345,10 @@ export function CountryOnboardingForm({
                 label="Settlement Cutoff"
                 placeholder="17:00"
                 error={Boolean(errors.workflowConfig?.settlementCutoff)}
-                helperText={errors.workflowConfig?.settlementCutoff?.message ?? '24h format HH:MM'}
+                helperText={helperText(
+                  errors.workflowConfig?.settlementCutoff?.message,
+                  '24h format HH:MM used by settlement windows and handoffs.'
+                )}
                 {...register('workflowConfig.settlementCutoff')}
               />
             </Grid>
@@ -341,8 +357,12 @@ export function CountryOnboardingForm({
                 fullWidth
                 type="number"
                 label="Escalation Hours"
+                placeholder="12"
                 error={Boolean(errors.workflowConfig?.escalationHours)}
-                helperText={errors.workflowConfig?.escalationHours?.message}
+                helperText={helperText(
+                  errors.workflowConfig?.escalationHours?.message,
+                  'Time limit before escalation when a workflow step stalls.'
+                )}
                 inputProps={{ min: 1, max: 72 }}
                 {...register('workflowConfig.escalationHours', { valueAsNumber: true })}
               />

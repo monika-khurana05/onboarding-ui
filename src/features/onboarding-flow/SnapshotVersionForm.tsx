@@ -25,7 +25,9 @@ export function SnapshotVersionForm({
     formState: { errors }
   } = useForm<SnapshotVersionValues>({
     resolver: zodResolver(snapshotVersionSchema),
-    defaultValues: snapshotVersionDefaults
+    defaultValues: snapshotVersionDefaults,
+    mode: 'onChange',
+    reValidateMode: 'onChange'
   });
 
   return (
@@ -45,7 +47,7 @@ export function SnapshotVersionForm({
         placeholder="Example: Added sanctions fallback path for local regulator controls."
         disabled={disabled || loading}
         error={Boolean(errors.reason)}
-        helperText={errors.reason?.message}
+        helperText={errors.reason?.message ?? 'Explains why this version exists for audit and rollback decisions.'}
         {...register('reason')}
       />
       <Button
