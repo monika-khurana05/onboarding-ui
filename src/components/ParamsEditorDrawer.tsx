@@ -105,7 +105,17 @@ export function ParamsEditorDrawer({
   };
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      PaperProps={{
+        sx: {
+          top: { xs: 56, sm: 64 },
+          height: { xs: 'calc(100% - 56px)', sm: 'calc(100% - 64px)' }
+        }
+      }}
+    >
       <Box
         sx={{
           width: { xs: 320, sm: 420 },

@@ -32,17 +32,15 @@ import {
   Typography
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { JsonMonacoPanel } from '../../components/JsonMonacoPanel';
-import { LoadingState } from '../../components/LoadingState';
 import { ParamsEditorDrawer } from '../../components/ParamsEditorDrawer';
-import { RepoTargetsTable, type RepoDefaultsEntry, type RepoTarget } from '../../components/RepoTargetsTable';
 import { SectionCard } from '../../components/SectionCard';
 import { WorkflowEditor } from '../../components/WorkflowEditor';
-import { createSnapshot, createSnapshotVersion, getRepoDefaults, listRepoPacks } from '../../api/client';
-import type { RepoDefaultsResponseDto, SnapshotDetailDto } from '../../api/types';
+import { createSnapshot, createSnapshotVersion } from '../../api/client';
+import type { SnapshotDetailDto } from '../../api/types';
 import { useGlobalError } from '../../app/GlobalErrorContext';
 import {
   capabilityKeys,
@@ -75,7 +73,6 @@ const stepLabels = [
   'CPX Capability Selection',
   'Validation & Enrichment',
   'State Manager / Workflow',
-  'Repo Targets',
   'Review & Save Snapshot'
 ];
 
@@ -84,7 +81,6 @@ const stepSubtitles = [
   'Enable only the CPX capabilities required for this onboarding rollout.',
   'Define deterministic validation and enrichment rules before workflow execution.',
   'Model the state machine that State Manager will enforce at runtime.',
-  'Map output packs to repos and branches for downstream delivery.',
   'Confirm snapshot scope, then persist the final payload.'
 ];
 
@@ -212,70 +208,6 @@ const defaultSnapshot: SnapshotModel = {
   deploymentOverrides: {}
 };
 
-const repoTargetTemplates: RepoTarget[] = [
-  {
-    id: 'state-manager',
-    label: 'State Manager',
-    description: 'FSM yaml + service config + component tests',
-    matchHints: ['state-manager', 'state_manager', 'fsm'],
-    enabled: true,
-    repoSlug: '',
-    baseBranch: 'main',
-    packVersion: '',
-    packOptions: [],
-    loadingPacks: false
-  },
-  {
-    id: 'payment-initiation',
-    label: 'Payment Initiation',
-    description: 'Validation/enrichment pipeline yaml',
-    matchHints: ['payment-initiation', 'initiation', 'payment'],
-    enabled: true,
-    repoSlug: '',
-    baseBranch: 'main',
-    packVersion: '',
-    packOptions: [],
-    loadingPacks: false
-  },
-  {
-    id: 'country-container',
-    label: 'Country Container',
-    description: 'Deployment yaml/scripts/smoke tests',
-    matchHints: ['country-container', 'country', 'container'],
-    enabled: true,
-    repoSlug: '',
-    baseBranch: 'main',
-    packVersion: '',
-    packOptions: [],
-    loadingPacks: false
-  }
-];
-
-function normalizeRepoDefaults(data?: RepoDefaultsResponseDto): RepoDefaultsEntry[] {
-  if (!data) {
-    return [];
-  }
-  const source = data.repos ?? data.repoDefaults ?? [];
-  return source
-    .map((repo) => {
-      const slug = repo.slug ?? repo.repoSlug ?? repo.name;
-      if (!slug) {
-        return null;
-      }
-      return {
-        slug,
-        label: repo.label ?? repo.name ?? slug,
-        defaultRef: repo.defaultRef ?? repo.ref ?? repo.branch ?? data.defaultRef ?? 'main'
-      };
-    })
-    .filter((repo): repo is { slug: string; label: string; defaultRef: string } => Boolean(repo));
-}
-
-function findRepoMatch(defaults: { slug: string; label: string; defaultRef: string }[], hints: string[]) {
-  const lowerHints = hints.map((hint) => hint.toLowerCase());
-  return defaults.find((repo) => lowerHints.some((hint) => repo.slug.toLowerCase().includes(hint)));
-}
-
 function getSnapshotIdFromResponse(response: SnapshotDetailDto) {
   return response.snapshotId ?? response.id ?? response.snapshot_id ?? null;
 }
@@ -352,7 +284,6 @@ export function CreateSnapshotWizard({
   const [snapshot, setSnapshot] = useState<SnapshotModel>(resolvedInitialSnapshot);
   const [jsonValue, setJsonValue] = useState(JSON.stringify(resolvedInitialSnapshot, null, 2));
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [repoTargets, setRepoTargets] = useState<RepoTarget[]>(repoTargetTemplates);
   const [paramsDrawerContext, setParamsDrawerContext] = useState<ParamsDrawerContext>(null);
   const [ruleTab, setRuleTab] = useState<RuleType>('validations');
   const [ruleSearch, setRuleSearch] = useState('');
@@ -362,13 +293,6 @@ export function CreateSnapshotWizard({
     capability: CapabilityDto;
     kind: RuleType;
   } | null>(null);
-
-  const repoDefaultsQuery = useQuery({
-    queryKey: ['repo-defaults-v2'],
-    queryFn: getRepoDefaults
-  });
-
-  const repoDefaults = useMemo(() => normalizeRepoDefaults(repoDefaultsQuery.data), [repoDefaultsQuery.data]);
 
   const createSnapshotMutation = useMutation({
     mutationFn: createSnapshot,
@@ -401,28 +325,6 @@ export function CreateSnapshotWizard({
     }
     setJsonValue(JSON.stringify(snapshot, null, 2));
   }, [advancedJson, snapshot]);
-
-  useEffect(() => {
-    if (!repoDefaults.length) {
-      return;
-    }
-    setRepoTargets((prev) =>
-      prev.map((target) => {
-        if (target.repoSlug.trim()) {
-          return target;
-        }
-        const match = findRepoMatch(repoDefaults, target.matchHints ?? []);
-        if (!match) {
-          return target;
-        }
-        return {
-          ...target,
-          repoSlug: match.slug,
-          baseBranch: match.defaultRef
-        };
-      })
-    );
-  }, [repoDefaults]);
 
 
   const updateSnapshot = (
@@ -508,12 +410,6 @@ export function CreateSnapshotWizard({
       transition.onEvent.trim().length > 0
   );
 
-  const repoTargetsValid =
-    repoTargets.filter((target) => target.enabled !== false).length > 0 &&
-    repoTargets
-      .filter((target) => target.enabled !== false)
-      .every((target) => target.repoSlug.trim() && target.baseBranch.trim());
-
   const stepValidations = [
     countryErrors.length === 0,
     hasCapabilitiesEnabled,
@@ -522,7 +418,6 @@ export function CreateSnapshotWizard({
       statesValid &&
       transitionErrors.length === 0 &&
       transitionsValid,
-    repoTargetsValid,
     true
   ];
 
@@ -651,21 +546,10 @@ export function CreateSnapshotWizard({
   };
 
   const handleSaveSnapshot = async () => {
-    const templatePacks = repoTargets
-      .filter((target) => target.enabled !== false && target.repoSlug.trim())
-      .reduce<Record<string, string>>((acc, target) => {
-        const version = target.packVersion.trim();
-        if (version) {
-          acc[target.repoSlug] = version;
-        }
-        return acc;
-      }, {});
-
     try {
       const payload = {
         countryCode: snapshot.countryCode,
-        snapshot,
-        templatePacks: Object.keys(templatePacks).length ? templatePacks : undefined
+        snapshot
       };
 
       if (isVersionMode) {
@@ -1148,59 +1032,10 @@ export function CreateSnapshotWizard({
             ) : null}
           </Stack>
         );
-      case 4:
-        return (
-          <Stack spacing={3}>
-            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
-              <Stack spacing={1.5}>
-                <Typography variant="subtitle1">Targeting Guidance</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Why this matters: repo targets map CPX outputs to the correct delivery pipelines.
-                </Typography>
-                {repoDefaultsQuery.isLoading ? <LoadingState message="Loading repo defaults..." minHeight={120} /> : null}
-                {repoDefaultsQuery.isError ? (
-                  <Alert severity="warning">Repo defaults unavailable. Enter repo slugs manually.</Alert>
-                ) : null}
-              </Stack>
-            </Paper>
-            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
-              <Stack spacing={2}>
-                <Typography variant="subtitle1">Active Repo Targets</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Enable each destination repo and confirm branch + pack mapping before save.
-                </Typography>
-                <RepoTargetsTable
-                  variant="wizard"
-                  targets={repoTargets}
-                  onChange={setRepoTargets}
-                  repoDefaults={repoDefaults}
-                  showValidationHint
-                  showErrors
-                  onDiscoverPacks={async (repoSlug, baseBranch) => {
-                    const packs = await listRepoPacks(repoSlug, baseBranch);
-                    return packs
-                      .map((pack) => pack.packName ?? pack.name ?? pack.slug ?? '')
-                      .filter(Boolean);
-                  }}
-                  onError={showError}
-                />
-              </Stack>
-            </Paper>
-          </Stack>
-        );
-      case 5: {
-        const enabledTargets = repoTargets.filter((target) => target.enabled !== false);
-        const templatePacks = enabledTargets.reduce<Record<string, string>>((acc, target) => {
-          const version = target.packVersion.trim();
-          if (target.repoSlug.trim() && version) {
-            acc[target.repoSlug] = version;
-          }
-          return acc;
-        }, {});
+      case 4: {
         const requestPayload = {
           countryCode: snapshot.countryCode,
-          snapshot,
-          templatePacks: Object.keys(templatePacks).length ? templatePacks : undefined
+          snapshot
         };
 
         return (
@@ -1214,7 +1049,7 @@ export function CreateSnapshotWizard({
                   </Typography>
                 </Stack>
                 <Grid container spacing={2}>
-                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                     <Paper variant="outlined" sx={{ p: 2.5 }}>
                       <Typography variant="caption" color="text.secondary">
                         Enabled Capabilities
@@ -1222,7 +1057,7 @@ export function CreateSnapshotWizard({
                       <Typography variant="h5">{enabledCapabilities.length}</Typography>
                     </Paper>
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                     <Paper variant="outlined" sx={{ p: 2.5 }}>
                       <Typography variant="caption" color="text.secondary">
                         Rule Count
@@ -1232,7 +1067,7 @@ export function CreateSnapshotWizard({
                       </Typography>
                     </Paper>
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                     <Paper variant="outlined" sx={{ p: 2.5 }}>
                       <Typography variant="caption" color="text.secondary">
                         Workflow
@@ -1241,14 +1076,6 @@ export function CreateSnapshotWizard({
                       <Typography variant="body2" color="text.secondary">
                         {snapshot.workflow.transitions.length} transitions
                       </Typography>
-                    </Paper>
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Paper variant="outlined" sx={{ p: 2.5 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Target Repos
-                      </Typography>
-                      <Typography variant="h5">{enabledTargets.length}</Typography>
                     </Paper>
                   </Grid>
                 </Grid>
@@ -1408,7 +1235,7 @@ export function CreateSnapshotWizard({
                 variant="contained"
                 startIcon={<SaveIcon />}
                 disabled={
-                  !stepValidations.slice(0, 5).every(Boolean) ||
+                  !stepValidations.slice(0, 4).every(Boolean) ||
                   Boolean(jsonError) ||
                   (isVersionMode ? createSnapshotVersionMutation.isPending : createSnapshotMutation.isPending)
                 }
