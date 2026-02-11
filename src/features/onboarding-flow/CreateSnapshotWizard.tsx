@@ -1,5 +1,7 @@
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import SearchIcon from '@mui/icons-material/Search';
 import SaveIcon from '@mui/icons-material/Save';
 import {
   Alert,
@@ -9,6 +11,7 @@ import {
   Divider,
   FormControlLabel,
   Grid,
+  InputAdornment,
   Link,
   MenuItem,
   Paper,
@@ -19,14 +22,19 @@ import {
   Switch,
   Tab,
   Tabs,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { EditableRulesTable } from '../../components/EditableRulesTable';
 import { JsonMonacoPanel } from '../../components/JsonMonacoPanel';
 import { LoadingState } from '../../components/LoadingState';
 import { ParamsEditorDrawer } from '../../components/ParamsEditorDrawer';
@@ -39,12 +47,19 @@ import { useGlobalError } from '../../app/GlobalErrorContext';
 import {
   capabilityKeys,
   type CapabilityKey,
+  type RulesConfig,
+  type SelectedCapability,
   type SnapshotModel,
   validateCountryCodeUppercase,
-  validateNoDuplicateRuleKeys,
   validateTransitionsReferToValidStates
 } from '../../models/snapshot';
 import { capabilityCatalog } from './capabilityCatalog';
+import paymentInitiationCapabilityMetadata from './mock/paymentInitiationCapabilityMetadata.json';
+import { CapabilityConfigDrawer } from './rules/CapabilityConfigDrawer';
+import type { CapabilityDto, CapabilityMetadataDto } from './rules/types';
+import { buildDefaultParams } from './rules/utils';
+import { clearRulesDraft, loadRulesDraft, saveRulesDraft, type RulesDraft } from '../../lib/storage/rulesDraftStorage';
+import { useRulesDraftAutosave } from '../../hooks/useRulesDraftAutosave';
 
 type RuleType = 'validations' | 'enrichments';
 
@@ -98,6 +113,89 @@ const defaultWorkflow = {
     { from: 'VALIDATED', to: 'CLEARED', onEvent: 'CLEAR' }
   ]
 };
+
+const capabilityMetadata = paymentInitiationCapabilityMetadata as CapabilityMetadataDto;
+const rulesMetadata = {
+  schemaVersion: capabilityMetadata.schemaVersion,
+  producer: capabilityMetadata.producer
+};
+
+function normalizeCapabilityList(metadata: CapabilityMetadataDto): CapabilityDto[] {
+  return Array.isArray(metadata.capabilities) ? metadata.capabilities : [];
+}
+
+function sortCapabilities(capabilities: CapabilityDto[]): CapabilityDto[] {
+  return [...capabilities].sort((left, right) => {
+    const leftOrder = left.orderHint ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = right.orderHint ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function buildSelectedCapabilities(capabilities: CapabilityDto[], kind: CapabilityDto['kind']): SelectedCapability[] {
+  return sortCapabilities(capabilities.filter((capability) => capability.kind === kind)).map((capability) => ({
+    id: capability.id,
+    enabled: false,
+    params: buildDefaultParams(capability.params ?? [])
+  }));
+}
+
+function buildRulesConfigFromMetadata(metadata: CapabilityMetadataDto): RulesConfig {
+  const capabilities = normalizeCapabilityList(metadata);
+  return {
+    metadata: {
+      schemaVersion: metadata.schemaVersion,
+      producer: metadata.producer
+    },
+    validations: buildSelectedCapabilities(capabilities, 'VALIDATION'),
+    enrichments: buildSelectedCapabilities(capabilities, 'ENRICHMENT')
+  };
+}
+
+function mergeSelectedCapabilities(
+  defaults: SelectedCapability[],
+  draft?: SelectedCapability[],
+  existing?: SelectedCapability[]
+): SelectedCapability[] {
+  const byId = new Map<string, SelectedCapability>();
+  defaults.forEach((item) => {
+    byId.set(item.id, { ...item, params: { ...item.params } });
+  });
+
+  const apply = (items?: SelectedCapability[]) => {
+    items?.forEach((item) => {
+      const base = byId.get(item.id) ?? { id: item.id, enabled: false, params: {} };
+      byId.set(item.id, {
+        ...base,
+        ...item,
+        params: { ...base.params, ...(item.params ?? {}) }
+      });
+    });
+  };
+
+  apply(draft);
+  apply(existing);
+
+  const ordered = defaults.map((item) => byId.get(item.id) ?? item);
+  const defaultIds = new Set(defaults.map((item) => item.id));
+  byId.forEach((value, id) => {
+    if (!defaultIds.has(id)) {
+      ordered.push(value);
+    }
+  });
+  return ordered;
+}
+
+function mergeRulesConfig(defaultConfig: RulesConfig, draft: RulesDraft | null, existing?: RulesConfig): RulesConfig {
+  return {
+    metadata: existing?.metadata ?? defaultConfig.metadata,
+    validations: mergeSelectedCapabilities(defaultConfig.validations, draft?.validations, existing?.validations),
+    enrichments: mergeSelectedCapabilities(defaultConfig.enrichments, draft?.enrichments, existing?.enrichments)
+  };
+}
 
 const defaultSnapshot: SnapshotModel = {
   countryCode: '',
@@ -190,6 +288,15 @@ function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
     transitions: Array.isArray(workflow.transitions) ? workflow.transitions : defaultWorkflow.transitions
   };
 
+  const rawRulesConfig = raw.rulesConfig as RulesConfig | undefined;
+  const normalizedRulesConfig = rawRulesConfig
+    ? {
+        metadata: rawRulesConfig.metadata,
+        validations: Array.isArray(rawRulesConfig.validations) ? rawRulesConfig.validations : [],
+        enrichments: Array.isArray(rawRulesConfig.enrichments) ? rawRulesConfig.enrichments : []
+      }
+    : undefined;
+
   const rawCapabilities = Array.isArray(raw.capabilities) ? raw.capabilities : [];
   const capabilityMap = new Map(rawCapabilities.map((cap) => [cap.capabilityKey, cap]));
   const normalizedCapabilities = capabilityKeys.map((key) => {
@@ -207,6 +314,7 @@ function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
     capabilities: normalizedCapabilities,
     validations: Array.isArray(raw.validations) ? raw.validations : [],
     enrichments: Array.isArray(raw.enrichments) ? raw.enrichments : [],
+    rulesConfig: normalizedRulesConfig,
     actions: Array.isArray(raw.actions) ? raw.actions : [],
     workflow: mergedWorkflow,
     integrationConfig: raw.integrationConfig ?? {},
@@ -233,6 +341,7 @@ export function CreateSnapshotWizard({
   const [stepAnimationDirection, setStepAnimationDirection] = useState<'forward' | 'backward'>('forward');
   const [advancedJson, setAdvancedJson] = useState(false);
   const jsonUpdateSource = useRef<'form' | 'editor' | null>(null);
+  const rulesInitRef = useRef<string | null>(null);
   const isVersionMode = mode === 'version';
 
   const resolvedInitialSnapshot = useMemo(
@@ -246,6 +355,13 @@ export function CreateSnapshotWizard({
   const [repoTargets, setRepoTargets] = useState<RepoTarget[]>(repoTargetTemplates);
   const [paramsDrawerContext, setParamsDrawerContext] = useState<ParamsDrawerContext>(null);
   const [ruleTab, setRuleTab] = useState<RuleType>('validations');
+  const [ruleSearch, setRuleSearch] = useState('');
+  const [showEnabledOnly, setShowEnabledOnly] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [rulesDrawerState, setRulesDrawerState] = useState<{
+    capability: CapabilityDto;
+    kind: RuleType;
+  } | null>(null);
 
   const repoDefaultsQuery = useQuery({
     queryKey: ['repo-defaults-v2'],
@@ -308,6 +424,7 @@ export function CreateSnapshotWizard({
     );
   }, [repoDefaults]);
 
+
   const updateSnapshot = (
     updater: (prev: SnapshotModel) => SnapshotModel,
     source: 'form' | 'editor' = 'form'
@@ -315,6 +432,27 @@ export function CreateSnapshotWizard({
     jsonUpdateSource.current = source;
     setSnapshot(updater);
   };
+
+  useEffect(() => {
+    const countryCode = snapshot.countryCode.trim();
+    if (!countryCode) {
+      return;
+    }
+    if (rulesInitRef.current === countryCode) {
+      return;
+    }
+
+    const defaults = buildRulesConfigFromMetadata(capabilityMetadata);
+    const draft = loadRulesDraft(countryCode);
+
+    updateSnapshot((prev) => ({
+      ...prev,
+      rulesConfig: mergeRulesConfig(defaults, draft, prev.rulesConfig)
+    }));
+
+    setDraftSavedAt(draft?.updatedAt ?? null);
+    rulesInitRef.current = countryCode;
+  }, [snapshot.countryCode]);
 
   const handleJsonChange = (next: string) => {
     setJsonValue(next);
@@ -329,12 +467,28 @@ export function CreateSnapshotWizard({
   };
 
   const countryErrors = validateCountryCodeUppercase(snapshot.countryCode);
-  const ruleKeyErrors = validateNoDuplicateRuleKeys(
-    snapshot.validations,
-    snapshot.enrichments,
-    snapshot.actions
-  );
   const transitionErrors = validateTransitionsReferToValidStates(snapshot.workflow);
+
+  const rulesConfig = snapshot.rulesConfig;
+  const validationSelections = rulesConfig?.validations ?? [];
+  const enrichmentSelections = rulesConfig?.enrichments ?? [];
+  const enabledValidations = validationSelections.filter((rule) => rule.enabled);
+  const enabledEnrichments = enrichmentSelections.filter((rule) => rule.enabled);
+  const allCapabilities = useMemo(() => normalizeCapabilityList(capabilityMetadata), []);
+  const defaultParamsById = useMemo(
+    () =>
+      new Map(
+        allCapabilities.map((capability) => [
+          capability.id,
+          buildDefaultParams(capability.params ?? [])
+        ])
+      ),
+    [allCapabilities]
+  );
+  const formattedDraftSavedAt = useMemo(
+    () => (draftSavedAt ? new Date(draftSavedAt).toLocaleString() : null),
+    [draftSavedAt]
+  );
 
   const capabilityStateByKey = useMemo(
     () => new Map(snapshot.capabilities.map((capability) => [capability.capabilityKey, capability])),
@@ -363,9 +517,7 @@ export function CreateSnapshotWizard({
   const stepValidations = [
     countryErrors.length === 0,
     hasCapabilitiesEnabled,
-    ruleKeyErrors.length === 0 &&
-      snapshot.validations.every((rule) => rule.key.trim()) &&
-      snapshot.enrichments.every((rule) => rule.key.trim()),
+    Boolean(rulesConfig),
     workflowKeyValid &&
       statesValid &&
       transitionErrors.length === 0 &&
@@ -375,6 +527,105 @@ export function CreateSnapshotWizard({
   ];
 
   const canProceed = stepValidations[activeStep] && !(advancedJson && jsonError);
+
+  const rulesDraftCountry = snapshot.countryCode.trim();
+  const buildRulesDraft = useCallback((): RulesDraft | null => {
+    if (!rulesDraftCountry || !rulesConfig) {
+      return null;
+    }
+    if (rulesInitRef.current !== rulesDraftCountry) {
+      return null;
+    }
+    const metadata = rulesConfig.metadata ?? rulesMetadata;
+    return {
+      schemaVersion: (metadata.schemaVersion ?? '1.0') as RulesDraft['schemaVersion'],
+      producer: {
+        system: 'payment-initiation',
+        artifact: metadata.producer?.artifact ?? 'payment-initiation-core',
+        version: metadata.producer?.version ?? '0.0.0-local'
+      },
+      countryCode: rulesDraftCountry,
+      updatedAt: new Date().toISOString(),
+      validations: rulesConfig.validations,
+      enrichments: rulesConfig.enrichments
+    };
+  }, [rulesDraftCountry, rulesConfig]);
+
+  useRulesDraftAutosave({
+    enabled: Boolean(rulesConfig) && Boolean(rulesDraftCountry),
+    countryCode: rulesDraftCountry,
+    buildDraft: buildRulesDraft,
+    onSaved: (draft) => setDraftSavedAt(draft.updatedAt)
+  });
+
+  const handleSaveDraft = () => {
+    const draft = buildRulesDraft();
+    if (!draft) {
+      return;
+    }
+    saveRulesDraft(draft);
+    setDraftSavedAt(draft.updatedAt);
+  };
+
+  const handleResetDraft = () => {
+    if (!rulesDraftCountry) {
+      return;
+    }
+    clearRulesDraft(rulesDraftCountry);
+    const defaults = buildRulesConfigFromMetadata(capabilityMetadata);
+    updateSnapshot((prev) => ({
+      ...prev,
+      rulesConfig: defaults
+    }));
+    setDraftSavedAt(null);
+  };
+
+  const updateRulesConfig = (kind: RuleType, updater: (prev: SelectedCapability[]) => SelectedCapability[]) => {
+    updateSnapshot((prev) => {
+      const current = prev.rulesConfig ?? buildRulesConfigFromMetadata(capabilityMetadata);
+      return {
+        ...prev,
+        rulesConfig: {
+          ...current,
+          metadata: current.metadata ?? rulesMetadata,
+          [kind]: updater(current[kind])
+        }
+      };
+    });
+  };
+
+  const handleToggleAll = (kind: RuleType, enabled: boolean) => {
+    updateRulesConfig(kind, (prev) => prev.map((rule) => ({ ...rule, enabled })));
+  };
+
+  const handleToggleRule = (kind: RuleType, capability: CapabilityDto, enabled: boolean) => {
+    updateRulesConfig(kind, (prev) => {
+      const existing = prev.find((rule) => rule.id === capability.id);
+      if (!existing) {
+        const defaults = defaultParamsById.get(capability.id) ?? {};
+        return [...prev, { id: capability.id, enabled, params: defaults }];
+      }
+      return prev.map((rule) => {
+        if (rule.id !== capability.id) {
+          return rule;
+        }
+        if (!enabled) {
+          return { ...rule, enabled };
+        }
+        const defaults = defaultParamsById.get(rule.id) ?? {};
+        const hasParams = Object.keys(rule.params ?? {}).length > 0;
+        return {
+          ...rule,
+          enabled,
+          params: hasParams ? rule.params : defaults
+        };
+      });
+    });
+  };
+
+  const openCapabilityDrawer = (kind: RuleType, capability: CapabilityDto) => {
+    setRulesDrawerState({ kind, capability });
+  };
 
   const goNext = () => {
     if (activeStep < stepLabels.length - 1) {
@@ -688,96 +939,192 @@ export function CreateSnapshotWizard({
           </Stack>
         );
       case 2:
-        return (
-          <Stack spacing={3}>
-            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
-              <Stack spacing={2}>
-                <Stack spacing={0.5}>
-                  <Typography variant="subtitle1">Rule Scope</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Choose which rule set to edit and keep each set focused on one purpose.
-                  </Typography>
+        {
+          const activeKind = ruleTab === 'validations' ? 'VALIDATION' : 'ENRICHMENT';
+          const selections = ruleTab === 'validations' ? validationSelections : enrichmentSelections;
+          const selectionMap = new Map(selections.map((rule) => [rule.id, rule]));
+          const searchable = ruleSearch.trim().toLowerCase();
+
+          const filteredCapabilities = sortCapabilities(
+            allCapabilities.filter((capability) => capability.kind === activeKind)
+          ).filter((capability) => {
+            const selected = selectionMap.get(capability.id);
+            if (showEnabledOnly && !selected?.enabled) {
+              return false;
+            }
+            if (!searchable) {
+              return true;
+            }
+            const haystack = `${capability.id} ${capability.name} ${capability.description}`.toLowerCase();
+            return haystack.includes(searchable);
+          });
+
+          return (
+            <Stack spacing={3}>
+              <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+                <Stack spacing={2}>
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle1">Rule Scope</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Choose which rule set to edit and keep each set focused on one purpose.
+                    </Typography>
+                  </Stack>
+                  <Tabs
+                    value={ruleTab}
+                    onChange={(_, value) => setRuleTab(value as RuleType)}
+                    aria-label="Rule type tabs"
+                  >
+                    <Tab value="validations" label="Validations" />
+                    <Tab value="enrichments" label="Enrichments" />
+                  </Tabs>
                 </Stack>
-                <Tabs
-                  value={ruleTab}
-                  onChange={(_, value) => setRuleTab(value as RuleType)}
-                  aria-label="Rule type tabs"
-                >
-                  <Tab value="validations" label="Validations" />
-                  <Tab value="enrichments" label="Enrichments" />
-                </Tabs>
-              </Stack>
-            </Paper>
-            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
-              <Stack spacing={2.5}>
-                <Stack spacing={0.5}>
-                  <Typography variant="subtitle1">
-                    {ruleTab === 'validations' ? 'Validation Rules' : 'Enrichment Rules'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Why this matters: CPX validation and enrichment rules must be deterministic to preserve flow
-                    integrity.
-                  </Typography>
+              </Paper>
+              <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+                <Stack spacing={2.5}>
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle1">
+                      {ruleTab === 'validations' ? 'Validation Rules' : 'Enrichment Rules'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Why this matters: CPX validation and enrichment rules must be deterministic to preserve flow
+                      integrity.
+                    </Typography>
+                  </Stack>
+                  <Stack spacing={1.5}>
+                    <Stack
+                      direction={{ xs: 'column', md: 'row' }}
+                      spacing={1.5}
+                      alignItems={{ xs: 'stretch', md: 'center' }}
+                    >
+                      <TextField
+                        size="small"
+                        value={ruleSearch}
+                        onChange={(event) => setRuleSearch(event.target.value)}
+                        placeholder="Search rules..."
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <SearchIcon fontSize="small" />
+                            </InputAdornment>
+                          )
+                        }}
+                        sx={{ flex: 1, minWidth: { xs: '100%', md: 280 } }}
+                      />
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Button size="small" variant="outlined" onClick={() => handleToggleAll(ruleTab, true)}>
+                          Enable all
+                        </Button>
+                        <Button size="small" variant="text" onClick={() => handleToggleAll(ruleTab, false)}>
+                          Disable all
+                        </Button>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={showEnabledOnly}
+                              onChange={(_, checked) => setShowEnabledOnly(checked)}
+                            />
+                          }
+                          label="Show enabled only"
+                        />
+                      </Stack>
+                    </Stack>
+                    <Stack
+                      direction={{ xs: 'column', md: 'row' }}
+                      spacing={1.5}
+                      alignItems={{ xs: 'stretch', md: 'center' }}
+                      justifyContent="space-between"
+                    >
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<SaveIcon />}
+                          onClick={handleSaveDraft}
+                          disabled={!rulesDraftCountry}
+                        >
+                          Save Draft
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="text"
+                          startIcon={<RestartAltIcon />}
+                          onClick={handleResetDraft}
+                          disabled={!rulesDraftCountry}
+                        >
+                          Reset
+                        </Button>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        Draft saved locally{formattedDraftSavedAt ? ` · ${formattedDraftSavedAt}` : ''}
+                      </Typography>
+                    </Stack>
+                  </Stack>
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small" stickyHeader aria-label="Capability rules table">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Key</TableCell>
+                          <TableCell>Name</TableCell>
+                          <TableCell>Description</TableCell>
+                          <TableCell align="center">Enabled</TableCell>
+                          <TableCell align="right">Params</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {filteredCapabilities.map((capability) => {
+                          const selection = selectionMap.get(capability.id);
+                          const enabled = selection?.enabled ?? false;
+                          const paramCount = capability.params?.length ?? 0;
+
+                          return (
+                            <TableRow key={capability.id} hover>
+                              <TableCell>{capability.id}</TableCell>
+                              <TableCell>{capability.name}</TableCell>
+                              <TableCell>
+                                <Typography variant="body2" color="text.secondary">
+                                  {capability.description}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Switch
+                                  checked={enabled}
+                                  onChange={(_, checked) => handleToggleRule(ruleTab, capability, checked)}
+                                  inputProps={{
+                                    'aria-label': `Enable ${capability.id}`
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <Button
+                                  size="small"
+                                  variant="text"
+                                  startIcon={<BuildOutlinedIcon fontSize="small" />}
+                                  onClick={() => openCapabilityDrawer(ruleTab, capability)}
+                                  disabled={paramCount === 0}
+                                >
+                                  Configure {paramCount} param{paramCount === 1 ? '' : 's'}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        {filteredCapabilities.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5}>
+                              <Typography variant="body2" color="text.secondary">
+                                No rules match the current filters.
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
                 </Stack>
-                {ruleTab === 'validations' ? (
-                  <EditableRulesTable
-                    title="Validations"
-                    helperText="Validation rules gate onboarding before downstream processing."
-                    rows={snapshot.validations}
-                    showSeverity
-                    addLabel="Add Validation"
-                    onChange={(next) => updateSnapshot((prev) => ({ ...prev, validations: next }))}
-                    onEditParams={(index, params) =>
-                      openParamsDrawer(
-                        'Validation Params',
-                        params,
-                        (next) =>
-                          updateSnapshot((prev) => ({
-                            ...prev,
-                            validations: prev.validations.map((rule, ruleIndex) =>
-                              ruleIndex === index ? { ...rule, params: next } : rule
-                            )
-                          })),
-                        'Tune validation params aligned to the CPX checks lane.'
-                      )
-                    }
-                  />
-                ) : (
-                  <EditableRulesTable
-                    title="Enrichments"
-                    helperText="Enrichment rules add contextual data to the CPX runtime payload."
-                    rows={snapshot.enrichments}
-                    addLabel="Add Enrichment"
-                    onChange={(next) => updateSnapshot((prev) => ({ ...prev, enrichments: next }))}
-                    onEditParams={(index, params) =>
-                      openParamsDrawer(
-                        'Enrichment Params',
-                        params,
-                        (next) =>
-                          updateSnapshot((prev) => ({
-                            ...prev,
-                            enrichments: prev.enrichments.map((rule, ruleIndex) =>
-                              ruleIndex === index ? { ...rule, params: next } : rule
-                            )
-                          })),
-                        'Configure enrichment params that augment the CPX runtime payload.'
-                      )
-                    }
-                  />
-                )}
-              </Stack>
-            </Paper>
-            {ruleKeyErrors.length ? (
-              <Stack spacing={1}>
-                {ruleKeyErrors.map((error) => (
-                  <Alert key={error.path} severity="warning">
-                    {error.message}
-                  </Alert>
-                ))}
-              </Stack>
-            ) : null}
-          </Stack>
-        );
+              </Paper>
+            </Stack>
+          );
+        }
       case 3:
         return (
           <Stack spacing={3}>
@@ -881,7 +1228,7 @@ export function CreateSnapshotWizard({
                         Rule Count
                       </Typography>
                       <Typography variant="h5">
-                        {snapshot.validations.length + snapshot.enrichments.length}
+                        {enabledValidations.length + enabledEnrichments.length}
                       </Typography>
                     </Paper>
                   </Grid>
@@ -924,6 +1271,42 @@ export function CreateSnapshotWizard({
                 ) : (
                   <Alert severity="info">No capabilities are enabled.</Alert>
                 )}
+              </Stack>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={2}>
+                <Typography variant="subtitle1">Enabled Rules</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Validations and enrichments enabled for payment initiation.
+                </Typography>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Validations ({enabledValidations.length})
+                  </Typography>
+                  {enabledValidations.length ? (
+                    <Typography variant="body2">
+                      {enabledValidations.map((rule) => rule.id).join(', ')}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No validations enabled.
+                    </Typography>
+                  )}
+                </Stack>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Enrichments ({enabledEnrichments.length})
+                  </Typography>
+                  {enabledEnrichments.length ? (
+                    <Typography variant="body2">
+                      {enabledEnrichments.map((rule) => rule.id).join(', ')}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No enrichments enabled.
+                    </Typography>
+                  )}
+                </Stack>
               </Stack>
             </Paper>
             <SectionCard title="Snapshot JSON Preview" subtitle="Payload that will be persisted to CPX backend.">
@@ -1051,6 +1434,38 @@ export function CreateSnapshotWizard({
         params={paramsDrawerContext?.params}
         onSave={(params) => paramsDrawerContext?.onSave(params)}
         onClose={() => setParamsDrawerContext(null)}
+      />
+      <CapabilityConfigDrawer
+        open={Boolean(rulesDrawerState)}
+        capability={rulesDrawerState?.capability}
+        selected={
+          rulesDrawerState?.kind === 'validations'
+            ? validationSelections.find((rule) => rule.id === rulesDrawerState?.capability.id) ?? null
+            : enrichmentSelections.find((rule) => rule.id === rulesDrawerState?.capability.id) ?? null
+        }
+        onClose={() => setRulesDrawerState(null)}
+        onSave={(params) => {
+          if (!rulesDrawerState) {
+            return;
+          }
+          updateRulesConfig(rulesDrawerState.kind, (prev) => {
+            const exists = prev.some((rule) => rule.id === rulesDrawerState.capability.id);
+            const next = prev.map((rule) =>
+              rule.id === rulesDrawerState.capability.id ? { ...rule, params } : rule
+            );
+            if (exists) {
+              return next;
+            }
+            return [
+              ...next,
+              {
+                id: rulesDrawerState.capability.id,
+                enabled: true,
+                params
+              }
+            ];
+          });
+        }}
       />
     </Stack>
   );

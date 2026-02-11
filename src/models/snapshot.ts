@@ -29,6 +29,27 @@ export type SnapshotRule = {
   params?: Record<string, any>;
 };
 
+export type SelectedCapability = {
+  id: string;
+  enabled: boolean;
+  params: Record<string, unknown>;
+};
+
+export type RulesConfigMetadata = {
+  schemaVersion: string;
+  producer: {
+    system: string;
+    artifact: string;
+    version: string;
+  };
+};
+
+export type RulesConfig = {
+  metadata?: RulesConfigMetadata;
+  validations: SelectedCapability[];
+  enrichments: SelectedCapability[];
+};
+
 export type SnapshotAction = {
   key: string;
   enabled: boolean;
@@ -56,6 +77,7 @@ export type SnapshotModel = {
   capabilities: SnapshotCapability[];
   validations: SnapshotRule[];
   enrichments: SnapshotRule[];
+  rulesConfig?: RulesConfig;
   actions: SnapshotAction[];
   workflow: SnapshotWorkflow;
   integrationConfig?: Record<string, any>;

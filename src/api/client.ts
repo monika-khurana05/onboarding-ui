@@ -1,5 +1,6 @@
 import { ApiError, httpRequest } from './http';
 import type {
+  CapabilityMetadataDto,
   CreateSnapshotRequestDto,
   CreateSnapshotResponseDto,
   PreviewGenerateRequestDto,
@@ -67,6 +68,19 @@ export async function listRepoPacks(repoSlug: string, ref?: string): Promise<Rep
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return [];
+    }
+    throw error;
+  }
+}
+
+export async function getPaymentInitiationCapabilityMetadata(): Promise<CapabilityMetadataDto> {
+  const query = '?system=payment-initiation';
+
+  try {
+    return await httpRequest<CapabilityMetadataDto>(`/capabilities/metadata${query}`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return { capabilities: [] };
     }
     throw error;
   }

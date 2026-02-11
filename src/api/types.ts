@@ -133,3 +133,30 @@ export type RepoPackDto = {
 export type RepoPacksResponseDto = {
   packs?: RepoPackDto[];
 };
+
+export type CapabilityMetadataDto = {
+  schemaVersion?: string;
+  producer?: string;
+  generatedAt?: string;
+  capabilities: CapabilityDto[];
+};
+
+export type CapabilityDto = {
+  id: string;
+  kind: string;
+  name: string;
+  description: string;
+  stage?: string;
+  orderHint?: number;
+  dependencies?: string[];
+  params: ParamDefDto[];
+};
+
+export type ParamDefDto = {
+  name: string;
+  type: string;
+  required: boolean;
+  default: unknown;
+  constraints?: Record<string, unknown>;
+  ui?: Record<string, unknown>;
+};

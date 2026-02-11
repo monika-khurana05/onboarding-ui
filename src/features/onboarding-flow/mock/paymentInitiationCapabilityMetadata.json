@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "1.0",
+  "producer": {
+    "system": "payment-initiation",
+    "artifact": "payment-initiation-core",
+    "version": "0.0.0-local"
+  },
+  "generatedAt": "2026-02-11T00:00:00Z",
+  "capabilities": [
+    {
+      "id": "ACCOUNT_NUMBER_LENGTH",
+      "kind": "VALIDATION",
+      "name": "Account Number Length",
+      "description": "Validate local account number length",
+      "stage": "PRE_CLEARING",
+      "orderHint": 10,
+      "dependencies": [],
+      "params": [
+        {
+          "name": "minLength",
+          "type": "INT",
+          "required": true,
+          "default": 12,
+          "constraints": { "min": 1, "max": 34 },
+          "ui": { "label": "Min Length", "input": "number" }
+        },
+        {
+          "name": "maxLength",
+          "type": "INT",
+          "required": true,
+          "default": 12,
+          "constraints": { "min": 1, "max": 34 },
+          "ui": { "label": "Max Length", "input": "number" }
+        }
+      ]
+    },
+    {
+      "id": "BANK_CODE_ENRICHMENT",
+      "kind": "ENRICHMENT",
+      "name": "Bank Code Enrichment",
+      "description": "Enrich routing/bank code from reference data",
+      "stage": "PRE_SANCTIONS",
+      "orderHint": 20,
+      "dependencies": [],
+      "params": [
+        {
+          "name": "source",
+          "type": "ENUM",
+          "required": true,
+          "default": "REFERENCE_DATA",
+          "constraints": { "enumValues": ["REFERENCE_DATA", "EXTERNAL_SERVICE"] },
+          "ui": { "label": "Source", "input": "select" }
+        }
+      ]
+    }
+  ]
+}
