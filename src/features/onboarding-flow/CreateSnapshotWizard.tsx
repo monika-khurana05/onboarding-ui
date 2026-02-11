@@ -1,17 +1,15 @@
-import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
-import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
-import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import SaveIcon from '@mui/icons-material/Save';
-import SchemaOutlinedIcon from '@mui/icons-material/SchemaOutlined';
-import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
-import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import {
   Alert,
   Box,
   Button,
+  Checkbox,
+  Chip,
   Divider,
   FormControlLabel,
   Grid,
+  InputAdornment,
   MenuItem,
   Paper,
   Stack,
@@ -21,10 +19,15 @@ import {
   Switch,
   Tab,
   Tabs,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography
 } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -46,20 +49,7 @@ import {
   validateNoDuplicateRuleKeys,
   validateTransitionsReferToValidStates
 } from '../../models/snapshot';
-
-type CapabilityDefinition = {
-  key: CapabilityKey;
-  label: string;
-  description: string;
-  helper: string;
-};
-
-type CapabilityGroup = {
-  id: string;
-  title: string;
-  helper: string;
-  items: CapabilityDefinition[];
-};
+import { capabilityCatalog } from './capabilityCatalog';
 
 type RuleType = 'validations' | 'enrichments';
 
@@ -88,110 +78,18 @@ const stepSubtitles = [
   'Confirm snapshot scope, then persist the final payload.'
 ];
 
-const capabilityGroups: CapabilityGroup[] = [
-  {
-    id: 'ingress',
-    title: 'Ingress / Orchestration',
-    helper: 'Entry-point services that kick off onboarding and drive orchestration in the CPX runtime.',
-    items: [
-      {
-        key: 'PAYMENT_INITIATION',
-        label: 'Payment Initiation',
-        description: 'Accepts onboarding requests and triggers the initial lifecycle events.',
-        helper: 'Controls how new country onboarding enters the CPX pipeline.'
-      },
-      {
-        key: 'STATE_MANAGER',
-        label: 'State Manager',
-        description: 'Owns lifecycle state, transitions, and persistence checkpoints.',
-        helper: 'Defines the canonical FSM for country onboarding state.'
-      }
-    ]
-  },
-  {
-    id: 'checks',
-    title: 'Checks',
-    helper: 'Validation and screening blocks that gate flow before clearing and posting.',
-    items: [
-      {
-        key: 'VALIDATION',
-        label: 'Validation',
-        description: 'Schema and business rule checks for incoming payloads.',
-        helper: 'Aligns to the validation lane in the CPX runtime diagram.'
-      },
-      {
-        key: 'ENRICHMENT',
-        label: 'Enrichment',
-        description: 'Adds reference data and context before downstream clearing.',
-        helper: 'Maps to the enrichment lane in the CPX runtime diagram.'
-      },
-      {
-        key: 'DUPLICATE_CHECK',
-        label: 'Duplicate Check',
-        description: 'Detects repeat onboarding attempts across identifiers.',
-        helper: 'Prevents duplicate state creation in CPX orchestration.'
-      },
-      {
-        key: 'SANCTIONS_SCREENING',
-        label: 'Sanctions Screening',
-        description: 'Screens country/party data against sanctions policies.',
-        helper: 'Maps to the compliance checkpoint in the CPX flow.'
-      }
-    ]
-  },
-  {
-    id: 'clearing',
-    title: 'Clearing & Posting',
-    helper: 'Clearing paths and posting integrations once validation is complete.',
-    items: [
-      {
-        key: 'GLS_CLEARING',
-        label: 'GLS Clearing',
-        description: 'Clearing setup, participant mapping, and GLS routing.',
-        helper: 'Drives clearing rules in the CPX runtime lane.'
-      },
-      {
-        key: 'REGIONAL_ROUTING',
-        label: 'Regional Routing',
-        description: 'Routes traffic to regional processing clusters.',
-        helper: 'Controls regional fork behavior in the CPX runtime.'
-      },
-      {
-        key: 'FLEXCUBE_POSTING',
-        label: 'Flexcube Posting',
-        description: 'Posts onboarding outcomes to the Flexcube ledger.',
-        helper: 'Aligns to the posting step in CPX clearing.'
-      }
-    ]
-  },
-  {
-    id: 'observability',
-    title: 'Observability / Outputs',
-    helper: 'Outputs, data lake feeds, and error handling for runtime visibility.',
-    items: [
-      {
-        key: 'NOTIFICATIONS',
-        label: 'Notifications',
-        description: 'Outbound messages to stakeholders and downstream systems.',
-        helper: 'Ensures CPX emits notifications on lifecycle milestones.'
-      },
-      {
-        key: 'BIGDATA',
-        label: 'Big Data',
-        description: 'Pushes onboarding telemetry to analytics sinks.',
-        helper: 'Feeds the CPX data lake and audit trail.'
-      },
-      {
-        key: 'ERROR_HANDLING',
-        label: 'Error Handling',
-        description: 'Captures and routes failure states for recovery.',
-        helper: 'Defines remediation paths in the CPX runtime diagram.'
-      }
-    ]
-  }
-];
+const defaultEnabledCapabilities = new Set<CapabilityKey>([
+  'PAYMENT_INITIATION',
+  'PAYMENT_ORCHESTRATION',
+  'CLEARING',
+  'POSTING',
+  'SANCTIONS',
+  'PLATFORM_RESILIENCY'
+]);
 
-const defaultEnabledCapabilities = new Set<CapabilityKey>(['PAYMENT_INITIATION', 'STATE_MANAGER']);
+const capabilityLabelLookup = new Map<CapabilityKey, string>(
+  capabilityCatalog.map((item) => [item.key, item.label])
+);
 
 const defaultWorkflow = {
   workflowKey: 'PAYMENT_INGRESS',
@@ -255,23 +153,6 @@ const repoTargetTemplates: RepoTarget[] = [
     loadingPacks: false
   }
 ];
-
-function getCapabilityIcon(key: CapabilityKey) {
-  switch (key) {
-    case 'GLS_CLEARING':
-      return <StorageOutlinedIcon fontSize="small" />;
-    case 'SANCTIONS_SCREENING':
-      return <ShieldOutlinedIcon fontSize="small" />;
-    case 'FLEXCUBE_POSTING':
-      return <AccountBalanceOutlinedIcon fontSize="small" />;
-    case 'REGIONAL_ROUTING':
-      return <AccountTreeOutlinedIcon fontSize="small" />;
-    case 'STATE_MANAGER':
-      return <SchemaOutlinedIcon fontSize="small" />;
-    default:
-      return <BuildOutlinedIcon fontSize="small" />;
-  }
-}
 
 function normalizeRepoDefaults(data?: RepoDefaultsResponseDto): RepoDefaultsEntry[] {
   if (!data) {
@@ -366,6 +247,7 @@ export function CreateSnapshotWizard({
   const [repoTargets, setRepoTargets] = useState<RepoTarget[]>(repoTargetTemplates);
   const [paramsDrawerContext, setParamsDrawerContext] = useState<ParamsDrawerContext>(null);
   const [ruleTab, setRuleTab] = useState<RuleType>('validations');
+  const [capabilitySearch, setCapabilitySearch] = useState('');
 
   const repoDefaultsQuery = useQuery({
     queryKey: ['repo-defaults-v2'],
@@ -436,6 +318,25 @@ export function CreateSnapshotWizard({
     setSnapshot(updater);
   };
 
+  const setAllCapabilities = (enabled: boolean) => {
+    updateSnapshot((prev) => ({
+      ...prev,
+      capabilities: prev.capabilities.map((capability) => ({
+        ...capability,
+        enabled
+      }))
+    }));
+  };
+
+  const toggleCapability = (key: CapabilityKey, enabled: boolean) => {
+    updateSnapshot((prev) => ({
+      ...prev,
+      capabilities: prev.capabilities.map((capability) =>
+        capability.capabilityKey === key ? { ...capability, enabled } : capability
+      )
+    }));
+  };
+
   const handleJsonChange = (next: string) => {
     setJsonValue(next);
     try {
@@ -455,6 +356,23 @@ export function CreateSnapshotWizard({
     snapshot.actions
   );
   const transitionErrors = validateTransitionsReferToValidStates(snapshot.workflow);
+
+  const capabilityStateByKey = useMemo(
+    () => new Map(snapshot.capabilities.map((capability) => [capability.capabilityKey, capability])),
+    [snapshot.capabilities]
+  );
+
+  const filteredCapabilities = useMemo(() => {
+    const normalizedQuery = capabilitySearch.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return capabilityCatalog;
+    }
+    return capabilityCatalog.filter((capability) => {
+      const haystack = `${capability.label} ${capability.description}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [capabilitySearch]);
+  const searchLabel = capabilitySearch.trim() || 'your query';
 
   const enabledCapabilities = snapshot.capabilities.filter((capability) => capability.enabled);
   const hasCapabilitiesEnabled = enabledCapabilities.length > 0;
@@ -665,136 +583,110 @@ export function CreateSnapshotWizard({
             {!hasCapabilitiesEnabled ? (
               <Alert severity="warning">Enable at least one CPX capability to proceed.</Alert>
             ) : null}
-            <Stack spacing={2.5}>
-              {capabilityGroups.map((group) => (
-                <Paper key={group.id} variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
-                  <Stack spacing={2}>
-                    <Stack spacing={0.5}>
-                      <Typography variant="subtitle1">{group.title}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {group.helper}
-                      </Typography>
-                    </Stack>
-                    <Grid container spacing={2}>
-                      {group.items.map((item) => {
-                        const capability = snapshot.capabilities.find((cap) => cap.capabilityKey === item.key);
-                        const enabled = capability?.enabled ?? false;
-                        const icon = getCapabilityIcon(item.key);
-                        return (
-                          <Grid key={item.key} size={{ xs: 12, md: 6 }}>
-                            <Paper
-                              variant="outlined"
-                              sx={(theme) => ({
-                                p: 2,
-                                height: '100%',
-                                borderWidth: enabled ? 2 : 1,
-                                borderColor: enabled ? theme.palette.primary.main : theme.palette.divider,
-                                backgroundColor: enabled
-                                  ? alpha(theme.palette.primary.main, 0.06)
-                                  : theme.palette.background.paper,
-                                transition: theme.transitions.create(
-                                  ['transform', 'box-shadow', 'border-color', 'background-color'],
-                                  { duration: theme.transitions.duration.shorter }
-                                ),
-                                '&:hover': {
-                                  transform: 'translateY(-2px)',
-                                  boxShadow: theme.shadows[3],
-                                  borderColor: theme.palette.primary.main
-                                }
-                              })}
-                            >
-                              <Stack spacing={2}>
-                                <Stack direction="row" spacing={1.25} alignItems="flex-start">
-                                  <Stack
-                                    alignItems="center"
-                                    justifyContent="center"
-                                    sx={(theme) => ({
-                                      width: 34,
-                                      height: 34,
-                                      borderRadius: 1,
-                                      color: enabled ? theme.palette.primary.main : theme.palette.text.secondary,
-                                      backgroundColor: enabled
-                                        ? alpha(theme.palette.primary.main, 0.14)
-                                        : alpha(theme.palette.text.secondary, 0.08),
-                                      flexShrink: 0
-                                    })}
-                                  >
-                                    {icon}
-                                  </Stack>
-                                  <Stack spacing={0.5}>
-                                    <Typography variant="subtitle2">{item.label}</Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                      {item.description}
-                                    </Typography>
-                                  </Stack>
-                                </Stack>
-                                <Stack
-                                  direction={{ xs: 'column', sm: 'row' }}
-                                  alignItems={{ xs: 'flex-start', sm: 'center' }}
-                                  justifyContent="space-between"
-                                  spacing={1}
-                                >
-                                  <FormControlLabel
-                                    sx={{
-                                      m: 0,
-                                      '& .MuiFormControlLabel-label': {
-                                        textAlign: 'left',
-                                        fontSize: 12,
-                                        color: 'text.secondary'
-                                      }
-                                    }}
-                                    control={
-                                      <Switch
-                                        checked={enabled}
-                                        onChange={(_, checked) =>
-                                          updateSnapshot((prev) => ({
-                                            ...prev,
-                                            capabilities: prev.capabilities.map((cap) =>
-                                              cap.capabilityKey === item.key ? { ...cap, enabled: checked } : cap
-                                            )
-                                          }))
-                                        }
-                                        aria-label={`Enable ${item.label}`}
-                                      />
-                                    }
-                                    label={enabled ? 'Enabled' : 'Disabled'}
-                                  />
-                                  <Button
-                                    size="small"
-                                    variant={enabled ? 'contained' : 'outlined'}
-                                    startIcon={<BuildOutlinedIcon />}
-                                    disabled={!enabled}
-                                    onClick={() =>
-                                      openParamsDrawer(
-                                        `${item.label} Params`,
-                                        capability?.params,
-                                        (params) =>
-                                          updateSnapshot((prev) => ({
-                                            ...prev,
-                                            capabilities: prev.capabilities.map((cap) =>
-                                              cap.capabilityKey === item.key ? { ...cap, params } : cap
-                                            )
-                                          })),
-                                        item.helper
-                                      )
-                                    }
-                                  >
-                                    Configure
-                                  </Button>
-                                </Stack>
-                                <Typography variant="caption" color="text.secondary">
-                                  {item.helper}
-                                </Typography>
-                              </Stack>
-                            </Paper>
-                          </Grid>
-                        );
-                      })}
-                    </Grid>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={2}>
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={2}
+                  alignItems={{ xs: 'stretch', sm: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <TextField
+                    label="Search capabilities"
+                    placeholder="Search by name or description"
+                    value={capabilitySearch}
+                    onChange={(event) => setCapabilitySearch(event.target.value)}
+                    size="small"
+                    sx={{ flex: 1, minWidth: 240 }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchOutlinedIcon fontSize="small" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                  <Stack direction="row" spacing={1} justifyContent="flex-end">
+                    <Button size="small" variant="outlined" onClick={() => setAllCapabilities(true)}>
+                      Enable all
+                    </Button>
+                    <Button size="small" variant="outlined" color="inherit" onClick={() => setAllCapabilities(false)}>
+                      Disable all
+                    </Button>
                   </Stack>
-                </Paper>
-              ))}
-            </Stack>
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  Showing {filteredCapabilities.length} of {capabilityCatalog.length} capabilities.
+                </Typography>
+                <TableContainer
+                  component={Paper}
+                  variant="outlined"
+                  sx={{
+                    borderColor: 'divider',
+                    '& .MuiTableCell-root': {
+                      borderColor: 'divider',
+                      py: 1.25
+                    },
+                    '& .MuiTableRow-root:hover': {
+                      backgroundColor: 'action.hover'
+                    },
+                    '& .MuiTableCell-head': {
+                      fontSize: 12,
+                      letterSpacing: 0.6,
+                      textTransform: 'uppercase',
+                      color: 'text.secondary'
+                    }
+                  }}
+                >
+                  <Table size="small" aria-label="Capability selection table">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell padding="checkbox">Enabled</TableCell>
+                        <TableCell>Capability Name</TableCell>
+                        <TableCell>Description</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {filteredCapabilities.length ? (
+                        filteredCapabilities.map((item) => {
+                          const capability = capabilityStateByKey.get(item.key);
+                          const enabled = capability?.enabled ?? false;
+                          return (
+                            <TableRow key={item.key} hover>
+                              <TableCell padding="checkbox">
+                                <Checkbox
+                                  checked={enabled}
+                                  onChange={(event) => toggleCapability(item.key, event.target.checked)}
+                                  inputProps={{ 'aria-label': `Enable ${item.label}` }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                  {item.label}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" color="text.secondary">
+                                  {item.description}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={3}>
+                            <Typography variant="body2" color="text.secondary">
+                              No capabilities match "{searchLabel}". Try a different search.
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Stack>
+            </Paper>
           </Stack>
         );
       case 2:
@@ -1015,6 +907,25 @@ export function CreateSnapshotWizard({
                     </Paper>
                   </Grid>
                 </Grid>
+              </Stack>
+            </Paper>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={1.5}>
+                <Typography variant="subtitle1">Enabled Capabilities</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Selected CPX capabilities that will be persisted with this snapshot.
+                </Typography>
+                {enabledCapabilities.length ? (
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                    {enabledCapabilities.map((capability) => {
+                      const label =
+                        capabilityLabelLookup.get(capability.capabilityKey) ?? capability.capabilityKey;
+                      return <Chip key={capability.capabilityKey} label={label} color="primary" variant="outlined" />;
+                    })}
+                  </Stack>
+                ) : (
+                  <Alert severity="info">No capabilities are enabled.</Alert>
+                )}
               </Stack>
             </Paper>
             <SectionCard title="Snapshot JSON Preview" subtitle="Payload that will be persisted to CPX backend.">

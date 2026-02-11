@@ -15,11 +15,11 @@ describe('snapshot validation helpers', () => {
 
   it('detects duplicate capability keys', () => {
     const errors = validateNoDuplicateCapabilityKey([
-      { capabilityKey: 'STATE_MANAGER', enabled: true },
-      { capabilityKey: 'STATE_MANAGER', enabled: false }
+      { capabilityKey: 'PAYMENT_ORCHESTRATION', enabled: true },
+      { capabilityKey: 'PAYMENT_ORCHESTRATION', enabled: false }
     ]);
     expect(errors).toHaveLength(1);
-    expect(errors[0].message).toMatch(/STATE_MANAGER/);
+    expect(errors[0].message).toMatch(/PAYMENT_ORCHESTRATION/);
   });
 
   it('detects duplicate rule keys across validations/enrichments/actions', () => {
