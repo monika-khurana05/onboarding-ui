@@ -106,8 +106,16 @@ export function ParamsEditorDrawer({
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: { xs: 320, sm: 420 }, p: 2 }}>
-        <Stack spacing={2}>
+      <Box
+        sx={{
+          width: { xs: 320, sm: 420 },
+          p: 2,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
           <Stack spacing={0.5}>
             <Typography variant="h6">{title}</Typography>
             <Typography variant="body2" color="text.secondary">
@@ -118,81 +126,83 @@ export function ParamsEditorDrawer({
             <Tab value="kv" label="Key/Value" />
             <Tab value="json" label="JSON" />
           </Tabs>
-          {mode === 'kv' ? (
-            <Stack spacing={1.5}>
-              {entries.map((entry, index) => (
-                <Stack key={`${entry.key}-${index}`} direction="row" spacing={1}>
-                  <TextField
-                    label="Key"
-                    size="small"
-                    value={entry.key}
-                    onChange={(event) => {
-                      const next = [...entries];
-                      next[index] = { ...next[index], key: event.target.value };
-                      setEntries(next);
-                    }}
-                    fullWidth
-                  />
-                  <TextField
-                    label="Value"
-                    size="small"
-                    value={entry.value}
-                    onChange={(event) => {
-                      const next = [...entries];
-                      next[index] = { ...next[index], value: event.target.value };
-                      setEntries(next);
-                    }}
-                    fullWidth
-                  />
-                  <IconButton
-                    aria-label="Remove param"
-                    onClick={() => setEntries(entries.filter((_, rowIndex) => rowIndex !== index))}
-                  >
-                    <DeleteOutlineIcon />
-                  </IconButton>
-                </Stack>
-              ))}
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => setEntries([...entries, { key: '', value: '' }])}
-              >
-                Add Param
-              </Button>
-            </Stack>
-          ) : (
-            <Stack spacing={1.5}>
-              <JsonAdvancedEditor
-                ariaLabel="Params JSON editor"
-                value={jsonValue}
-                onChange={(next) => {
-                  setJsonValue(next);
-                  try {
-                    const parsed = JSON.parse(next);
-                    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-                      setJsonError('Params JSON must be an object.');
-                      return;
+          <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', pr: 0.5 }}>
+            {mode === 'kv' ? (
+              <Stack spacing={1.5}>
+                {entries.map((entry, index) => (
+                  <Stack key={`${entry.key}-${index}`} direction="row" spacing={1}>
+                    <TextField
+                      label="Key"
+                      size="small"
+                      value={entry.key}
+                      onChange={(event) => {
+                        const next = [...entries];
+                        next[index] = { ...next[index], key: event.target.value };
+                        setEntries(next);
+                      }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Value"
+                      size="small"
+                      value={entry.value}
+                      onChange={(event) => {
+                        const next = [...entries];
+                        next[index] = { ...next[index], value: event.target.value };
+                        setEntries(next);
+                      }}
+                      fullWidth
+                    />
+                    <IconButton
+                      aria-label="Remove param"
+                      onClick={() => setEntries(entries.filter((_, rowIndex) => rowIndex !== index))}
+                    >
+                      <DeleteOutlineIcon />
+                    </IconButton>
+                  </Stack>
+                ))}
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => setEntries([...entries, { key: '', value: '' }])}
+                >
+                  Add Param
+                </Button>
+              </Stack>
+            ) : (
+              <Stack spacing={1.5}>
+                <JsonAdvancedEditor
+                  ariaLabel="Params JSON editor"
+                  value={jsonValue}
+                  onChange={(next) => {
+                    setJsonValue(next);
+                    try {
+                      const parsed = JSON.parse(next);
+                      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                        setJsonError('Params JSON must be an object.');
+                        return;
+                      }
+                      setJsonError(null);
+                    } catch {
+                      setJsonError('JSON parse error. Check commas and quotes.');
                     }
-                    setJsonError(null);
-                  } catch {
-                    setJsonError('JSON parse error. Check commas and quotes.');
-                  }
-                }}
-                hideHelper
-                label="Params JSON"
-              />
-              {jsonError ? <Alert severity="warning">{jsonError}</Alert> : null}
-            </Stack>
-          )}
-          <Divider />
-          <Stack direction="row" justifyContent="flex-end" spacing={1}>
-            <Button variant="text" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button variant="contained" onClick={handleSave} disabled={!canSave}>
-              Save Params
-            </Button>
-          </Stack>
+                  }}
+                  hideHelper
+                  label="Params JSON"
+                />
+                {jsonError ? <Alert severity="warning">{jsonError}</Alert> : null}
+              </Stack>
+            )}
+          </Box>
+        </Stack>
+        <Divider sx={{ my: 2 }} />
+        <Stack direction="row" justifyContent="flex-end" spacing={1}>
+          <Button variant="text" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleSave} disabled={!canSave}>
+            Save Params
+          </Button>
         </Stack>
       </Box>
     </Drawer>
