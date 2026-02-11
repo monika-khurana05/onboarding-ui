@@ -1,15 +1,13 @@
+import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
 import SaveIcon from '@mui/icons-material/Save';
-import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import {
   Alert,
   Box,
   Button,
-  Checkbox,
   Chip,
   Divider,
   FormControlLabel,
   Grid,
-  InputAdornment,
   MenuItem,
   Paper,
   Stack,
@@ -19,15 +17,10 @@ import {
   Switch,
   Tab,
   Tabs,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -90,6 +83,10 @@ const defaultEnabledCapabilities = new Set<CapabilityKey>([
 const capabilityLabelLookup = new Map<CapabilityKey, string>(
   capabilityCatalog.map((item) => [item.key, item.label])
 );
+
+function getCapabilityIcon(_: CapabilityKey) {
+  return <BuildOutlinedIcon fontSize="small" />;
+}
 
 const defaultWorkflow = {
   workflowKey: 'PAYMENT_INGRESS',
@@ -247,7 +244,6 @@ export function CreateSnapshotWizard({
   const [repoTargets, setRepoTargets] = useState<RepoTarget[]>(repoTargetTemplates);
   const [paramsDrawerContext, setParamsDrawerContext] = useState<ParamsDrawerContext>(null);
   const [ruleTab, setRuleTab] = useState<RuleType>('validations');
-  const [capabilitySearch, setCapabilitySearch] = useState('');
 
   const repoDefaultsQuery = useQuery({
     queryKey: ['repo-defaults-v2'],
@@ -318,25 +314,6 @@ export function CreateSnapshotWizard({
     setSnapshot(updater);
   };
 
-  const setAllCapabilities = (enabled: boolean) => {
-    updateSnapshot((prev) => ({
-      ...prev,
-      capabilities: prev.capabilities.map((capability) => ({
-        ...capability,
-        enabled
-      }))
-    }));
-  };
-
-  const toggleCapability = (key: CapabilityKey, enabled: boolean) => {
-    updateSnapshot((prev) => ({
-      ...prev,
-      capabilities: prev.capabilities.map((capability) =>
-        capability.capabilityKey === key ? { ...capability, enabled } : capability
-      )
-    }));
-  };
-
   const handleJsonChange = (next: string) => {
     setJsonValue(next);
     try {
@@ -361,18 +338,6 @@ export function CreateSnapshotWizard({
     () => new Map(snapshot.capabilities.map((capability) => [capability.capabilityKey, capability])),
     [snapshot.capabilities]
   );
-
-  const filteredCapabilities = useMemo(() => {
-    const normalizedQuery = capabilitySearch.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return capabilityCatalog;
-    }
-    return capabilityCatalog.filter((capability) => {
-      const haystack = `${capability.label} ${capability.description}`.toLowerCase();
-      return haystack.includes(normalizedQuery);
-    });
-  }, [capabilitySearch]);
-  const searchLabel = capabilitySearch.trim() || 'your query';
 
   const enabledCapabilities = snapshot.capabilities.filter((capability) => capability.enabled);
   const hasCapabilitiesEnabled = enabledCapabilities.length > 0;
@@ -585,106 +550,125 @@ export function CreateSnapshotWizard({
             ) : null}
             <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2}>
-                <Stack
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={2}
-                  alignItems={{ xs: 'stretch', sm: 'center' }}
-                  justifyContent="space-between"
-                >
-                  <TextField
-                    label="Search capabilities"
-                    placeholder="Search by name or description"
-                    value={capabilitySearch}
-                    onChange={(event) => setCapabilitySearch(event.target.value)}
-                    size="small"
-                    sx={{ flex: 1, minWidth: 240 }}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchOutlinedIcon fontSize="small" />
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                  <Stack direction="row" spacing={1} justifyContent="flex-end">
-                    <Button size="small" variant="outlined" onClick={() => setAllCapabilities(true)}>
-                      Enable all
-                    </Button>
-                    <Button size="small" variant="outlined" color="inherit" onClick={() => setAllCapabilities(false)}>
-                      Disable all
-                    </Button>
-                  </Stack>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle1">Capability Catalog</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Toggle each capability to match the onboarding scope for this snapshot.
+                  </Typography>
                 </Stack>
-                <Typography variant="caption" color="text.secondary">
-                  Showing {filteredCapabilities.length} of {capabilityCatalog.length} capabilities.
-                </Typography>
-                <TableContainer
-                  component={Paper}
-                  variant="outlined"
-                  sx={{
-                    borderColor: 'divider',
-                    '& .MuiTableCell-root': {
-                      borderColor: 'divider',
-                      py: 1.25
-                    },
-                    '& .MuiTableRow-root:hover': {
-                      backgroundColor: 'action.hover'
-                    },
-                    '& .MuiTableCell-head': {
-                      fontSize: 12,
-                      letterSpacing: 0.6,
-                      textTransform: 'uppercase',
-                      color: 'text.secondary'
-                    }
-                  }}
-                >
-                  <Table size="small" aria-label="Capability selection table">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell padding="checkbox">Enabled</TableCell>
-                        <TableCell>Capability Name</TableCell>
-                        <TableCell>Description</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {filteredCapabilities.length ? (
-                        filteredCapabilities.map((item) => {
-                          const capability = capabilityStateByKey.get(item.key);
-                          const enabled = capability?.enabled ?? false;
-                          return (
-                            <TableRow key={item.key} hover>
-                              <TableCell padding="checkbox">
-                                <Checkbox
-                                  checked={enabled}
-                                  onChange={(event) => toggleCapability(item.key, event.target.checked)}
-                                  inputProps={{ 'aria-label': `Enable ${item.label}` }}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                                  {item.label}
-                                </Typography>
-                              </TableCell>
-                              <TableCell>
+                <Grid container spacing={2}>
+                  {capabilityCatalog.map((item) => {
+                    const capability = capabilityStateByKey.get(item.key);
+                    const enabled = capability?.enabled ?? false;
+                    const icon = getCapabilityIcon(item.key);
+                    return (
+                      <Grid key={item.key} size={{ xs: 12, md: 6 }}>
+                        <Paper
+                          variant="outlined"
+                          sx={(theme) => ({
+                            p: 2,
+                            height: '100%',
+                            borderWidth: enabled ? 2 : 1,
+                            borderColor: enabled ? theme.palette.primary.main : theme.palette.divider,
+                            backgroundColor: enabled
+                              ? alpha(theme.palette.primary.main, 0.06)
+                              : theme.palette.background.paper,
+                            transition: theme.transitions.create(
+                              ['transform', 'box-shadow', 'border-color', 'background-color'],
+                              { duration: theme.transitions.duration.shorter }
+                            ),
+                            '&:hover': {
+                              transform: 'translateY(-2px)',
+                              boxShadow: theme.shadows[3],
+                              borderColor: theme.palette.primary.main
+                            }
+                          })}
+                        >
+                          <Stack spacing={2}>
+                            <Stack direction="row" spacing={1.25} alignItems="flex-start">
+                              <Stack
+                                alignItems="center"
+                                justifyContent="center"
+                                sx={(theme) => ({
+                                  width: 34,
+                                  height: 34,
+                                  borderRadius: 1,
+                                  color: enabled ? theme.palette.primary.main : theme.palette.text.secondary,
+                                  backgroundColor: enabled
+                                    ? alpha(theme.palette.primary.main, 0.14)
+                                    : alpha(theme.palette.text.secondary, 0.08),
+                                  flexShrink: 0
+                                })}
+                              >
+                                {icon}
+                              </Stack>
+                              <Stack spacing={0.5}>
+                                <Typography variant="subtitle2">{item.label}</Typography>
                                 <Typography variant="body2" color="text.secondary">
                                   {item.description}
                                 </Typography>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={3}>
-                            <Typography variant="body2" color="text.secondary">
-                              No capabilities match "{searchLabel}". Try a different search.
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                              </Stack>
+                            </Stack>
+                            <Stack
+                              direction={{ xs: 'column', sm: 'row' }}
+                              alignItems={{ xs: 'flex-start', sm: 'center' }}
+                              justifyContent="space-between"
+                              spacing={1}
+                            >
+                              <FormControlLabel
+                                sx={{
+                                  m: 0,
+                                  '& .MuiFormControlLabel-label': {
+                                    textAlign: 'left',
+                                    fontSize: 12,
+                                    color: 'text.secondary'
+                                  }
+                                }}
+                                control={
+                                  <Switch
+                                    checked={enabled}
+                                    onChange={(_, checked) =>
+                                      updateSnapshot((prev) => ({
+                                        ...prev,
+                                        capabilities: prev.capabilities.map((cap) =>
+                                          cap.capabilityKey === item.key ? { ...cap, enabled: checked } : cap
+                                        )
+                                      }))
+                                    }
+                                    aria-label={`Enable ${item.label}`}
+                                  />
+                                }
+                                label={enabled ? 'Enabled' : 'Disabled'}
+                              />
+                              <Button
+                                size="small"
+                                variant={enabled ? 'contained' : 'outlined'}
+                                startIcon={<BuildOutlinedIcon />}
+                                disabled={!enabled}
+                                onClick={() =>
+                                  openParamsDrawer(
+                                    `${item.label} Params`,
+                                    capability?.params,
+                                    (params) =>
+                                      updateSnapshot((prev) => ({
+                                        ...prev,
+                                        capabilities: prev.capabilities.map((cap) =>
+                                          cap.capabilityKey === item.key ? { ...cap, params } : cap
+                                        )
+                                      })),
+                                    item.description
+                                  )
+                                }
+                              >
+                                Configure
+                              </Button>
+                            </Stack>
+                          </Stack>
+                        </Paper>
+                      </Grid>
+                    );
+                  })}
+                </Grid>
               </Stack>
             </Paper>
           </Stack>
