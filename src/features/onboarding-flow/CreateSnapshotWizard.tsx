@@ -1,4 +1,5 @@
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SaveIcon from '@mui/icons-material/Save';
 import {
   Alert,
@@ -8,6 +9,7 @@ import {
   Divider,
   FormControlLabel,
   Grid,
+  Link,
   MenuItem,
   Paper,
   Stack,
@@ -607,6 +609,18 @@ export function CreateSnapshotWizard({
                                 <Typography variant="body2" color="text.secondary">
                                   {item.description}
                                 </Typography>
+                                <Link
+                                  href={item.epicUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  underline="hover"
+                                  color="primary"
+                                  variant="caption"
+                                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                                >
+                                  About
+                                  <OpenInNewIcon fontSize="inherit" />
+                                </Link>
                               </Stack>
                             </Stack>
                             <Stack
