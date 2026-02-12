@@ -1,8 +1,6 @@
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import SearchIcon from '@mui/icons-material/Search';
 import SaveIcon from '@mui/icons-material/Save';
 import {
   Alert,
@@ -15,7 +13,6 @@ import {
   FormControlLabel,
   Grid,
   IconButton,
-  InputAdornment,
   Link,
   List,
   ListItemButton,
@@ -29,12 +26,6 @@ import {
   Switch,
   Tab,
   Tabs,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography
 } from '@mui/material';
@@ -43,17 +34,19 @@ import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { JsonMonacoPanel } from '../../components/JsonMonacoPanel';
+import { CatalogSelector, type CatalogColumn } from '../../components/CatalogSelector';
 import { ParamsEditorDrawer } from '../../components/ParamsEditorDrawer';
 import { SectionCard } from '../../components/SectionCard';
 import { WorkflowDefinitionFields, WorkflowTabPanels, type WorkflowTabKey } from '../../components/WorkflowEditor';
 import { createSnapshot, createSnapshotVersion } from '../../api/client';
 import type { SnapshotDetailDto } from '../../api/types';
 import { useGlobalError } from '../../app/GlobalErrorContext';
+import { enrichmentCatalog, type EnrichmentCatalogItem } from '../../catalog/enrichmentCatalog';
+import { validationCatalog, type ValidationCatalogItem } from '../../catalog/validationCatalog';
 import {
   capabilityKeys,
   type CapabilityKey,
   type RulesConfig,
-  type SelectedCapability,
   type SnapshotModel,
   type WorkflowSpec,
   type StateSpec,
@@ -64,15 +57,10 @@ import {
   migrateLegacyTransitions,
   validateCountryCodeUppercase
 } from '../../models/snapshot';
+import { loadOnboardingDraft, saveOnboardingDraft } from '../../lib/storage/onboardingDraftStorage';
 import { capabilityCatalog } from './capabilityCatalog';
-import paymentInitiationCapabilityMetadata from './mock/paymentInitiationCapabilityMetadata.json';
-import { CapabilityConfigDrawer } from './rules/CapabilityConfigDrawer';
-import type { CapabilityDto, CapabilityMetadataDto } from './rules/types';
-import { buildDefaultParams } from './rules/utils';
-import { clearRulesDraft, loadRulesDraft, saveRulesDraft, type RulesDraft } from '../../lib/storage/rulesDraftStorage';
-import { useRulesDraftAutosave } from '../../hooks/useRulesDraftAutosave';
 
-type RuleType = 'validations' | 'enrichments';
+type CatalogTab = 'validations' | 'enrichments';
 
 type ParamsDrawerContext = {
   title: string;
@@ -112,6 +100,46 @@ const capabilityLabelLookup = new Map<CapabilityKey, string>(
 
 function getCapabilityIcon(_: CapabilityKey) {
   return <BuildOutlinedIcon fontSize="small" />;
+}
+
+const validationCatalogIds = new Set(validationCatalog.map((item) => item.id));
+const enrichmentCatalogIds = new Set(enrichmentCatalog.map((item) => item.id));
+const validationLabelLookup = new Map(validationCatalog.map((item) => [item.id, item.className]));
+const enrichmentLabelLookup = new Map(enrichmentCatalog.map((item) => [item.id, item.className]));
+
+function normalizeSelectedIds(value: unknown, allowedIds: Set<string>): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const result: string[] = [];
+  value.forEach((entry) => {
+    if (typeof entry !== 'string') {
+      return;
+    }
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed) || !allowedIds.has(trimmed)) {
+      return;
+    }
+    seen.add(trimmed);
+    result.push(trimmed);
+  });
+  return result;
+}
+
+function orderSelection(ids: string[], catalog: Array<{ id: string }>): string[] {
+  const selected = new Set(ids);
+  return catalog.filter((item) => selected.has(item.id)).map((item) => item.id);
+}
+
+function toggleSelection(ids: string[], id: string, catalog: Array<{ id: string }>): string[] {
+  const next = new Set(ids);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  return orderSelection(Array.from(next), catalog);
 }
 
 const defaultWorkflow: WorkflowSpec = {
@@ -220,88 +248,6 @@ function normalizeWorkflowSpec(raw: Partial<WorkflowSpec> & { transitions?: unkn
   };
 }
 
-const capabilityMetadata = paymentInitiationCapabilityMetadata as CapabilityMetadataDto;
-const rulesMetadata = {
-  schemaVersion: capabilityMetadata.schemaVersion,
-  producer: capabilityMetadata.producer
-};
-
-function normalizeCapabilityList(metadata: CapabilityMetadataDto): CapabilityDto[] {
-  return Array.isArray(metadata.capabilities) ? metadata.capabilities : [];
-}
-
-function sortCapabilities(capabilities: CapabilityDto[]): CapabilityDto[] {
-  return [...capabilities].sort((left, right) => {
-    const leftOrder = left.orderHint ?? Number.MAX_SAFE_INTEGER;
-    const rightOrder = right.orderHint ?? Number.MAX_SAFE_INTEGER;
-    if (leftOrder !== rightOrder) {
-      return leftOrder - rightOrder;
-    }
-    return left.name.localeCompare(right.name);
-  });
-}
-
-function buildSelectedCapabilities(capabilities: CapabilityDto[], kind: CapabilityDto['kind']): SelectedCapability[] {
-  return sortCapabilities(capabilities.filter((capability) => capability.kind === kind)).map((capability) => ({
-    id: capability.id,
-    enabled: false,
-    params: buildDefaultParams(capability.params ?? [])
-  }));
-}
-
-function buildRulesConfigFromMetadata(metadata: CapabilityMetadataDto): RulesConfig {
-  const capabilities = normalizeCapabilityList(metadata);
-  return {
-    metadata: {
-      schemaVersion: metadata.schemaVersion,
-      producer: metadata.producer
-    },
-    validations: buildSelectedCapabilities(capabilities, 'VALIDATION'),
-    enrichments: buildSelectedCapabilities(capabilities, 'ENRICHMENT')
-  };
-}
-
-function mergeSelectedCapabilities(
-  defaults: SelectedCapability[],
-  draft?: SelectedCapability[],
-  existing?: SelectedCapability[]
-): SelectedCapability[] {
-  const byId = new Map<string, SelectedCapability>();
-  defaults.forEach((item) => {
-    byId.set(item.id, { ...item, params: { ...item.params } });
-  });
-
-  const apply = (items?: SelectedCapability[]) => {
-    items?.forEach((item) => {
-      const base = byId.get(item.id) ?? { id: item.id, enabled: false, params: {} };
-      byId.set(item.id, {
-        ...base,
-        ...item,
-        params: { ...base.params, ...(item.params ?? {}) }
-      });
-    });
-  };
-
-  apply(draft);
-  apply(existing);
-
-  const ordered = defaults.map((item) => byId.get(item.id) ?? item);
-  const defaultIds = new Set(defaults.map((item) => item.id));
-  byId.forEach((value, id) => {
-    if (!defaultIds.has(id)) {
-      ordered.push(value);
-    }
-  });
-  return ordered;
-}
-
-function mergeRulesConfig(defaultConfig: RulesConfig, draft: RulesDraft | null, existing?: RulesConfig): RulesConfig {
-  return {
-    metadata: existing?.metadata ?? defaultConfig.metadata,
-    validations: mergeSelectedCapabilities(defaultConfig.validations, draft?.validations, existing?.validations),
-    enrichments: mergeSelectedCapabilities(defaultConfig.enrichments, draft?.enrichments, existing?.enrichments)
-  };
-}
 
 const defaultSnapshot: SnapshotModel = {
   countryCode: '',
@@ -312,6 +258,8 @@ const defaultSnapshot: SnapshotModel = {
   })),
   validations: [],
   enrichments: [],
+  selectedValidations: [],
+  selectedEnrichments: [],
   actions: [],
   workflow: defaultWorkflow,
   integrationConfig: {},
@@ -347,6 +295,14 @@ function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
       params: existing?.params
     };
   });
+  const normalizedSelectedValidations = orderSelection(
+    normalizeSelectedIds(raw.selectedValidations, validationCatalogIds),
+    validationCatalog
+  );
+  const normalizedSelectedEnrichments = orderSelection(
+    normalizeSelectedIds(raw.selectedEnrichments, enrichmentCatalogIds),
+    enrichmentCatalog
+  );
 
   return {
     countryCode: raw.countryCode ?? '',
@@ -354,6 +310,8 @@ function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
     capabilities: normalizedCapabilities,
     validations: Array.isArray(raw.validations) ? raw.validations : [],
     enrichments: Array.isArray(raw.enrichments) ? raw.enrichments : [],
+    selectedValidations: normalizedSelectedValidations,
+    selectedEnrichments: normalizedSelectedEnrichments,
     rulesConfig: normalizedRulesConfig,
     actions: Array.isArray(raw.actions) ? raw.actions : [],
     workflow: mergedWorkflow,
@@ -361,8 +319,6 @@ function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
     deploymentOverrides: raw.deploymentOverrides ?? {}
   };
 }
-
-const workflowDraftStorageKey = 'onboarding:draft:v1';
 
 function normalizeWorkflowDraft(raw: unknown): WorkflowSpec | null {
   if (!raw || typeof raw !== 'object') {
@@ -390,7 +346,6 @@ export function CreateSnapshotWizard({
   const [stepAnimationDirection, setStepAnimationDirection] = useState<'forward' | 'backward'>('forward');
   const [advancedJson, setAdvancedJson] = useState(false);
   const jsonUpdateSource = useRef<'form' | 'editor' | null>(null);
-  const rulesInitRef = useRef<string | null>(null);
   const isVersionMode = mode === 'version';
 
   const resolvedInitialSnapshot = useMemo(
@@ -402,16 +357,10 @@ export function CreateSnapshotWizard({
   const [jsonValue, setJsonValue] = useState(JSON.stringify(resolvedInitialSnapshot, null, 2));
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [paramsDrawerContext, setParamsDrawerContext] = useState<ParamsDrawerContext>(null);
-  const [ruleTab, setRuleTab] = useState<RuleType>('validations');
-  const [ruleSearch, setRuleSearch] = useState('');
-  const [showEnabledOnly, setShowEnabledOnly] = useState(false);
-  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [catalogTab, setCatalogTab] = useState<CatalogTab>('validations');
+  const [draftHydrated, setDraftHydrated] = useState(false);
   const [workflowTab, setWorkflowTab] = useState<WorkflowTabKey>('transitions');
   const [workflowFocus, setWorkflowFocus] = useState<{ issue: WorkflowLintIssue; nonce: number } | null>(null);
-  const [rulesDrawerState, setRulesDrawerState] = useState<{
-    capability: CapabilityDto;
-    kind: RuleType;
-  } | null>(null);
   const [workflowSidePanel, setWorkflowSidePanel] = useState<'lint' | 'help' | null>(null);
 
   const createSnapshotMutation = useMutation({
@@ -462,50 +411,37 @@ export function CreateSnapshotWizard({
   };
 
   useEffect(() => {
-    const raw = localStorage.getItem(workflowDraftStorageKey);
-    if (!raw) {
-      return;
+    const draft = loadOnboardingDraft();
+    if (draft) {
+      const workflowDraft = normalizeWorkflowDraft(draft.workflow);
+      const selectedValidations = orderSelection(
+        normalizeSelectedIds(draft.selectedValidations, validationCatalogIds),
+        validationCatalog
+      );
+      const selectedEnrichments = orderSelection(
+        normalizeSelectedIds(draft.selectedEnrichments, enrichmentCatalogIds),
+        enrichmentCatalog
+      );
+      updateSnapshot((prev) => ({
+        ...prev,
+        workflow: workflowDraft ?? prev.workflow,
+        selectedValidations,
+        selectedEnrichments
+      }));
     }
-    try {
-      const parsed = JSON.parse(raw);
-      const draft = normalizeWorkflowDraft(parsed);
-      if (!draft) {
-        return;
-      }
-      updateSnapshot((prev) => ({ ...prev, workflow: draft }));
-    } catch {
-      // Ignore invalid drafts.
-    }
+    setDraftHydrated(true);
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(workflowDraftStorageKey, JSON.stringify(snapshot.workflow));
-    } catch {
-      // Ignore storage errors (e.g., quota exceeded).
-    }
-  }, [snapshot.workflow]);
-
-  useEffect(() => {
-    const countryCode = snapshot.countryCode.trim();
-    if (!countryCode) {
+    if (!draftHydrated) {
       return;
     }
-    if (rulesInitRef.current === countryCode) {
-      return;
-    }
-
-    const defaults = buildRulesConfigFromMetadata(capabilityMetadata);
-    const draft = loadRulesDraft(countryCode);
-
-    updateSnapshot((prev) => ({
-      ...prev,
-      rulesConfig: mergeRulesConfig(defaults, draft, prev.rulesConfig)
-    }));
-
-    setDraftSavedAt(draft?.updatedAt ?? null);
-    rulesInitRef.current = countryCode;
-  }, [snapshot.countryCode]);
+    saveOnboardingDraft({
+      workflow: snapshot.workflow,
+      selectedValidations: snapshot.selectedValidations,
+      selectedEnrichments: snapshot.selectedEnrichments
+    });
+  }, [draftHydrated, snapshot.workflow, snapshot.selectedValidations, snapshot.selectedEnrichments]);
 
   const handleJsonChange = (next: string) => {
     setJsonValue(next);
@@ -522,25 +458,15 @@ export function CreateSnapshotWizard({
   const countryErrors = validateCountryCodeUppercase(snapshot.countryCode);
   const workflowLint = useMemo(() => lintWorkflowSpec(snapshot.workflow), [snapshot.workflow]);
 
-  const rulesConfig = snapshot.rulesConfig;
-  const validationSelections = rulesConfig?.validations ?? [];
-  const enrichmentSelections = rulesConfig?.enrichments ?? [];
-  const enabledValidations = validationSelections.filter((rule) => rule.enabled);
-  const enabledEnrichments = enrichmentSelections.filter((rule) => rule.enabled);
-  const allCapabilities = useMemo(() => normalizeCapabilityList(capabilityMetadata), []);
-  const defaultParamsById = useMemo(
-    () =>
-      new Map(
-        allCapabilities.map((capability) => [
-          capability.id,
-          buildDefaultParams(capability.params ?? [])
-        ])
-      ),
-    [allCapabilities]
+  const selectedValidations = snapshot.selectedValidations;
+  const selectedEnrichments = snapshot.selectedEnrichments;
+  const selectedValidationLabels = useMemo(
+    () => selectedValidations.map((id) => validationLabelLookup.get(id) ?? id),
+    [selectedValidations]
   );
-  const formattedDraftSavedAt = useMemo(
-    () => (draftSavedAt ? new Date(draftSavedAt).toLocaleString() : null),
-    [draftSavedAt]
+  const selectedEnrichmentLabels = useMemo(
+    () => selectedEnrichments.map((id) => enrichmentLabelLookup.get(id) ?? id),
+    [selectedEnrichments]
   );
 
   const capabilityStateByKey = useMemo(
@@ -634,7 +560,7 @@ export function CreateSnapshotWizard({
   const stepValidations = [
     countryErrors.length === 0,
     hasCapabilitiesEnabled,
-    Boolean(rulesConfig),
+    true,
     workflowKeyValid &&
       statesValid &&
       workflowLint.errors.length === 0 &&
@@ -645,103 +571,90 @@ export function CreateSnapshotWizard({
 
   const canProceed = stepValidations[activeStep] && !(advancedJson && jsonError);
 
-  const rulesDraftCountry = snapshot.countryCode.trim();
-  const buildRulesDraft = useCallback((): RulesDraft | null => {
-    if (!rulesDraftCountry || !rulesConfig) {
-      return null;
-    }
-    if (rulesInitRef.current !== rulesDraftCountry) {
-      return null;
-    }
-    const metadata = rulesConfig.metadata ?? rulesMetadata;
-    return {
-      schemaVersion: (metadata.schemaVersion ?? '1.0') as RulesDraft['schemaVersion'],
-      producer: {
-        system: 'payment-initiation',
-        artifact: metadata.producer?.artifact ?? 'payment-initiation-core',
-        version: metadata.producer?.version ?? '0.0.0-local'
+
+  const validationColumns = useMemo<CatalogColumn<ValidationCatalogItem>[]>(
+    () => [
+      {
+        id: 'className',
+        label: 'Class Name',
+        render: (item) => item.className
       },
-      countryCode: rulesDraftCountry,
-      updatedAt: new Date().toISOString(),
-      validations: rulesConfig.validations,
-      enrichments: rulesConfig.enrichments
-    };
-  }, [rulesDraftCountry, rulesConfig]);
+      {
+        id: 'keyStatus',
+        label: 'Key/Status',
+        render: (item) => item.keyStatus
+      },
+      {
+        id: 'description',
+        label: 'Description',
+        render: (item) => (
+          <Typography variant="body2" color="text.secondary">
+            {item.description}
+          </Typography>
+        )
+      }
+    ],
+    []
+  );
+  const enrichmentColumns = useMemo<CatalogColumn<EnrichmentCatalogItem>[]>(
+    () => [
+      {
+        id: 'className',
+        label: 'Class Name',
+        render: (item) => item.className
+      },
+      {
+        id: 'key',
+        label: 'Key',
+        render: (item) => item.key
+      },
+      {
+        id: 'description',
+        label: 'Description',
+        render: (item) => (
+          <Typography variant="body2" color="text.secondary">
+            {item.description}
+          </Typography>
+        )
+      }
+    ],
+    []
+  );
+  const validationSearchText = useCallback(
+    (item: ValidationCatalogItem) => `${item.className} ${item.keyStatus} ${item.description}`,
+    []
+  );
+  const enrichmentSearchText = useCallback(
+    (item: EnrichmentCatalogItem) => `${item.className} ${item.key} ${item.description}`,
+    []
+  );
 
-  useRulesDraftAutosave({
-    enabled: Boolean(rulesConfig) && Boolean(rulesDraftCountry),
-    countryCode: rulesDraftCountry,
-    buildDraft: buildRulesDraft,
-    onSaved: (draft) => setDraftSavedAt(draft.updatedAt)
-  });
-
-  const handleSaveDraft = () => {
-    const draft = buildRulesDraft();
-    if (!draft) {
-      return;
-    }
-    saveRulesDraft(draft);
-    setDraftSavedAt(draft.updatedAt);
-  };
-
-  const handleResetDraft = () => {
-    if (!rulesDraftCountry) {
-      return;
-    }
-    clearRulesDraft(rulesDraftCountry);
-    const defaults = buildRulesConfigFromMetadata(capabilityMetadata);
+  const handleToggleValidation = (id: string) => {
     updateSnapshot((prev) => ({
       ...prev,
-      rulesConfig: defaults
+      selectedValidations: toggleSelection(prev.selectedValidations, id, validationCatalog)
     }));
-    setDraftSavedAt(null);
   };
 
-  const updateRulesConfig = (kind: RuleType, updater: (prev: SelectedCapability[]) => SelectedCapability[]) => {
-    updateSnapshot((prev) => {
-      const current = prev.rulesConfig ?? buildRulesConfigFromMetadata(capabilityMetadata);
-      return {
-        ...prev,
-        rulesConfig: {
-          ...current,
-          metadata: current.metadata ?? rulesMetadata,
-          [kind]: updater(current[kind])
-        }
-      };
-    });
+  const handleToggleEnrichment = (id: string) => {
+    updateSnapshot((prev) => ({
+      ...prev,
+      selectedEnrichments: toggleSelection(prev.selectedEnrichments, id, enrichmentCatalog)
+    }));
   };
 
-  const handleToggleAll = (kind: RuleType, enabled: boolean) => {
-    updateRulesConfig(kind, (prev) => prev.map((rule) => ({ ...rule, enabled })));
+  const handleClearValidations = () => {
+    updateSnapshot((prev) => ({
+      ...prev,
+      selectedValidations: []
+    }));
   };
 
-  const handleToggleRule = (kind: RuleType, capability: CapabilityDto, enabled: boolean) => {
-    updateRulesConfig(kind, (prev) => {
-      const existing = prev.find((rule) => rule.id === capability.id);
-      if (!existing) {
-        const defaults = defaultParamsById.get(capability.id) ?? {};
-        return [...prev, { id: capability.id, enabled, params: defaults }];
-      }
-      return prev.map((rule) => {
-        if (rule.id !== capability.id) {
-          return rule;
-        }
-        if (!enabled) {
-          return { ...rule, enabled };
-        }
-        const defaults = defaultParamsById.get(rule.id) ?? {};
-        const hasParams = Object.keys(rule.params ?? {}).length > 0;
-        return {
-          ...rule,
-          enabled,
-          params: hasParams ? rule.params : defaults
-        };
-      });
-    });
-  };
-
-  const openCapabilityDrawer = (kind: RuleType, capability: CapabilityDto) => {
-    setRulesDrawerState({ kind, capability });
+  const handleClearEnrichments = () => {
+    updateSnapshot((prev) => ({
+      ...prev,
+      selectedEnrichments: []
+    }));
   };
 
   const goNext = () => {
@@ -1045,192 +958,51 @@ export function CreateSnapshotWizard({
           </Stack>
         );
       case 2:
-        {
-          const activeKind = ruleTab === 'validations' ? 'VALIDATION' : 'ENRICHMENT';
-          const selections = ruleTab === 'validations' ? validationSelections : enrichmentSelections;
-          const selectionMap = new Map(selections.map((rule) => [rule.id, rule]));
-          const searchable = ruleSearch.trim().toLowerCase();
-
-          const filteredCapabilities = sortCapabilities(
-            allCapabilities.filter((capability) => capability.kind === activeKind)
-          ).filter((capability) => {
-            const selected = selectionMap.get(capability.id);
-            if (showEnabledOnly && !selected?.enabled) {
-              return false;
-            }
-            if (!searchable) {
-              return true;
-            }
-            const haystack = `${capability.id} ${capability.name} ${capability.description}`.toLowerCase();
-            return haystack.includes(searchable);
-          });
-
-          return (
-            <Stack spacing={3}>
-              <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
-                <Stack spacing={2}>
-                  <Stack spacing={0.5}>
-                    <Typography variant="subtitle1">Rule Scope</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Choose which rule set to edit and keep each set focused on one purpose.
-                    </Typography>
-                  </Stack>
-                  <Tabs
-                    value={ruleTab}
-                    onChange={(_, value) => setRuleTab(value as RuleType)}
-                    aria-label="Rule type tabs"
-                  >
-                    <Tab value="validations" label="Validations" />
-                    <Tab value="enrichments" label="Enrichments" />
-                  </Tabs>
+        return (
+          <Stack spacing={3}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+              <Stack spacing={2}>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle1">Validation & Enrichment</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Select the validation and enrichment rules that should run before workflow execution.
+                  </Typography>
                 </Stack>
-              </Paper>
-              <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
-                <Stack spacing={2.5}>
-                  <Stack spacing={0.5}>
-                    <Typography variant="subtitle1">
-                      {ruleTab === 'validations' ? 'Validation Rules' : 'Enrichment Rules'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Why this matters: CPX validation and enrichment rules must be deterministic to preserve flow
-                      integrity.
-                    </Typography>
-                  </Stack>
-                  <Stack spacing={1.5}>
-                    <Stack
-                      direction={{ xs: 'column', md: 'row' }}
-                      spacing={1.5}
-                      alignItems={{ xs: 'stretch', md: 'center' }}
-                    >
-                      <TextField
-                        size="small"
-                        value={ruleSearch}
-                        onChange={(event) => setRuleSearch(event.target.value)}
-                        placeholder="Search rules..."
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <SearchIcon fontSize="small" />
-                            </InputAdornment>
-                          )
-                        }}
-                        sx={{ flex: 1, minWidth: { xs: '100%', md: 280 } }}
-                      />
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        <Button size="small" variant="outlined" onClick={() => handleToggleAll(ruleTab, true)}>
-                          Enable all
-                        </Button>
-                        <Button size="small" variant="text" onClick={() => handleToggleAll(ruleTab, false)}>
-                          Disable all
-                        </Button>
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={showEnabledOnly}
-                              onChange={(_, checked) => setShowEnabledOnly(checked)}
-                            />
-                          }
-                          label="Show enabled only"
-                        />
-                      </Stack>
-                    </Stack>
-                    <Stack
-                      direction={{ xs: 'column', md: 'row' }}
-                      spacing={1.5}
-                      alignItems={{ xs: 'stretch', md: 'center' }}
-                      justifyContent="space-between"
-                    >
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<SaveIcon />}
-                          onClick={handleSaveDraft}
-                          disabled={!rulesDraftCountry}
-                        >
-                          Save Draft
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="text"
-                          startIcon={<RestartAltIcon />}
-                          onClick={handleResetDraft}
-                          disabled={!rulesDraftCountry}
-                        >
-                          Reset
-                        </Button>
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        Draft saved locally{formattedDraftSavedAt ? ` · ${formattedDraftSavedAt}` : ''}
-                      </Typography>
-                    </Stack>
-                  </Stack>
-                  <TableContainer component={Paper} variant="outlined">
-                    <Table size="small" stickyHeader aria-label="Capability rules table">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Key</TableCell>
-                          <TableCell>Name</TableCell>
-                          <TableCell>Description</TableCell>
-                          <TableCell align="center">Enabled</TableCell>
-                          <TableCell align="right">Params</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {filteredCapabilities.map((capability) => {
-                          const selection = selectionMap.get(capability.id);
-                          const enabled = selection?.enabled ?? false;
-                          const paramCount = capability.params?.length ?? 0;
-
-                          return (
-                            <TableRow key={capability.id} hover>
-                              <TableCell>{capability.id}</TableCell>
-                              <TableCell>{capability.name}</TableCell>
-                              <TableCell>
-                                <Typography variant="body2" color="text.secondary">
-                                  {capability.description}
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="center">
-                                <Switch
-                                  checked={enabled}
-                                  onChange={(_, checked) => handleToggleRule(ruleTab, capability, checked)}
-                                  inputProps={{
-                                    'aria-label': `Enable ${capability.id}`
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell align="right">
-                                <Button
-                                  size="small"
-                                  variant="text"
-                                  startIcon={<BuildOutlinedIcon fontSize="small" />}
-                                  onClick={() => openCapabilityDrawer(ruleTab, capability)}
-                                  disabled={paramCount === 0}
-                                >
-                                  Configure {paramCount} param{paramCount === 1 ? '' : 's'}
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                        {filteredCapabilities.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={5}>
-                              <Typography variant="body2" color="text.secondary">
-                                No rules match the current filters.
-                              </Typography>
-                            </TableCell>
-                          </TableRow>
-                        ) : null}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Stack>
-              </Paper>
-            </Stack>
-          );
-        }
+                <Tabs
+                  value={catalogTab}
+                  onChange={(_, value) => setCatalogTab(value as CatalogTab)}
+                  aria-label="Validation and enrichment tabs"
+                >
+                  <Tab value="validations" label="Validations" />
+                  <Tab value="enrichments" label="Enrichments" />
+                </Tabs>
+              </Stack>
+            </Paper>
+            {catalogTab === 'validations' ? (
+              <CatalogSelector
+                items={validationCatalog}
+                selectedIds={selectedValidations}
+                onToggle={handleToggleValidation}
+                onClear={handleClearValidations}
+                searchPlaceholder="Search validations..."
+                columns={validationColumns}
+                getSearchText={validationSearchText}
+                tableAriaLabel="Validation catalog table"
+              />
+            ) : (
+              <CatalogSelector
+                items={enrichmentCatalog}
+                selectedIds={selectedEnrichments}
+                onToggle={handleToggleEnrichment}
+                onClear={handleClearEnrichments}
+                searchPlaceholder="Search enrichments..."
+                columns={enrichmentColumns}
+                getSearchText={enrichmentSearchText}
+                tableAriaLabel="Enrichment catalog table"
+              />
+            )}
+          </Stack>
+        );
       case 3:
         return (
           <Stack spacing={3}>
@@ -1445,7 +1217,7 @@ export function CreateSnapshotWizard({
                         Rule Count
                       </Typography>
                       <Typography variant="h5">
-                        {enabledValidations.length + enabledEnrichments.length}
+                        {selectedValidations.length + selectedEnrichments.length}
                       </Typography>
                     </Paper>
                   </Grid>
@@ -1484,35 +1256,35 @@ export function CreateSnapshotWizard({
             </Paper>
             <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2}>
-                <Typography variant="subtitle1">Enabled Rules</Typography>
+                <Typography variant="subtitle1">Selected Rules</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Validations and enrichments enabled for payment initiation.
+                  Validations and enrichments selected for payment initiation.
                 </Typography>
                 <Stack spacing={1}>
                   <Typography variant="caption" color="text.secondary">
-                    Validations ({enabledValidations.length})
+                    Validations ({selectedValidations.length})
                   </Typography>
-                  {enabledValidations.length ? (
+                  {selectedValidations.length ? (
                     <Typography variant="body2">
-                      {enabledValidations.map((rule) => rule.id).join(', ')}
+                      {selectedValidationLabels.join(', ')}
                     </Typography>
                   ) : (
                     <Typography variant="body2" color="text.secondary">
-                      No validations enabled.
+                      No validations selected.
                     </Typography>
                   )}
                 </Stack>
                 <Stack spacing={1}>
                   <Typography variant="caption" color="text.secondary">
-                    Enrichments ({enabledEnrichments.length})
+                    Enrichments ({selectedEnrichments.length})
                   </Typography>
-                  {enabledEnrichments.length ? (
+                  {selectedEnrichments.length ? (
                     <Typography variant="body2">
-                      {enabledEnrichments.map((rule) => rule.id).join(', ')}
+                      {selectedEnrichmentLabels.join(', ')}
                     </Typography>
                   ) : (
                     <Typography variant="body2" color="text.secondary">
-                      No enrichments enabled.
+                      No enrichments selected.
                     </Typography>
                   )}
                 </Stack>
@@ -1643,38 +1415,6 @@ export function CreateSnapshotWizard({
         params={paramsDrawerContext?.params}
         onSave={(params) => paramsDrawerContext?.onSave(params)}
         onClose={() => setParamsDrawerContext(null)}
-      />
-      <CapabilityConfigDrawer
-        open={Boolean(rulesDrawerState)}
-        capability={rulesDrawerState?.capability}
-        selected={
-          rulesDrawerState?.kind === 'validations'
-            ? validationSelections.find((rule) => rule.id === rulesDrawerState?.capability.id) ?? null
-            : enrichmentSelections.find((rule) => rule.id === rulesDrawerState?.capability.id) ?? null
-        }
-        onClose={() => setRulesDrawerState(null)}
-        onSave={(params) => {
-          if (!rulesDrawerState) {
-            return;
-          }
-          updateRulesConfig(rulesDrawerState.kind, (prev) => {
-            const exists = prev.some((rule) => rule.id === rulesDrawerState.capability.id);
-            const next = prev.map((rule) =>
-              rule.id === rulesDrawerState.capability.id ? { ...rule, params } : rule
-            );
-            if (exists) {
-              return next;
-            }
-            return [
-              ...next,
-              {
-                id: rulesDrawerState.capability.id,
-                enabled: true,
-                params
-              }
-            ];
-          });
-        }}
       />
     </Stack>
   );

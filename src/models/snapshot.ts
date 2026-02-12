@@ -107,6 +107,8 @@ export type SnapshotModel = {
   capabilities: SnapshotCapability[];
   validations: SnapshotRule[];
   enrichments: SnapshotRule[];
+  selectedValidations: string[];
+  selectedEnrichments: string[];
   rulesConfig?: RulesConfig;
   actions: SnapshotAction[];
   workflow: WorkflowSpec;
