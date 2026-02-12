@@ -71,6 +71,18 @@ function LabelledEdge({
   const hasActions = (data as LabelledEdgeData | undefined)?.hasActions ?? false;
   const labelBg = hasActions ? colors.actionLabelBg : colors.labelBg;
   const labelText = hasActions ? colors.actionLabelText : colors.labelText;
+  const labelLines = label ? label.split('\n') : [];
+  const lineCount = Math.max(1, labelLines.length);
+  const dx = targetX - sourceX;
+  const dy = targetY - sourceY;
+  const distance = Math.hypot(dx, dy) || 1;
+  const normalX = distance === 0 ? 0 : -dy / distance;
+  const normalY = distance === 0 ? -1 : dx / distance;
+  const labelSizeOffset = Math.max(0, lineCount - 1) * 10;
+  const shortEdgeBoost = Math.max(0, 160 - distance) * 0.18;
+  const baseOffset = (hasActions ? 48 : 36) + labelSizeOffset + shortEdgeBoost;
+  const adjustedLabelX = labelX + normalX * baseOffset + offsetX;
+  const adjustedLabelY = labelY + normalY * baseOffset + offsetY;
 
   const renderLabel = (labelTextValue: string) => {
     const lines = labelTextValue.split('\n');
@@ -97,7 +109,7 @@ function LabelledEdge({
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX + offsetX}px,${labelY + offsetY}px)`,
+              transform: `translate(-50%, -50%) translate(${adjustedLabelX}px,${adjustedLabelY}px)`,
               background: labelBg,
               color: labelText,
               border: `1px solid ${colors.nodeBorder}`,
@@ -110,7 +122,7 @@ function LabelledEdge({
               textAlign: 'left',
               maxWidth: 260,
               pointerEvents: 'none',
-              zIndex: 4,
+              zIndex: 2,
               boxShadow: '0 2px 6px rgba(0, 0, 0, 0.35)'
             }}
           >
@@ -174,6 +186,7 @@ function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
           lineHeight: 1.2,
           whiteSpace: 'normal',
           overflowWrap: 'anywhere',
+          zIndex: 3,
           ...(node.style ?? {})
         }
       })),
