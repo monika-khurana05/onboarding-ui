@@ -29,7 +29,7 @@ import { InlineHelpText } from '../components/InlineHelpText';
 import { PageContainer } from '../components/PageContainer';
 import { SkeletonState } from '../components/SkeletonState';
 import { useGlobalError } from '../app/GlobalErrorContext';
-import type { SnapshotModel } from '../models/snapshot';
+import { listAllTransitions, type SnapshotModel } from '../models/snapshot';
 import { CreateSnapshotWizard } from '../features/onboarding-flow/CreateSnapshotWizard';
 
 function extractSnapshotPayload(detail?: SnapshotDetailDto): SnapshotModel | null {
@@ -116,7 +116,8 @@ export function SnapshotDetailsPage() {
   const validations = snapshotPayload?.validations ?? [];
   const enrichments = snapshotPayload?.enrichments ?? [];
   const actions = snapshotPayload?.actions ?? [];
-  const workflow = snapshotPayload?.workflow ?? { workflowKey: 'N/A', states: [], transitions: [] };
+  const workflow = snapshotPayload?.workflow ?? { workflowKey: 'N/A', states: [] };
+  const workflowTransitionCount = listAllTransitions(workflow).length;
 
   const previewParams = new URLSearchParams();
   previewParams.set('snapshotId', snapshotId);
@@ -245,11 +246,11 @@ export function SnapshotDetailsPage() {
           <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
             <Chip label={`Workflow: ${workflow.workflowKey || 'N/A'}`} variant="outlined" />
             <Chip label={`States: ${workflow.states.length}`} variant="outlined" />
-            <Chip label={`Transitions: ${workflow.transitions.length}`} variant="outlined" />
+            <Chip label={`Transitions: ${workflowTransitionCount}`} variant="outlined" />
           </Stack>
           {workflow.states.length ? (
             <Typography variant="body2" color="text.secondary">
-              States: {workflow.states.join(', ')}
+              States: {workflow.states.map((state) => state.name).join(', ')}
             </Typography>
           ) : null}
         </Stack>

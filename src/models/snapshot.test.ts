@@ -41,14 +41,23 @@ describe('snapshot validation helpers', () => {
   it('validates workflow transitions reference valid states', () => {
     const workflow = {
       workflowKey: 'PAYMENT_INGRESS',
-      states: ['RECEIVED', 'VALIDATED'],
-      transitions: [
-        { from: 'RECEIVED', to: 'VALIDATED', onEvent: 'VALIDATE' },
-        { from: 'MISSING', to: 'VALIDATED', onEvent: 'INVALID' }
+      states: [
+        {
+          name: 'RECEIVED',
+          onEvent: {
+            VALIDATE: { target: 'VALIDATED', actions: [] }
+          }
+        },
+        {
+          name: 'MISSING',
+          onEvent: {
+            INVALID: { target: 'VALIDATED', actions: [] }
+          }
+        }
       ]
     };
     const errors = validateTransitionsReferToValidStates(workflow);
     expect(errors).toHaveLength(1);
-    expect(errors[0].path).toContain('from');
+    expect(errors[0].path).toContain('target');
   });
 });

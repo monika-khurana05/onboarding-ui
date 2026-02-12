@@ -7,6 +7,7 @@ import {
   Alert,
   Box,
   Button,
+  Badge,
   Chip,
   Divider,
   FormControlLabel,
@@ -38,7 +39,7 @@ import { useNavigate } from 'react-router-dom';
 import { JsonMonacoPanel } from '../../components/JsonMonacoPanel';
 import { ParamsEditorDrawer } from '../../components/ParamsEditorDrawer';
 import { SectionCard } from '../../components/SectionCard';
-import { WorkflowEditor } from '../../components/WorkflowEditor';
+import { WorkflowDefinitionFields, WorkflowTabPanels, type WorkflowTabKey } from '../../components/WorkflowEditor';
 import { createSnapshot, createSnapshotVersion } from '../../api/client';
 import type { SnapshotDetailDto } from '../../api/types';
 import { useGlobalError } from '../../app/GlobalErrorContext';
@@ -48,8 +49,14 @@ import {
   type RulesConfig,
   type SelectedCapability,
   type SnapshotModel,
-  validateCountryCodeUppercase,
-  validateTransitionsReferToValidStates
+  type WorkflowSpec,
+  type StateSpec,
+  type TransitionSpec,
+  type WorkflowLintIssue,
+  listAllTransitions,
+  lintWorkflowSpec,
+  migrateLegacyTransitions,
+  validateCountryCodeUppercase
 } from '../../models/snapshot';
 import { capabilityCatalog } from './capabilityCatalog';
 import paymentInitiationCapabilityMetadata from './mock/paymentInitiationCapabilityMetadata.json';
@@ -101,14 +108,111 @@ function getCapabilityIcon(_: CapabilityKey) {
   return <BuildOutlinedIcon fontSize="small" />;
 }
 
-const defaultWorkflow = {
+const defaultWorkflow: WorkflowSpec = {
   workflowKey: 'PAYMENT_INGRESS',
-  states: ['RECEIVED', 'VALIDATED', 'CLEARED'],
-  transitions: [
-    { from: 'RECEIVED', to: 'VALIDATED', onEvent: 'VALIDATE' },
-    { from: 'VALIDATED', to: 'CLEARED', onEvent: 'CLEAR' }
+  statesClass: 'com.citi.cpx.statemanager.fsm.State',
+  eventsClass: 'com.citi.cpx.statemanager.fsm.Event',
+  startState: 'RECEIVED',
+  states: [
+    {
+      name: 'RECEIVED',
+      onEvent: {
+        VALIDATE: { target: 'VALIDATED', actions: [] }
+      }
+    },
+    {
+      name: 'VALIDATED',
+      onEvent: {
+        CLEAR: { target: 'CLEARED', actions: [] }
+      }
+    },
+    {
+      name: 'CLEARED',
+      onEvent: {}
+    }
   ]
 };
+
+function normalizeTransitionSpec(value: unknown): TransitionSpec {
+  if (!value || typeof value !== 'object') {
+    return { target: '', actions: [] };
+  }
+  const candidate = value as { target?: unknown; actions?: unknown };
+  return {
+    target: typeof candidate.target === 'string' ? candidate.target : '',
+    actions: Array.isArray(candidate.actions)
+      ? candidate.actions.map((action) => String(action).trim()).filter(Boolean)
+      : []
+  };
+}
+
+function normalizeOnEventMap(value: unknown): Record<string, TransitionSpec> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, TransitionSpec>>((acc, [key, transition]) => {
+    acc[key] = normalizeTransitionSpec(transition);
+    return acc;
+  }, {});
+}
+
+function normalizeWorkflowSpec(raw: Partial<WorkflowSpec> & { transitions?: unknown } | undefined): WorkflowSpec {
+  if (!raw || typeof raw !== 'object') {
+    return defaultWorkflow;
+  }
+
+  const workflowKey = typeof raw.workflowKey === 'string' ? raw.workflowKey : defaultWorkflow.workflowKey;
+  const statesClassCandidate = typeof raw.statesClass === 'string' ? raw.statesClass.trim() : '';
+  const eventsClassCandidate = typeof raw.eventsClass === 'string' ? raw.eventsClass.trim() : '';
+  const statesClass = statesClassCandidate ? raw.statesClass : defaultWorkflow.statesClass;
+  const eventsClass = eventsClassCandidate ? raw.eventsClass : defaultWorkflow.eventsClass;
+  const startStateCandidate = typeof raw.startState === 'string' ? raw.startState.trim() : '';
+  const rawStates = raw.states ?? defaultWorkflow.states;
+  const stateSpecs: StateSpec[] = Array.isArray(rawStates)
+    ? rawStates
+        .map((state) => {
+          if (typeof state === 'string') {
+            return { name: state, onEvent: {} };
+          }
+          if (!state || typeof state !== 'object') {
+            return null;
+          }
+          const candidate = state as { name?: unknown; onEvent?: unknown };
+          if (typeof candidate.name !== 'string') {
+            return null;
+          }
+          return {
+            name: candidate.name,
+            onEvent: normalizeOnEventMap(candidate.onEvent)
+          };
+        })
+        .filter((state): state is StateSpec => Boolean(state?.name))
+    : defaultWorkflow.states;
+
+  const hasStateObjects =
+    Array.isArray(rawStates) &&
+    rawStates.some((state) => state && typeof state === 'object' && 'name' in (state as Record<string, unknown>));
+  const hasTransitions = Object.prototype.hasOwnProperty.call(raw as Record<string, unknown>, 'transitions');
+  const nextStates = hasTransitions && !hasStateObjects
+    ? migrateLegacyTransitions(
+        stateSpecs.map((state) => state.name),
+        (raw as { transitions?: unknown }).transitions
+      )
+    : stateSpecs;
+  const resolvedStates = nextStates.length ? nextStates : defaultWorkflow.states;
+  const nextStateNames = resolvedStates.map((state) => state.name);
+  const resolvedStartState = nextStateNames.includes(startStateCandidate)
+    ? startStateCandidate
+    : nextStateNames[0] ?? defaultWorkflow.startState ?? '';
+
+  return {
+    workflowKey,
+    statesClass,
+    eventsClass,
+    startState: resolvedStartState,
+    states: resolvedStates
+  };
+}
 
 const capabilityMetadata = paymentInitiationCapabilityMetadata as CapabilityMetadataDto;
 const rulesMetadata = {
@@ -215,9 +319,7 @@ function getSnapshotIdFromResponse(response: SnapshotDetailDto) {
 function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
   const workflow = raw.workflow ?? defaultWorkflow;
   const mergedWorkflow = {
-    workflowKey: workflow.workflowKey ?? defaultWorkflow.workflowKey,
-    states: Array.isArray(workflow.states) ? workflow.states : defaultWorkflow.states,
-    transitions: Array.isArray(workflow.transitions) ? workflow.transitions : defaultWorkflow.transitions
+    ...normalizeWorkflowSpec(workflow)
   };
 
   const rawRulesConfig = raw.rulesConfig as RulesConfig | undefined;
@@ -252,6 +354,15 @@ function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
     integrationConfig: raw.integrationConfig ?? {},
     deploymentOverrides: raw.deploymentOverrides ?? {}
   };
+}
+
+const workflowDraftStorageKey = 'onboarding:draft:v1';
+
+function normalizeWorkflowDraft(raw: unknown): WorkflowSpec | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  return normalizeWorkflowSpec(raw as Partial<WorkflowSpec> & { transitions?: unknown });
 }
 
 type CreateSnapshotWizardProps = {
@@ -289,6 +400,8 @@ export function CreateSnapshotWizard({
   const [ruleSearch, setRuleSearch] = useState('');
   const [showEnabledOnly, setShowEnabledOnly] = useState(false);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [workflowTab, setWorkflowTab] = useState<WorkflowTabKey>('transitions');
+  const [workflowFocus, setWorkflowFocus] = useState<{ issue: WorkflowLintIssue; nonce: number } | null>(null);
   const [rulesDrawerState, setRulesDrawerState] = useState<{
     capability: CapabilityDto;
     kind: RuleType;
@@ -336,6 +449,31 @@ export function CreateSnapshotWizard({
   };
 
   useEffect(() => {
+    const raw = localStorage.getItem(workflowDraftStorageKey);
+    if (!raw) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      const draft = normalizeWorkflowDraft(parsed);
+      if (!draft) {
+        return;
+      }
+      updateSnapshot((prev) => ({ ...prev, workflow: draft }));
+    } catch {
+      // Ignore invalid drafts.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(workflowDraftStorageKey, JSON.stringify(snapshot.workflow));
+    } catch {
+      // Ignore storage errors (e.g., quota exceeded).
+    }
+  }, [snapshot.workflow]);
+
+  useEffect(() => {
     const countryCode = snapshot.countryCode.trim();
     if (!countryCode) {
       return;
@@ -369,7 +507,7 @@ export function CreateSnapshotWizard({
   };
 
   const countryErrors = validateCountryCodeUppercase(snapshot.countryCode);
-  const transitionErrors = validateTransitionsReferToValidStates(snapshot.workflow);
+  const workflowLint = useMemo(() => lintWorkflowSpec(snapshot.workflow), [snapshot.workflow]);
 
   const rulesConfig = snapshot.rulesConfig;
   const validationSelections = rulesConfig?.validations ?? [];
@@ -401,13 +539,82 @@ export function CreateSnapshotWizard({
   const hasCapabilitiesEnabled = enabledCapabilities.length > 0;
 
   const workflowKeyValid = snapshot.workflow.workflowKey.trim().length > 0;
-  const statesValid = snapshot.workflow.states.length > 0;
+  const stateNames = useMemo(
+    () => snapshot.workflow.states.map((state) => state.name).filter(Boolean),
+    [snapshot.workflow.states]
+  );
+  const statesValid = stateNames.length > 0;
+  const transitionRows = useMemo(() => listAllTransitions(snapshot.workflow), [snapshot.workflow]);
+  const workflowLintCounts = useMemo(() => {
+    const base = {
+      transitions: { errors: 0, warnings: 0 },
+      state: { errors: 0, warnings: 0 },
+      yaml: { errors: 0, warnings: 0 }
+    };
+    workflowLint.issues.forEach((issue) => {
+      const bucket = base[issue.tab] ?? base.transitions;
+      if (issue.level === 'error') {
+        bucket.errors += 1;
+      } else {
+        bucket.warnings += 1;
+      }
+    });
+    return base;
+  }, [workflowLint]);
 
-  const transitionsValid = snapshot.workflow.transitions.every(
+  const duplicateEventCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    transitionRows.forEach((transition) => {
+      const normalizedEvent = transition.eventName.trim().toUpperCase();
+      if (!normalizedEvent) {
+        return;
+      }
+      const key = `${transition.from}::${normalizedEvent}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+    return Array.from(counts.values()).filter((count) => count > 1).length;
+  }, [transitionRows]);
+
+  const transitionsValid = transitionRows.every(
     (transition) =>
-      snapshot.workflow.states.includes(transition.from) &&
-      snapshot.workflow.states.includes(transition.to) &&
-      transition.onEvent.trim().length > 0
+      stateNames.includes(transition.from) &&
+      stateNames.includes(transition.target) &&
+      transition.eventName.trim().length > 0
+  );
+  const transitionUniquenessValid = duplicateEventCount === 0;
+  const workflowTransitionCount = transitionRows.length;
+  const renderWorkflowTabLabel = (label: string, counts: { errors: number; warnings: number }) => (
+    <Stack direction="row" spacing={1} alignItems="center">
+      <Typography variant="body2">{label}</Typography>
+      {counts.errors > 0 ? (
+        <Badge color="error" badgeContent={counts.errors}>
+          <Box sx={{ width: 6, height: 6 }} />
+        </Badge>
+      ) : null}
+      {counts.warnings > 0 ? (
+        <Badge color="warning" badgeContent={counts.warnings}>
+          <Box sx={{ width: 6, height: 6 }} />
+        </Badge>
+      ) : null}
+    </Stack>
+  );
+  const formatWorkflowIssueContext = (issue: WorkflowLintIssue) => {
+    const parts: string[] = [];
+    if (issue.stateName) {
+      parts.push(`State: ${issue.stateName}`);
+    }
+    if (issue.eventName !== undefined) {
+      const eventLabel = issue.eventName?.trim() ? issue.eventName : 'Unnamed';
+      parts.push(`Event: ${eventLabel}`);
+    }
+    return parts.join(' • ');
+  };
+  const handleLintIssueClick = useCallback(
+    (issue: WorkflowLintIssue) => {
+      setWorkflowTab(issue.tab as WorkflowTabKey);
+      setWorkflowFocus({ issue, nonce: Date.now() });
+    },
+    [setWorkflowTab]
   );
 
   const stepValidations = [
@@ -416,8 +623,9 @@ export function CreateSnapshotWizard({
     Boolean(rulesConfig),
     workflowKeyValid &&
       statesValid &&
-      transitionErrors.length === 0 &&
-      transitionsValid,
+      workflowLint.errors.length === 0 &&
+      transitionsValid &&
+      transitionUniquenessValid,
     true
   ];
 
@@ -1020,15 +1228,130 @@ export function CreateSnapshotWizard({
                     Why this matters: the CPX State Manager uses this FSM to enforce lifecycle guarantees.
                   </Typography>
                 </Stack>
-                <WorkflowEditor
-                  value={snapshot.workflow}
-                  onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
-                  helperText="Define a clean lifecycle path with explicit states and events."
-                />
+                <Grid container spacing={2.5}>
+                  <Grid size={{ xs: 12, lg: 8 }}>
+                    <Stack spacing={2}>
+                      <WorkflowDefinitionFields
+                        value={snapshot.workflow}
+                        onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
+                        helperText="Define a clean lifecycle path with explicit states and events."
+                      />
+                      <Tabs value={workflowTab} onChange={(_, value) => setWorkflowTab(value as WorkflowTabKey)}>
+                        <Tab
+                          value="transitions"
+                          label={renderWorkflowTabLabel('Transitions', workflowLintCounts.transitions)}
+                        />
+                        <Tab value="state" label={renderWorkflowTabLabel('State View', workflowLintCounts.state)} />
+                        <Tab value="yaml" label={renderWorkflowTabLabel('YAML Preview', workflowLintCounts.yaml)} />
+                      </Tabs>
+                      <WorkflowTabPanels
+                        value={snapshot.workflow}
+                        onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
+                        activeTab={workflowTab}
+                        focusIssue={workflowFocus?.issue ?? null}
+                        focusNonce={workflowFocus?.nonce ?? 0}
+                        downloadFileName={(() => {
+                          const country = snapshot.countryCode.trim();
+                          const flow = snapshot.workflow.workflowKey.trim();
+                          if (!country || !flow) {
+                            return 'workflow-fsm.yaml';
+                          }
+                          const sanitize = (value: string) =>
+                            value
+                              .toLowerCase()
+                              .replace(/[^a-z0-9]+/g, '-')
+                              .replace(/(^-|-$)/g, '');
+                          return `${sanitize(country)}-${sanitize(flow)}-fsm.yaml`;
+                        })()}
+                      />
+                    </Stack>
+                  </Grid>
+                  <Grid size={{ xs: 12, lg: 4 }}>
+                    <Stack spacing={2}>
+                      <Paper variant="outlined" sx={{ p: 2 }}>
+                        <Stack spacing={1.5}>
+                          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                            <Typography variant="subtitle2">Lint Checks</Typography>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              {workflowLint.errors.length > 0 ? (
+                                <Badge color="error" badgeContent={workflowLint.errors.length}>
+                                  <Box sx={{ width: 6, height: 6 }} />
+                                </Badge>
+                              ) : null}
+                              {workflowLint.warnings.length > 0 ? (
+                                <Badge color="warning" badgeContent={workflowLint.warnings.length}>
+                                  <Box sx={{ width: 6, height: 6 }} />
+                                </Badge>
+                              ) : null}
+                            </Stack>
+                          </Stack>
+                          {workflowLint.issues.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">
+                              No lint issues detected yet.
+                            </Typography>
+                          ) : (
+                            <Stack spacing={1}>
+                              {workflowLint.errors.length > 0 ? (
+                                <Stack spacing={0.5}>
+                                  <Typography variant="caption" color="error">
+                                    Errors
+                                  </Typography>
+                                  <List dense>
+                                    {workflowLint.errors.map((issue) => (
+                                      <ListItemButton key={issue.id} onClick={() => handleLintIssueClick(issue)}>
+                                        <ListItemText
+                                          primary={issue.message}
+                                          secondary={formatWorkflowIssueContext(issue) || undefined}
+                                        />
+                                      </ListItemButton>
+                                    ))}
+                                  </List>
+                                </Stack>
+                              ) : null}
+                              {workflowLint.warnings.length > 0 ? (
+                                <Stack spacing={0.5}>
+                                  <Typography variant="caption" sx={{ color: 'warning.main' }}>
+                                    Warnings
+                                  </Typography>
+                                  <List dense>
+                                    {workflowLint.warnings.map((issue) => (
+                                      <ListItemButton key={issue.id} onClick={() => handleLintIssueClick(issue)}>
+                                        <ListItemText
+                                          primary={issue.message}
+                                          secondary={formatWorkflowIssueContext(issue) || undefined}
+                                        />
+                                      </ListItemButton>
+                                    ))}
+                                  </List>
+                                </Stack>
+                              ) : null}
+                            </Stack>
+                          )}
+                          <Typography variant="caption" color="text.secondary">
+                            Click any issue to jump to the related state or transition.
+                          </Typography>
+                        </Stack>
+                      </Paper>
+                      <Paper variant="outlined" sx={{ p: 2 }}>
+                        <Stack spacing={1}>
+                          <Typography variant="subtitle2">Quick Help</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Events map to runtime triggers (ex: `VALIDATE`, `CLEAR`, `OnRetry`).
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Actions run on transition and can be chained in order. Keep them deterministic.
+                          </Typography>
+                        </Stack>
+                      </Paper>
+                    </Stack>
+                  </Grid>
+                </Grid>
               </Stack>
             </Paper>
-            {transitionErrors.length || !transitionsValid ? (
-              <Alert severity="warning">Transitions must refer to valid states and include events.</Alert>
+            {workflowLint.errors.length > 0 ? (
+              <Alert severity="warning">
+                Resolve workflow lint errors before proceeding to review.
+              </Alert>
             ) : null}
           </Stack>
         );
@@ -1074,7 +1397,7 @@ export function CreateSnapshotWizard({
                       </Typography>
                       <Typography variant="h5">{snapshot.workflow.states.length} states</Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {snapshot.workflow.transitions.length} transitions
+                        {workflowTransitionCount} transitions
                       </Typography>
                     </Paper>
                   </Grid>
