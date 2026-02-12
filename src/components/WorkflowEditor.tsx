@@ -328,7 +328,7 @@ export function WorkflowDefinitionFields({
           states={stateNames}
           onAddState={handleAddState}
           onRemoveState={handleRemoveState}
-          catalogStates={mergedCatalog.states}
+          catalogStates={fsmCatalog.states}
         />
         {showErrors && stateNames.length === 0 ? (
           <Typography variant="caption" color="error">
