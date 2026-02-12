@@ -15,7 +15,9 @@ export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[], direction: L
     rankdir: direction,
     ranksep: 180,
     nodesep: 90,
-    edgesep: 70
+    edgesep: 70,
+    marginx: 80,
+    marginy: 60
   });
 
   nodes.forEach((node) => {

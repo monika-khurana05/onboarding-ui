@@ -88,7 +88,9 @@ function LabelledEdge({
               fontFamily,
               fontWeight: 600,
               whiteSpace: 'nowrap',
-              pointerEvents: 'none'
+              pointerEvents: 'none',
+              zIndex: 4,
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.35)'
             }}
           >
             {label}
