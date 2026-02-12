@@ -11,7 +11,12 @@ export const DEFAULT_NODE_SIZE = {
 export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[], direction: LayoutDirection = 'LR'): GraphNode[] {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: direction });
+  dagreGraph.setGraph({
+    rankdir: direction,
+    ranksep: 180,
+    nodesep: 90,
+    edgesep: 70
+  });
 
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, {

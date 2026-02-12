@@ -1,13 +1,17 @@
 import { useMemo } from 'react';
 import ReactFlow, {
   Background,
+  BaseEdge,
   Controls,
+  EdgeLabelRenderer,
   MiniMap,
   Panel,
   ReactFlowProvider,
   type Edge,
+  type EdgeProps,
   type Node,
-  useReactFlow
+  useReactFlow,
+  getBezierPath
 } from 'reactflow';
 import { Button } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
@@ -17,6 +21,83 @@ type DiagramViewProps = {
   nodes: Node[];
   edges: Edge[];
 };
+
+type DiagramColors = {
+  nodeBg: string;
+  nodeBorder: string;
+  nodeText: string;
+  edge: string;
+  labelBg: string;
+  labelText: string;
+  actionLabelBg: string;
+  actionLabelText: string;
+  grid: string;
+  minimapMask: string;
+};
+
+type LabelledEdgeData = {
+  labelOffsetX?: number;
+  labelOffsetY?: number;
+  hasActions?: boolean;
+};
+
+function LabelledEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  label,
+  data,
+  style,
+  colors,
+  fontFamily
+}: EdgeProps & { colors: DiagramColors; fontFamily: string }) {
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition
+  });
+  const offsetX = (data as LabelledEdgeData | undefined)?.labelOffsetX ?? 0;
+  const offsetY = (data as LabelledEdgeData | undefined)?.labelOffsetY ?? 0;
+  const hasActions = (data as LabelledEdgeData | undefined)?.hasActions ?? false;
+  const labelBg = hasActions ? colors.actionLabelBg : colors.labelBg;
+  const labelText = hasActions ? colors.actionLabelText : colors.labelText;
+
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
+      {label ? (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX + offsetX}px,${labelY + offsetY}px)`,
+              background: labelBg,
+              color: labelText,
+              border: `1px solid ${colors.nodeBorder}`,
+              borderRadius: 6,
+              padding: '2px 6px',
+              fontSize: 12,
+              fontFamily,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none'
+            }}
+          >
+            {label}
+          </div>
+        </EdgeLabelRenderer>
+      ) : null}
+    </>
+  );
+}
 
 function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
   const { fitView } = useReactFlow();
@@ -30,10 +111,20 @@ function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
       edge: isDark ? '#CBD5E1' : '#475569',
       labelBg: isDark ? '#F8FAFC' : '#0F172A',
       labelText: isDark ? '#0F172A' : '#F8FAFC',
+      actionLabelBg: isDark ? '#BFDBFE' : '#93C5FD',
+      actionLabelText: '#0F172A',
       grid: alpha(theme.palette.text.secondary, 0.25),
       minimapMask: alpha(theme.palette.background.default, 0.85)
     };
   }, [theme]);
+  const edgeTypes = useMemo(
+    () => ({
+      labelled: (props: EdgeProps) => (
+        <LabelledEdge {...props} colors={diagramColors} fontFamily={theme.typography.fontFamily} />
+      )
+    }),
+    [diagramColors, theme.typography.fontFamily]
+  );
 
   const styledNodes = useMemo(
     () =>
@@ -60,24 +151,12 @@ function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
     () =>
       edges.map((edge) => ({
         ...edge,
+        type: edge.type ?? 'labelled',
         style: {
           stroke: diagramColors.edge,
           strokeWidth: 1.6,
           ...(edge.style ?? {})
-        },
-        labelStyle: {
-          fill: diagramColors.labelText,
-          fontSize: 12,
-          fontFamily: theme.typography.fontFamily,
-          ...(edge.labelStyle ?? {})
-        },
-        labelBgStyle: {
-          fill: diagramColors.labelBg,
-          stroke: diagramColors.nodeBorder,
-          strokeWidth: 0.8
-        },
-        labelBgPadding: [6, 3],
-        labelBgBorderRadius: 6
+        }
       })),
     [edges, diagramColors, theme]
   );
@@ -86,6 +165,7 @@ function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
     <ReactFlow
       nodes={styledNodes}
       edges={styledEdges}
+      edgeTypes={edgeTypes}
       fitView
       fitViewOptions={{ padding: 0.2 }}
       nodesDraggable={false}

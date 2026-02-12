@@ -95,6 +95,7 @@ type DiagramEdge = {
   eventName: string;
   label: string;
   kind: 'happy' | 'failure' | 'retry';
+  hasActions: boolean;
 };
 
 type SearchResult = {
@@ -461,7 +462,8 @@ export function WorkflowTabPanels({
           target: row.target,
           eventName: row.eventName,
           label: diagramEdgeLabelById.get(id) ?? row.eventName,
-          kind
+          kind,
+          hasActions: (row.actions?.length ?? 0) > 0
         };
       }),
     [diagramEdgeLabelById, transitionRows]
@@ -478,14 +480,47 @@ export function WorkflowTabPanels({
   );
 
   const diagramFlowEdges = useMemo(
-    () =>
-      visibleDiagramEdges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        label: edge.label
-      })),
-    [visibleDiagramEdges]
+    () => {
+      const offsetStep = 22;
+      const groups = new Map<string, DiagramEdge[]>();
+      visibleDiagramEdges.forEach((edge) => {
+        const key = `${edge.source}__${edge.target}`;
+        if (!groups.has(key)) {
+          groups.set(key, []);
+        }
+        groups.get(key)?.push(edge);
+      });
+      const result: Array<{
+        id: string;
+        source: string;
+        target: string;
+        label: string;
+        type: 'labelled';
+        data: { labelOffsetX: number; labelOffsetY: number; hasActions: boolean };
+      }> = [];
+      groups.forEach((edges) => {
+        const middleIndex = (edges.length - 1) / 2;
+        edges.forEach((edge, index) => {
+          const offsetValue = (index - middleIndex) * offsetStep;
+          const labelOffsetX = diagramDirection === 'TB' ? offsetValue : 0;
+          const labelOffsetY = diagramDirection === 'LR' ? offsetValue : 0;
+          result.push({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            label: edge.label,
+            type: 'labelled',
+            data: {
+              labelOffsetX,
+              labelOffsetY,
+              hasActions: edge.hasActions
+            }
+          });
+        });
+      });
+      return result;
+    },
+    [diagramDirection, visibleDiagramEdges]
   );
 
   useEffect(() => {
