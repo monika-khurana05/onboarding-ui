@@ -1,4 +1,5 @@
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
+import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SearchIcon from '@mui/icons-material/Search';
@@ -10,8 +11,10 @@ import {
   Badge,
   Chip,
   Divider,
+  Drawer,
   FormControlLabel,
   Grid,
+  IconButton,
   InputAdornment,
   Link,
   List,
@@ -409,6 +412,7 @@ export function CreateSnapshotWizard({
     capability: CapabilityDto;
     kind: RuleType;
   } | null>(null);
+  const [workflowSidePanel, setWorkflowSidePanel] = useState<'lint' | 'help' | null>(null);
 
   const createSnapshotMutation = useMutation({
     mutationFn: createSnapshot,
@@ -441,6 +445,12 @@ export function CreateSnapshotWizard({
     }
     setJsonValue(JSON.stringify(snapshot, null, 2));
   }, [advancedJson, snapshot]);
+
+  useEffect(() => {
+    if (activeStep !== 3 && workflowSidePanel) {
+      setWorkflowSidePanel(null);
+    }
+  }, [activeStep, workflowSidePanel]);
 
 
   const updateSnapshot = (
@@ -586,6 +596,7 @@ export function CreateSnapshotWizard({
   );
   const transitionUniquenessValid = duplicateEventCount === 0;
   const workflowTransitionCount = transitionRows.length;
+  const workflowLintIssueCount = workflowLint.errors.length + workflowLint.warnings.length;
   const renderWorkflowTabLabel = (label: string, counts: { errors: number; warnings: number }) => (
     <Stack direction="row" spacing={1} alignItems="center">
       <Typography variant="body2">{label}</Typography>
@@ -1232,21 +1243,52 @@ export function CreateSnapshotWizard({
                   </Typography>
                 </Stack>
                 <Grid container spacing={2.5}>
-                  <Grid size={{ xs: 12, lg: 8 }}>
+                  <Grid size={{ xs: 12 }}>
                     <Stack spacing={2}>
                       <WorkflowDefinitionFields
                         value={snapshot.workflow}
                         onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
                         helperText="Define a clean lifecycle path with explicit states and events."
                       />
-                      <Tabs value={workflowTab} onChange={(_, value) => setWorkflowTab(value as WorkflowTabKey)}>
-                        <Tab
-                          value="transitions"
-                          label={renderWorkflowTabLabel('Transitions', workflowLintCounts.transitions)}
-                        />
-                        <Tab value="state" label={renderWorkflowTabLabel('State View', workflowLintCounts.state)} />
-                        <Tab value="yaml" label={renderWorkflowTabLabel('YAML Preview', workflowLintCounts.yaml)} />
-                      </Tabs>
+                      <Stack
+                        direction={{ xs: 'column', md: 'row' }}
+                        spacing={1}
+                        alignItems={{ xs: 'stretch', md: 'center' }}
+                        justifyContent="space-between"
+                      >
+                        <Tabs value={workflowTab} onChange={(_, value) => setWorkflowTab(value as WorkflowTabKey)}>
+                          <Tab
+                            value="transitions"
+                            label={renderWorkflowTabLabel('Transitions', workflowLintCounts.transitions)}
+                          />
+                          <Tab value="state" label={renderWorkflowTabLabel('State View', workflowLintCounts.state)} />
+                          <Tab value="yaml" label={renderWorkflowTabLabel('YAML Preview', workflowLintCounts.yaml)} />
+                        </Tabs>
+                        <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end">
+                          <Badge
+                            color={workflowLint.errors.length > 0 ? 'error' : 'warning'}
+                            badgeContent={workflowLintIssueCount}
+                            invisible={workflowLintIssueCount === 0}
+                          >
+                            <Button
+                              size="small"
+                              variant={workflowSidePanel === 'lint' ? 'contained' : 'outlined'}
+                              onClick={() =>
+                                setWorkflowSidePanel((prev) => (prev === 'lint' ? null : 'lint'))
+                              }
+                            >
+                              Lint Checks
+                            </Button>
+                          </Badge>
+                          <Button
+                            size="small"
+                            variant={workflowSidePanel === 'help' ? 'contained' : 'outlined'}
+                            onClick={() => setWorkflowSidePanel((prev) => (prev === 'help' ? null : 'help'))}
+                          >
+                            Quick Help
+                          </Button>
+                        </Stack>
+                      </Stack>
                       <WorkflowTabPanels
                         value={snapshot.workflow}
                         onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
@@ -1269,85 +1311,6 @@ export function CreateSnapshotWizard({
                       />
                     </Stack>
                   </Grid>
-                  <Grid size={{ xs: 12, lg: 4 }}>
-                    <Stack spacing={2}>
-                      <Paper variant="outlined" sx={{ p: 2 }}>
-                        <Stack spacing={1.5}>
-                          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-                            <Typography variant="subtitle2">Lint Checks</Typography>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              {workflowLint.errors.length > 0 ? (
-                                <Badge color="error" badgeContent={workflowLint.errors.length}>
-                                  <Box sx={{ width: 6, height: 6 }} />
-                                </Badge>
-                              ) : null}
-                              {workflowLint.warnings.length > 0 ? (
-                                <Badge color="warning" badgeContent={workflowLint.warnings.length}>
-                                  <Box sx={{ width: 6, height: 6 }} />
-                                </Badge>
-                              ) : null}
-                            </Stack>
-                          </Stack>
-                          {workflowLint.issues.length === 0 ? (
-                            <Typography variant="body2" color="text.secondary">
-                              No lint issues detected yet.
-                            </Typography>
-                          ) : (
-                            <Stack spacing={1}>
-                              {workflowLint.errors.length > 0 ? (
-                                <Stack spacing={0.5}>
-                                  <Typography variant="caption" color="error">
-                                    Errors
-                                  </Typography>
-                                  <List dense>
-                                    {workflowLint.errors.map((issue) => (
-                                      <ListItemButton key={issue.id} onClick={() => handleLintIssueClick(issue)}>
-                                        <ListItemText
-                                          primary={issue.message}
-                                          secondary={formatWorkflowIssueContext(issue) || undefined}
-                                        />
-                                      </ListItemButton>
-                                    ))}
-                                  </List>
-                                </Stack>
-                              ) : null}
-                              {workflowLint.warnings.length > 0 ? (
-                                <Stack spacing={0.5}>
-                                  <Typography variant="caption" sx={{ color: 'warning.main' }}>
-                                    Warnings
-                                  </Typography>
-                                  <List dense>
-                                    {workflowLint.warnings.map((issue) => (
-                                      <ListItemButton key={issue.id} onClick={() => handleLintIssueClick(issue)}>
-                                        <ListItemText
-                                          primary={issue.message}
-                                          secondary={formatWorkflowIssueContext(issue) || undefined}
-                                        />
-                                      </ListItemButton>
-                                    ))}
-                                  </List>
-                                </Stack>
-                              ) : null}
-                            </Stack>
-                          )}
-                          <Typography variant="caption" color="text.secondary">
-                            Click any issue to jump to the related state or transition.
-                          </Typography>
-                        </Stack>
-                      </Paper>
-                      <Paper variant="outlined" sx={{ p: 2 }}>
-                        <Stack spacing={1}>
-                          <Typography variant="subtitle2">Quick Help</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Events map to runtime triggers (ex: `VALIDATE`, `CLEAR`, `OnRetry`).
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Actions run on transition and can be chained in order. Keep them deterministic.
-                          </Typography>
-                        </Stack>
-                      </Paper>
-                    </Stack>
-                  </Grid>
                 </Grid>
               </Stack>
             </Paper>
@@ -1356,6 +1319,99 @@ export function CreateSnapshotWizard({
                 Resolve workflow lint errors before proceeding to review.
               </Alert>
             ) : null}
+            <Drawer
+              anchor="right"
+              open={Boolean(workflowSidePanel)}
+              onClose={() => setWorkflowSidePanel(null)}
+              ModalProps={{ keepMounted: true }}
+              PaperProps={{ sx: { width: { xs: '100%', sm: 360 } } }}
+            >
+              <Stack spacing={2} sx={{ p: 2 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Typography variant="subtitle1">
+                      {workflowSidePanel === 'lint' ? 'Lint Checks' : 'Quick Help'}
+                    </Typography>
+                    {workflowSidePanel === 'lint' ? (
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        {workflowLint.errors.length > 0 ? (
+                          <Badge color="error" badgeContent={workflowLint.errors.length}>
+                            <Box sx={{ width: 6, height: 6 }} />
+                          </Badge>
+                        ) : null}
+                        {workflowLint.warnings.length > 0 ? (
+                          <Badge color="warning" badgeContent={workflowLint.warnings.length}>
+                            <Box sx={{ width: 6, height: 6 }} />
+                          </Badge>
+                        ) : null}
+                      </Stack>
+                    ) : null}
+                  </Stack>
+                  <IconButton aria-label="Close panel" onClick={() => setWorkflowSidePanel(null)}>
+                    <CloseIcon />
+                  </IconButton>
+                </Stack>
+                <Divider />
+                {workflowSidePanel === 'lint' ? (
+                  <Stack spacing={1.5}>
+                    {workflowLint.issues.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        No lint issues detected yet.
+                      </Typography>
+                    ) : (
+                      <Stack spacing={1}>
+                        {workflowLint.errors.length > 0 ? (
+                          <Stack spacing={0.5}>
+                            <Typography variant="caption" color="error">
+                              Errors
+                            </Typography>
+                            <List dense>
+                              {workflowLint.errors.map((issue) => (
+                                <ListItemButton key={issue.id} onClick={() => handleLintIssueClick(issue)}>
+                                  <ListItemText
+                                    primary={issue.message}
+                                    secondary={formatWorkflowIssueContext(issue) || undefined}
+                                  />
+                                </ListItemButton>
+                              ))}
+                            </List>
+                          </Stack>
+                        ) : null}
+                        {workflowLint.warnings.length > 0 ? (
+                          <Stack spacing={0.5}>
+                            <Typography variant="caption" sx={{ color: 'warning.main' }}>
+                              Warnings
+                            </Typography>
+                            <List dense>
+                              {workflowLint.warnings.map((issue) => (
+                                <ListItemButton key={issue.id} onClick={() => handleLintIssueClick(issue)}>
+                                  <ListItemText
+                                    primary={issue.message}
+                                    secondary={formatWorkflowIssueContext(issue) || undefined}
+                                  />
+                                </ListItemButton>
+                              ))}
+                            </List>
+                          </Stack>
+                        ) : null}
+                      </Stack>
+                    )}
+                    <Typography variant="caption" color="text.secondary">
+                      Click any issue to jump to the related state or transition.
+                    </Typography>
+                  </Stack>
+                ) : workflowSidePanel === 'help' ? (
+                  <Stack spacing={1}>
+                    <Typography variant="body2" color="text.secondary">
+                      Events map to runtime triggers (ex: `VALIDATE`, `CLEAR`, `OnRetry`).
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Actions run on transition and can be chained in order. Keep them deterministic.
+                    </Typography>
+                  </Stack>
+                ) : null}
+              </Stack>
+            </Drawer>
           </Stack>
         );
       case 4: {
