@@ -7,6 +7,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import SchemaOutlinedIcon from '@mui/icons-material/SchemaOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import {
   Accordion,
@@ -42,14 +43,22 @@ import {
   TableRow,
   Tooltip,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import type { StateSpec, WorkflowLintIssue, WorkflowSpec, WorkflowTransitionRow } from '../models/snapshot';
 import { deleteTransition, listAllTransitions, renameState, upsertTransition } from '../models/snapshot';
 import { FSM_PRESETS } from '../features/workflow/presets/presetsRegistry';
 import { loadPresetYaml } from '../features/workflow/presets/loadPresetYaml';
 import { parseFsmYamlToSpec } from '../features/workflow/presets/parseFsmYamlToSpec';
+import { DiagramView } from '../features/workflow/diagram/DiagramView';
+import { exportDiagramSvg } from '../features/workflow/diagram/export';
+import { filterEdges } from '../features/workflow/diagram/filters';
+import { layoutGraph, type LayoutDirection } from '../features/workflow/diagram/layout';
+import { toGraphFromSpec } from '../features/workflow/diagram/toGraph';
 import type { FsmCatalog } from '../lib/fsmCatalog';
 import { fsmCatalog, fsmSuggestions, type FsmTransitionSuggestion } from '../lib/fsmCatalog';
 import {
@@ -79,6 +88,14 @@ type WorkflowTabPanelsProps = {
 };
 
 type TransitionRow = WorkflowTransitionRow & { rowIndex: number };
+type DiagramEdge = {
+  id: string;
+  source: string;
+  target: string;
+  eventName: string;
+  label: string;
+  kind: 'happy' | 'failure' | 'retry';
+};
 
 type SearchResult = {
   id: string;
@@ -375,7 +392,15 @@ export function WorkflowTabPanels({
     transitions: number;
   } | null>(null);
   const [tempCatalog, setTempCatalog] = useState<FsmCatalog | null>(null);
+  const [diagramOpen, setDiagramOpen] = useState(false);
+  const [diagramHappyPathOnly, setDiagramHappyPathOnly] = useState(false);
+  const [diagramShowFailures, setDiagramShowFailures] = useState(true);
+  const [diagramShowRetries, setDiagramShowRetries] = useState(true);
+  const [diagramDirection, setDiagramDirection] = useState<LayoutDirection>('LR');
+  const [diagramExporting, setDiagramExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const diagramContainerRef = useRef<HTMLDivElement | null>(null);
+  const theme = useTheme();
 
   const stateNames = useMemo(() => value.states.map((state) => state.name), [value.states]);
   const mergedCatalog = useMemo(() => mergeCatalogs(fsmCatalog, tempCatalog), [tempCatalog]);
@@ -412,6 +437,56 @@ export function WorkflowTabPanels({
       (state) => (inboundCounts.get(state) ?? 0) === 0 && (outboundCounts.get(state) ?? 0) === 0
     );
   }, [stateNames, transitionRows]);
+
+  const baseDiagramGraph = useMemo(() => toGraphFromSpec(value), [value]);
+  const layoutedDiagramNodes = useMemo(
+    () => layoutGraph(baseDiagramGraph.nodes, baseDiagramGraph.edges, diagramDirection),
+    [baseDiagramGraph.edges, baseDiagramGraph.nodes, diagramDirection]
+  );
+  const diagramEdgeLabelById = useMemo(
+    () => new Map(baseDiagramGraph.edges.map((edge) => [edge.id, edge.label])),
+    [baseDiagramGraph.edges]
+  );
+
+  const diagramEdges = useMemo<DiagramEdge[]>(
+    () =>
+      transitionRows.map((row) => {
+        const isFailure = isFailureEventName(row.eventName);
+        const isRetry = isRetryEventName(row.eventName);
+        const kind: DiagramEdge['kind'] = isFailure ? 'failure' : isRetry ? 'retry' : 'happy';
+        const id = `${row.from}__${row.eventName}__${row.target}`;
+        return {
+          id,
+          source: row.from,
+          target: row.target,
+          eventName: row.eventName,
+          label: diagramEdgeLabelById.get(id) ?? row.eventName,
+          kind
+        };
+      }),
+    [diagramEdgeLabelById, transitionRows]
+  );
+
+  const visibleDiagramEdges = useMemo(
+    () =>
+      filterEdges(diagramEdges, {
+        happyOnly: diagramHappyPathOnly,
+        showFailures: diagramHappyPathOnly ? false : diagramShowFailures,
+        showRetries: diagramHappyPathOnly ? false : diagramShowRetries
+      }),
+    [diagramEdges, diagramHappyPathOnly, diagramShowFailures, diagramShowRetries]
+  );
+
+  const diagramFlowEdges = useMemo(
+    () =>
+      visibleDiagramEdges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        label: edge.label
+      })),
+    [visibleDiagramEdges]
+  );
 
   useEffect(() => {
     if (!activeState || !stateNames.includes(activeState)) {
@@ -1282,6 +1357,14 @@ export function WorkflowTabPanels({
             >
               Import FSM YAML
             </Button>
+            <Button
+              variant="outlined"
+              startIcon={<SchemaOutlinedIcon />}
+              onClick={() => setDiagramOpen(true)}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              View Diagram
+            </Button>
             <TextField
               select
               size="small"
@@ -1315,6 +1398,8 @@ export function WorkflowTabPanels({
           ? 'No transitions configured for this state yet.'
           : 'No transitions configured yet.';
     const showSearchResults = searchQuery.trim().length > 0 || showUnusedStates;
+    const showFailuresChecked = diagramHappyPathOnly ? false : diagramShowFailures;
+    const showRetriesChecked = diagramHappyPathOnly ? false : diagramShowRetries;
     const handleResultClick = (result: SearchResult) => {
       if (result.rowKey && result.field) {
         focusTransitionRow(result.rowKey, result.field);
@@ -1322,6 +1407,24 @@ export function WorkflowTabPanels({
       }
       if (result.stateName) {
         focusStateChip(result.stateName);
+      }
+    };
+    const handleDiagramExport = async () => {
+      const container = diagramContainerRef.current;
+      if (!container) {
+        return;
+      }
+      const exportTarget =
+        container.querySelector<HTMLElement>('.react-flow__renderer') ?? container;
+      setDiagramExporting(true);
+      try {
+        await exportDiagramSvg(exportTarget, {
+          backgroundColor: theme.palette.background.default
+        });
+      } catch {
+        // Ignore export errors.
+      } finally {
+        setDiagramExporting(false);
       }
     };
     return (
@@ -1582,6 +1685,116 @@ export function WorkflowTabPanels({
             )}
           </Stack>
         </Drawer>
+        <Dialog
+          open={diagramOpen}
+          onClose={() => setDiagramOpen(false)}
+          maxWidth="lg"
+          fullWidth
+        >
+          <DialogTitle>FSM Diagram</DialogTitle>
+          <DialogContent dividers>
+            <Stack spacing={2}>
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={1}
+                alignItems={{ xs: 'stretch', md: 'center' }}
+                justifyContent="space-between"
+              >
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<FileDownloadOutlinedIcon />}
+                    onClick={handleDiagramExport}
+                    disabled={diagramExporting || stateNames.length === 0}
+                    sx={{ whiteSpace: 'nowrap' }}
+                  >
+                    {diagramExporting ? 'Exporting...' : 'Export SVG'}
+                  </Button>
+                </Stack>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <ToggleButtonGroup
+                    size="small"
+                    value={diagramDirection}
+                    exclusive
+                    onChange={(_, value) => {
+                      if (value) {
+                        setDiagramDirection(value);
+                      }
+                    }}
+                    aria-label="Diagram layout direction"
+                  >
+                    <ToggleButton value="LR" aria-label="Left to right layout">
+                      LR
+                    </ToggleButton>
+                    <ToggleButton value="TB" aria-label="Top to bottom layout">
+                      TB
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                  <FormControlLabel
+                    sx={{ m: 0 }}
+                    control={
+                      <Switch
+                        size="small"
+                        checked={diagramHappyPathOnly}
+                        onChange={(_, checked) => setDiagramHappyPathOnly(checked)}
+                      />
+                    }
+                    label="Happy path only"
+                  />
+                  <FormControlLabel
+                    sx={{ m: 0 }}
+                    control={
+                      <Switch
+                        size="small"
+                        checked={showFailuresChecked}
+                        onChange={(_, checked) => setDiagramShowFailures(checked)}
+                        disabled={diagramHappyPathOnly}
+                      />
+                    }
+                    label="Show failures"
+                  />
+                  <FormControlLabel
+                    sx={{ m: 0 }}
+                    control={
+                      <Switch
+                        size="small"
+                        checked={showRetriesChecked}
+                        onChange={(_, checked) => setDiagramShowRetries(checked)}
+                        disabled={diagramHappyPathOnly}
+                      />
+                    }
+                    label="Show retries"
+                  />
+                </Stack>
+              </Stack>
+              <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'background.default' }}>
+                <Box
+                  ref={diagramContainerRef}
+                  sx={{
+                    width: '100%',
+                    height: { xs: 360, md: 520 },
+                    overflow: 'hidden',
+                    borderRadius: 1
+                  }}
+                >
+                  {stateNames.length === 0 ? (
+                    <Stack alignItems="center" justifyContent="center" sx={{ height: '100%' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Define at least one state to render the diagram.
+                      </Typography>
+                    </Stack>
+                  ) : (
+                    <DiagramView nodes={layoutedDiagramNodes} edges={diagramFlowEdges} />
+                  )}
+                </Box>
+              </Paper>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDiagramOpen(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
         <Dialog open={presetDialogOpen} onClose={closePresetDialog} maxWidth="sm" fullWidth>
           <DialogTitle>Apply FSM</DialogTitle>
           <DialogContent>

@@ -25,11 +25,14 @@
     "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
     "@tanstack/react-query": "^5.90.5",
+    "dagre": "^0.8.5",
+    "html-to-image": "^1.11.13",
     "js-yaml": "^4.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.66.0",
     "react-router-dom": "^6.30.1",
+    "reactflow": "^11.11.4",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -44,6 +47,7 @@
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
     "@vitejs/plugin-react": "^5.1.0",
+    "@vitest/coverage-v8": "^4.0.8",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -51,10 +55,9 @@
     "jsdom": "^27.1.0",
     "msw": "^2.11.6",
     "prettier": "^3.6.2",
-    "typescript-eslint": "^8.46.2",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2",
     "vite": "^7.1.12",
-    "vitest": "^4.0.8",
-    "@vitest/coverage-v8": "^4.0.8"
+    "vitest": "^4.0.8"
   }
 }
