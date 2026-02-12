@@ -78,9 +78,12 @@ function LabelledEdge({
   const distance = Math.hypot(dx, dy) || 1;
   const normalX = distance === 0 ? 0 : -dy / distance;
   const normalY = distance === 0 ? -1 : dx / distance;
+  const labelHeight =
+    lineCount * 14 + Math.max(0, lineCount - 1) * 4 + 12;
+  const nodeRadius = 70;
   const labelSizeOffset = Math.max(0, lineCount - 1) * 10;
-  const shortEdgeBoost = Math.max(0, 160 - distance) * 0.18;
-  const baseOffset = (hasActions ? 48 : 36) + labelSizeOffset + shortEdgeBoost;
+  const shortEdgeBoost = Math.max(0, 200 - distance) * 0.22;
+  const baseOffset = Math.max(nodeRadius + labelHeight / 2 + 12, (hasActions ? 56 : 44) + labelSizeOffset + shortEdgeBoost);
   const adjustedLabelX = labelX + normalX * baseOffset + offsetX;
   const adjustedLabelY = labelY + normalY * baseOffset + offsetY;
 
