@@ -31,6 +31,7 @@ type DiagramColors = {
   labelText: string;
   actionLabelBg: string;
   actionLabelText: string;
+  canvasBg: string;
   grid: string;
   minimapMask: string;
 };
@@ -70,6 +71,23 @@ function LabelledEdge({
   const labelBg = hasActions ? colors.actionLabelBg : colors.labelBg;
   const labelText = hasActions ? colors.actionLabelText : colors.labelText;
 
+  const renderLabel = (labelTextValue: string) => {
+    const lines = labelTextValue.split('\n');
+    if (lines.length === 1) {
+      return <span style={{ fontWeight: 700, fontSize: 12 }}>{lines[0]}</span>;
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+        <span style={{ fontWeight: 700, fontSize: 12 }}>{lines[0]}</span>
+        {lines.slice(1).map((line, index) => (
+          <span key={`${lines[0]}-${index}`} style={{ fontWeight: 500, fontSize: 11 }}>
+            {line}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <>
       <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
@@ -83,17 +101,19 @@ function LabelledEdge({
               color: labelText,
               border: `1px solid ${colors.nodeBorder}`,
               borderRadius: 6,
-              padding: '2px 6px',
+              padding: '6px 8px',
               fontSize: 12,
               fontFamily,
               fontWeight: 600,
-              whiteSpace: 'nowrap',
+              lineHeight: 1.35,
+              textAlign: 'left',
+              maxWidth: 260,
               pointerEvents: 'none',
               zIndex: 4,
               boxShadow: '0 2px 6px rgba(0, 0, 0, 0.35)'
             }}
           >
-            {label}
+            {renderLabel(label)}
           </div>
         </EdgeLabelRenderer>
       ) : null}
@@ -106,6 +126,7 @@ function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
   const theme = useTheme();
   const diagramColors = useMemo(() => {
     const isDark = theme.palette.mode === 'dark';
+    const canvasBg = isDark ? '#0B0F14' : '#F8FAFC';
     return {
       nodeBg: isDark ? '#111827' : '#E2E8F0',
       nodeBorder: isDark ? '#334155' : '#94A3B8',
@@ -115,8 +136,9 @@ function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
       labelText: isDark ? '#0F172A' : '#F8FAFC',
       actionLabelBg: isDark ? '#BFDBFE' : '#93C5FD',
       actionLabelText: '#0F172A',
+      canvasBg,
       grid: alpha(theme.palette.text.secondary, 0.25),
-      minimapMask: alpha(theme.palette.background.default, 0.85)
+      minimapMask: alpha(canvasBg, 0.85)
     };
   }, [theme]);
   const edgeTypes = useMemo(
@@ -177,7 +199,7 @@ function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
       style={{
         width: '100%',
         height: '100%',
-        background: theme.palette.background.default
+        background: diagramColors.canvasBg
       }}
     >
       <MiniMap

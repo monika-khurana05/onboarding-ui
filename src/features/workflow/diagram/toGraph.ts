@@ -28,11 +28,14 @@ function buildEdgeLabel(transition: TransitionRow): string {
   if (actions.length === 0) {
     return base;
   }
-  const maxActions = 3;
-  const shown = actions.slice(0, maxActions).join(', ');
+  const maxActions = 4;
+  const shown = actions.slice(0, maxActions);
   const remaining = actions.length - maxActions;
-  const suffix = remaining > 0 ? `, +${remaining} more` : '';
-  return `${base} \u2022 ${shown}${suffix}`;
+  const lines = [base, ...shown.map((action) => `• ${action}`)];
+  if (remaining > 0) {
+    lines.push(`+${remaining} more`);
+  }
+  return lines.join('\n');
 }
 
 function buildEdgeId(from: string, eventName: string, to: string): string {
