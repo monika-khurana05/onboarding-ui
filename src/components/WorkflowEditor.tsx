@@ -6,10 +6,15 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import SearchIcon from '@mui/icons-material/Search';
 import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
+  Alert,
+  Autocomplete,
+  Box,
   Button,
   Chip,
   Dialog,
@@ -19,6 +24,7 @@ import {
   Divider,
   FormControlLabel,
   IconButton,
+  InputAdornment,
   List,
   ListItemButton,
   ListItemText,
@@ -36,11 +42,20 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { useEffect, useMemo, useState } from 'react';
-import type { WorkflowLintIssue, WorkflowSpec, WorkflowTransitionRow } from '../models/snapshot';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import type { StateSpec, WorkflowLintIssue, WorkflowSpec, WorkflowTransitionRow } from '../models/snapshot';
 import { deleteTransition, listAllTransitions, renameState, upsertTransition } from '../models/snapshot';
-import { applyPreset, workflowPresets } from '../features/onboarding-flow/presets';
-import { ActionMultiSelect } from './ActionMultiSelect';
+import { FSM_PRESETS } from '../features/workflow/presets/presetsRegistry';
+import { loadPresetYaml } from '../features/workflow/presets/loadPresetYaml';
+import { parseFsmYamlToSpec } from '../features/workflow/presets/parseFsmYamlToSpec';
+import type { FsmCatalog } from '../lib/fsmCatalog';
+import { fsmCatalog, fsmSuggestions, type FsmTransitionSuggestion } from '../lib/fsmCatalog';
+import {
+  getSuggestedActionsForEvent,
+  getSuggestedEventsForState
+} from '../lib/fsmContextSuggestions';
+import { ActionsMultiSelect } from './ActionsMultiSelect';
+import { StateChipInput } from './StateChipInput';
 
 export type WorkflowTabKey = 'transitions' | 'state' | 'yaml';
 
@@ -63,86 +78,80 @@ type WorkflowTabPanelsProps = {
 
 type TransitionRow = WorkflowTransitionRow & { rowIndex: number };
 
+type SearchResult = {
+  id: string;
+  label: string;
+  detail?: string;
+  rowKey?: string;
+  field?: 'from' | 'event' | 'target' | 'actions';
+  stateName?: string;
+  kind: 'state' | 'event' | 'action' | 'unused-state';
+};
+
 const retryEventName = 'OnRetry';
 const buildStateKey = (name: string) => encodeURIComponent(name || '');
 const buildTransitionRowKey = (from: string, eventName: string) =>
   encodeURIComponent(`${from}::${eventName || '__EMPTY__'}`);
-
-type WorkflowPresetsControlProps = {
-  value: WorkflowSpec;
-  onChange: (next: WorkflowSpec) => void;
-  size?: 'small' | 'medium';
+const buildTransitionSuggestionKey = (from: string, eventName: string, target: string, actions: string[]) => {
+  const normalizedActions = [...actions]
+    .map((action) => action.trim())
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right));
+  return `${from}::${eventName}::${target}::${normalizedActions.join('|')}`;
+};
+const normalizeStateKey = (value: string) => value.trim().toUpperCase();
+const normalizeEventKey = (value: string) => value.trim().toUpperCase();
+const normalizeActionKey = (value: string) => value.trim().toLowerCase();
+const buildStateChipKey = (value: string) => encodeURIComponent(value || '');
+const isRetryEventName = (eventName: string) => {
+  const normalized = normalizeEventKey(eventName);
+  return normalized === 'ONRETRY' || normalized.includes('RETRY');
+};
+const isFailureEventName = (eventName: string) =>
+  /(FAIL|ERROR|REJECT|INVALID|NOTRECOVERABLE|NOT_RECOVERABLE|RECOVERABLE|NACK)/.test(
+    normalizeEventKey(eventName)
+  );
+const groupEventSuggestion = (eventName: string) => {
+  const normalized = normalizeEventKey(eventName);
+  if (normalized.includes('RETRY') || normalized === 'ONRETRY') {
+    return 'Retry events';
+  }
+  if (/(FAIL|ERROR|REJECT|INVALID|NOTRECOVERABLE|NOT_RECOVERABLE|RECOVERABLE|NACK)/.test(normalized)) {
+    return 'Failure events';
+  }
+  if (/(SUCCESS|PASSED|COMPLETED|ENABLED|APPROVED|APPROVE)/.test(normalized)) {
+    return 'Success events';
+  }
+  return 'Other events';
 };
 
-function WorkflowPresetsControl({ value, onChange, size = 'small' }: WorkflowPresetsControlProps) {
-  const [selectedId, setSelectedId] = useState('');
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
-  const selectedPreset = useMemo(
-    () => workflowPresets.find((preset) => preset.id === selectedId) ?? null,
-    [selectedId]
-  );
-
-  const handleApply = () => {
-    if (!selectedPreset) {
-      return;
-    }
-    onChange(applyPreset(value, selectedPreset));
-    setConfirmOpen(false);
-    setSelectedId('');
+const mergeCatalogs = (base: FsmCatalog, extra?: FsmCatalog | null): FsmCatalog => {
+  if (!extra) {
+    return base;
+  }
+  const mergeList = (left: string[], right: string[]) => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    [...left, ...right].forEach((value) => {
+      const next = value.trim();
+      if (!next) {
+        return;
+      }
+      const key = next.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      result.push(next);
+    });
+    return result;
   };
-
-  return (
-    <>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'center' }}>
-        <TextField
-          select
-          size={size}
-          label="Presets"
-          value={selectedId}
-          onChange={(event) => setSelectedId(event.target.value)}
-          sx={{ minWidth: 260 }}
-        >
-          {workflowPresets.map((preset) => (
-            <MenuItem key={preset.id} value={preset.id}>
-              {preset.label}
-            </MenuItem>
-          ))}
-        </TextField>
-        <Button
-          size={size}
-          variant="outlined"
-          disabled={!selectedPreset}
-          onClick={() => setConfirmOpen(true)}
-        >
-          Apply preset
-        </Button>
-      </Stack>
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Apply preset</DialogTitle>
-        <DialogContent>
-          <Stack spacing={1.5}>
-            <Typography variant="body2">
-              Apply the preset &quot;{selectedPreset?.label}&quot;? This will merge states and transitions into the
-              current workflow. Existing states and events will be preserved.
-            </Typography>
-            {selectedPreset?.description ? (
-              <Typography variant="body2" color="text.secondary">
-                {selectedPreset.description}
-              </Typography>
-            ) : null}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleApply} disabled={!selectedPreset}>
-            Apply preset
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
-  );
-}
+  return {
+    states: mergeList(base.states, extra.states),
+    events: mergeList(base.events, extra.events),
+    actions: mergeList(base.actions, extra.actions)
+  };
+};
 
 function removeStateFromSpec(spec: WorkflowSpec, stateName: string): WorkflowSpec {
   const nextStates = spec.states
@@ -206,7 +215,6 @@ export function WorkflowDefinitionFields({
   helperText,
   showErrors = true
 }: WorkflowDefinitionFieldsProps) {
-  const [stateInput, setStateInput] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const defaultStatesClass = 'com.citi.cpx.statemanager.fsm.State';
   const defaultEventsClass = 'com.citi.cpx.statemanager.fsm.Event';
@@ -214,6 +222,7 @@ export function WorkflowDefinitionFields({
   const resolvedEventsClass = value.eventsClass?.trim() ? value.eventsClass : defaultEventsClass;
 
   const stateNames = useMemo(() => value.states.map((state) => state.name), [value.states]);
+  const stateKeySet = useMemo(() => new Set(stateNames.map((state) => normalizeStateKey(state))), [stateNames]);
   const resolvedStartState = value.startState?.trim() ? value.startState : stateNames[0] ?? '';
   const workflowKeyError = showErrors && !value.workflowKey.trim();
 
@@ -231,20 +240,18 @@ export function WorkflowDefinitionFields({
     }
   }, [stateNames, value.startState, onChange]);
 
-  const handleAddState = () => {
-    const next = stateInput.trim().toUpperCase();
+  const handleAddState = (candidate: string) => {
+    const next = candidate.trim();
     if (!next) {
       return;
     }
-    if (stateNames.includes(next)) {
-      setStateInput('');
+    if (stateKeySet.has(normalizeStateKey(next))) {
       return;
     }
     onChange({
       ...value,
       states: [...value.states, { name: next, onEvent: {} }]
     });
-    setStateInput('');
   };
 
   const handleRemoveState = (stateName: string) => {
@@ -317,30 +324,12 @@ export function WorkflowDefinitionFields({
 
       <Stack spacing={1}>
         <Typography variant="subtitle2">States</Typography>
-        <WorkflowPresetsControl value={value} onChange={onChange} size="small" />
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <TextField
-            label="Add State"
-            size="small"
-            value={stateInput}
-            onChange={(event) => setStateInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                handleAddState();
-              }
-            }}
-            fullWidth
-          />
-          <Button variant="outlined" onClick={handleAddState} sx={{ whiteSpace: 'nowrap' }}>
-            Add State
-          </Button>
-        </Stack>
-        <Stack direction="row" gap={1} flexWrap="wrap">
-          {stateNames.map((state) => (
-            <Chip key={state} label={state} onDelete={() => handleRemoveState(state)} />
-          ))}
-        </Stack>
+        <StateChipInput
+          states={stateNames}
+          onAddState={handleAddState}
+          onRemoveState={handleRemoveState}
+          catalogStates={mergedCatalog.states}
+        />
         {showErrors && stateNames.length === 0 ? (
           <Typography variant="caption" color="error">
             Add at least one state.
@@ -367,13 +356,59 @@ export function WorkflowTabPanels({
   const [renameValue, setRenameValue] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
   const [patternSelection, setPatternSelection] = useState('');
+  const [eventSuggestionInput, setEventSuggestionInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterFailuresOnly, setFilterFailuresOnly] = useState(false);
+  const [filterRetryOnly, setFilterRetryOnly] = useState(false);
+  const [showUnusedStates, setShowUnusedStates] = useState(false);
+  const [presetSelection, setPresetSelection] = useState('');
+  const [presetDialogOpen, setPresetDialogOpen] = useState(false);
+  const [presetLoading, setPresetLoading] = useState(false);
+  const [presetError, setPresetError] = useState<string | null>(null);
+  const [pendingPreset, setPendingPreset] = useState<{ label: string; spec: WorkflowSpec } | null>(null);
+  const [loadedPresetInfo, setLoadedPresetInfo] = useState<{
+    label: string;
+    states: number;
+    transitions: number;
+  } | null>(null);
+  const [tempCatalog, setTempCatalog] = useState<FsmCatalog | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const stateNames = useMemo(() => value.states.map((state) => state.name), [value.states]);
+  const mergedCatalog = useMemo(() => mergeCatalogs(fsmCatalog, tempCatalog), [tempCatalog]);
   const canAddTransition = stateNames.length > 0;
+  const eventSuggestions = useMemo(
+    () => [...mergedCatalog.events].sort((left, right) => left.localeCompare(right)),
+    [mergedCatalog.events]
+  );
+  const catalogStateKeys = useMemo(
+    () => new Set(mergedCatalog.states.map((state) => normalizeStateKey(state))),
+    [mergedCatalog.states]
+  );
+  const catalogEventKeys = useMemo(
+    () => new Set(mergedCatalog.events.map((event) => normalizeEventKey(event))),
+    [mergedCatalog.events]
+  );
+  const catalogActionKeys = useMemo(
+    () => new Set(mergedCatalog.actions.map((action) => normalizeActionKey(action))),
+    [mergedCatalog.actions]
+  );
+  const suggestedEventChips = useMemo(() => eventSuggestions.slice(0, 10), [eventSuggestions]);
   const transitionRows = useMemo(
     () => listAllTransitions(value).map((row, index) => ({ ...row, rowIndex: index })),
     [value]
   );
+  const unusedStates = useMemo(() => {
+    const inboundCounts = new Map<string, number>();
+    const outboundCounts = new Map<string, number>();
+    transitionRows.forEach((transition) => {
+      inboundCounts.set(transition.target, (inboundCounts.get(transition.target) ?? 0) + 1);
+      outboundCounts.set(transition.from, (outboundCounts.get(transition.from) ?? 0) + 1);
+    });
+    return stateNames.filter(
+      (state) => (inboundCounts.get(state) ?? 0) === 0 && (outboundCounts.get(state) ?? 0) === 0
+    );
+  }, [stateNames, transitionRows]);
 
   useEffect(() => {
     if (!activeState || !stateNames.includes(activeState)) {
@@ -428,6 +463,10 @@ export function WorkflowTabPanels({
     }
   }, [activeState, isRenaming]);
 
+  useEffect(() => {
+    setEventSuggestionInput('');
+  }, [activeState]);
+
   const transitionErrors = useMemo(
     () =>
       transitionRows.map((transition) => ({
@@ -437,6 +476,20 @@ export function WorkflowTabPanels({
       })),
     [stateNames, transitionRows]
   );
+
+  const filteredTransitionRows = useMemo(() => {
+    let rows = transitionRows;
+    if (showOnlyCurrentState && activeState) {
+      rows = rows.filter((row) => row.from === activeState);
+    }
+    if (filterFailuresOnly) {
+      rows = rows.filter((row) => isFailureEventName(row.eventName));
+    }
+    if (filterRetryOnly) {
+      rows = rows.filter((row) => isRetryEventName(row.eventName) && row.from === row.target);
+    }
+    return rows;
+  }, [transitionRows, activeState, showOnlyCurrentState, filterFailuresOnly, filterRetryOnly]);
 
   const eventKeyCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -450,6 +503,140 @@ export function WorkflowTabPanels({
     });
     return counts;
   }, [transitionRows]);
+
+  const transitionSuggestionOptions = useMemo(() => {
+    const existingKeys = new Set(
+      transitionRows.map((transition) =>
+        buildTransitionSuggestionKey(transition.from, transition.eventName, transition.target, transition.actions)
+      )
+    );
+    const filtered = fsmSuggestions.transitions.filter((suggestion) => {
+      const key = buildTransitionSuggestionKey(suggestion.from, suggestion.event, suggestion.to, suggestion.actions);
+      return !existingKeys.has(key);
+    });
+    if (showOnlyCurrentState && activeState) {
+      return filtered.filter((suggestion) => suggestion.from === activeState);
+    }
+    return filtered;
+  }, [activeState, showOnlyCurrentState, transitionRows]);
+
+  const visibleTransitionSuggestions = useMemo(
+    () => transitionSuggestionOptions.slice(0, 6),
+    [transitionSuggestionOptions]
+  );
+  const hiddenTransitionSuggestionCount =
+    transitionSuggestionOptions.length - visibleTransitionSuggestions.length;
+
+  const searchResults = useMemo(() => {
+    const results: SearchResult[] = [];
+    const seen = new Set<string>();
+    const query = searchQuery.trim().toLowerCase();
+    const rowsForSearch = filteredTransitionRows.length ? filteredTransitionRows : transitionRows;
+
+    const addResult = (result: SearchResult) => {
+      if (seen.has(result.id)) {
+        return;
+      }
+      seen.add(result.id);
+      results.push(result);
+    };
+
+    if (query) {
+      stateNames.forEach((state) => {
+        if (!state.toLowerCase().includes(query)) {
+          return;
+        }
+        const matchRow =
+          rowsForSearch.find((row) => row.from === state) ??
+          rowsForSearch.find((row) => row.target === state) ??
+          transitionRows.find((row) => row.from === state || row.target === state);
+        if (matchRow) {
+          const field: 'from' | 'target' = matchRow.from === state ? 'from' : 'target';
+          addResult({
+            id: `state-${state}-${field}`,
+            label: `State: ${state}`,
+            detail: field === 'from' ? 'From state' : 'Target state',
+            rowKey: buildTransitionRowKey(matchRow.from, matchRow.eventName),
+            field,
+            kind: 'state'
+          });
+          return;
+        }
+        addResult({
+          id: `state-${state}-unused`,
+          label: `State: ${state}`,
+          detail: 'No transitions yet',
+          stateName: state,
+          kind: 'state'
+        });
+      });
+
+      rowsForSearch.forEach((row) => {
+        if (row.eventName.toLowerCase().includes(query)) {
+          addResult({
+            id: `event-${row.from}-${row.eventName}`,
+            label: `Event: ${row.eventName || 'Unnamed event'}`,
+            detail: `${row.from} → ${row.target}`,
+            rowKey: buildTransitionRowKey(row.from, row.eventName),
+            field: 'event',
+            kind: 'event'
+          });
+        }
+        row.actions.forEach((action) => {
+          if (!action.toLowerCase().includes(query)) {
+            return;
+          }
+          addResult({
+            id: `action-${row.from}-${row.eventName}-${action}`,
+            label: `Action: ${action}`,
+            detail: `${row.from} • ${row.eventName || 'Unnamed event'}`,
+            rowKey: buildTransitionRowKey(row.from, row.eventName),
+            field: 'actions',
+            kind: 'action'
+          });
+        });
+      });
+    }
+
+    if (showUnusedStates) {
+      unusedStates.forEach((state) => {
+        addResult({
+          id: `unused-${state}`,
+          label: `State: ${state}`,
+          detail: 'Unused state',
+          stateName: state,
+          kind: 'unused-state'
+        });
+      });
+    }
+
+    return results;
+  }, [searchQuery, stateNames, filteredTransitionRows, transitionRows, showUnusedStates, unusedStates]);
+
+  const groupedSearchResults = useMemo(() => {
+    const grouped = {
+      state: [] as SearchResult[],
+      event: [] as SearchResult[],
+      action: [] as SearchResult[],
+      unused: [] as SearchResult[]
+    };
+    searchResults.forEach((result) => {
+      if (result.kind === 'unused-state') {
+        grouped.unused.push(result);
+        return;
+      }
+      if (result.kind === 'state') {
+        grouped.state.push(result);
+        return;
+      }
+      if (result.kind === 'event') {
+        grouped.event.push(result);
+        return;
+      }
+      grouped.action.push(result);
+    });
+    return grouped;
+  }, [searchResults]);
 
   const buildUniqueEventName = (from: string, baseEventName: string) => {
     const normalizedExisting = new Set(
@@ -485,7 +672,13 @@ export function WorkflowTabPanels({
     if (!current) {
       return;
     }
-    const next = { ...current, ...patch };
+    const next: WorkflowTransitionRow = { ...current, ...patch };
+    if (patch.eventName !== undefined && patch.actions === undefined && current.actions.length === 0) {
+      const suggestedActions = getSuggestedActionsForEvent(next.eventName, mergedCatalog);
+      if (suggestedActions.length) {
+        next.actions = suggestedActions;
+      }
+    }
     let nextSpec = value;
     if (current.from !== next.from || current.eventName !== next.eventName) {
       nextSpec = deleteTransition(nextSpec, current.from, current.eventName);
@@ -538,12 +731,13 @@ export function WorkflowTabPanels({
     onChange(nextSpec);
   };
 
-  const handleAddEvent = () => {
+  const handleAddEvent = (candidate?: string) => {
     const from = activeState || stateNames[0];
     if (!from) {
       return;
     }
-    const eventName = resolveEventName(from, 'NEW_EVENT');
+    const baseName = candidate?.trim() ? candidate.trim() : 'NEW_EVENT';
+    const eventName = resolveEventName(from, baseName);
     const nextSpec = upsertTransition(value, from, eventName, { target: from, actions: [] });
     onChange(nextSpec);
   };
@@ -597,6 +791,172 @@ export function WorkflowTabPanels({
     onChange(removeStateFromSpec(value, activeState));
   };
 
+  const focusTransitionRow = (rowKey: string, field?: 'from' | 'event' | 'target' | 'actions') => {
+    const row = document.querySelector<HTMLElement>(`[data-transition-row="${rowKey}"]`);
+    if (!row) {
+      return;
+    }
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (!field) {
+      return;
+    }
+    const fieldContainer = row.querySelector<HTMLElement>(`[data-transition-field="${field}"]`);
+    if (!fieldContainer) {
+      return;
+    }
+    const focusTarget =
+      fieldContainer.querySelector<HTMLElement>('input, textarea, [role="button"]') ?? fieldContainer;
+    focusTarget.focus();
+  };
+
+  const focusStateChip = (stateName: string) => {
+    const key = buildStateChipKey(stateName);
+    const chip = document.querySelector<HTMLElement>(`[data-state-chip="${key}"]`);
+    if (!chip) {
+      return;
+    }
+    chip.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    chip.focus();
+  };
+
+  const buildReplaceSpec = (incoming: WorkflowSpec): WorkflowSpec => {
+    const startState =
+      incoming.startState && incoming.states.some((state) => state.name === incoming.startState)
+        ? incoming.startState
+        : incoming.states[0]?.name ?? '';
+    return {
+      ...value,
+      ...incoming,
+      workflowKey: value.workflowKey,
+      statesClass: incoming.statesClass ?? value.statesClass,
+      eventsClass: incoming.eventsClass ?? value.eventsClass,
+      startState
+    };
+  };
+
+  const mergeWorkflowSpec = (base: WorkflowSpec, incoming: WorkflowSpec): WorkflowSpec => {
+    const mergedStates: StateSpec[] = base.states.map((state) => ({
+      name: state.name,
+      onEvent: { ...state.onEvent }
+    }));
+    const stateIndex = new Map(mergedStates.map((state, index) => [state.name, index]));
+
+    incoming.states.forEach((state) => {
+      const index = stateIndex.get(state.name);
+      if (index === undefined) {
+        stateIndex.set(state.name, mergedStates.length);
+        mergedStates.push({
+          name: state.name,
+          onEvent: { ...state.onEvent }
+        });
+        return;
+      }
+      const existing = mergedStates[index];
+      Object.entries(state.onEvent ?? {}).forEach(([eventName, transition]) => {
+        if (existing.onEvent[eventName]) {
+          return;
+        }
+        existing.onEvent[eventName] = transition;
+      });
+    });
+
+    return {
+      ...base,
+      statesClass: base.statesClass ?? incoming.statesClass,
+      eventsClass: base.eventsClass ?? incoming.eventsClass,
+      startState: base.startState ?? incoming.startState,
+      states: mergedStates
+    };
+  };
+
+  const buildCatalogFromSpec = (spec: WorkflowSpec): FsmCatalog => {
+    const states = spec.states.map((state) => state.name);
+    const events: string[] = [];
+    const actions: string[] = [];
+    spec.states.forEach((state) => {
+      Object.entries(state.onEvent ?? {}).forEach(([eventName, transition]) => {
+        events.push(eventName);
+        transition.actions?.forEach((action) => actions.push(action));
+      });
+    });
+    return {
+      states,
+      events,
+      actions
+    };
+  };
+
+  const handleImportYaml = async (file: File) => {
+    setPresetError(null);
+    try {
+      const yamlText = await file.text();
+      const spec = parseFsmYamlToSpec(yamlText);
+      const importedCatalog = buildCatalogFromSpec(spec);
+      setTempCatalog((prev) => mergeCatalogs(prev ?? { states: [], events: [], actions: [] }, importedCatalog));
+      setPendingPreset({ label: `Imported: ${file.name}`, spec });
+      setPresetDialogOpen(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to import YAML.';
+      setPresetError(message);
+    }
+  };
+
+  const handleImportInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    void handleImportYaml(file);
+    event.target.value = '';
+  };
+
+  const handlePresetSelect = async (presetId: string) => {
+    setPresetSelection(presetId);
+    setPresetError(null);
+    if (!presetId) {
+      return;
+    }
+    const preset = FSM_PRESETS.find((item) => item.id === presetId);
+    if (!preset) {
+      setPresetSelection('');
+      return;
+    }
+    setPresetLoading(true);
+    try {
+      const yamlText = await loadPresetYaml(preset.url);
+      const spec = parseFsmYamlToSpec(yamlText);
+      setPendingPreset({ label: preset.label, spec });
+      setPresetDialogOpen(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load preset.';
+      setPresetError(message);
+    } finally {
+      setPresetLoading(false);
+      setPresetSelection('');
+    }
+  };
+
+  const applyPreset = (mode: 'replace' | 'merge') => {
+    if (!pendingPreset) {
+      return;
+    }
+    const incoming = pendingPreset.spec;
+    const nextSpec = mode === 'replace' ? buildReplaceSpec(incoming) : mergeWorkflowSpec(value, incoming);
+    onChange(nextSpec);
+    setLoadedPresetInfo({
+      label: pendingPreset.label,
+      states: nextSpec.states.length,
+      transitions: listAllTransitions(nextSpec).length
+    });
+    setPendingPreset(null);
+    setPresetDialogOpen(false);
+  };
+
+  const closePresetDialog = () => {
+    setPresetDialogOpen(false);
+    setPendingPreset(null);
+  };
+
   const handleAddTransition = (fromOverride?: string) => {
     if (!canAddTransition) {
       return;
@@ -607,8 +967,112 @@ export function WorkflowTabPanels({
     onChange(nextSpec);
   };
 
+  const handleApplySuggestedTransition = (suggestion: FsmTransitionSuggestion) => {
+    const from = suggestion.from.trim();
+    const target = suggestion.to.trim();
+    const eventName = suggestion.event.trim();
+    if (!from || !target || !eventName) {
+      return;
+    }
+    let nextSpec = value;
+    const existingStateSet = new Set(nextSpec.states.map((state) => state.name));
+    const ensureState = (stateName: string) => {
+      if (existingStateSet.has(stateName)) {
+        return;
+      }
+      existingStateSet.add(stateName);
+      nextSpec = {
+        ...nextSpec,
+        states: [...nextSpec.states, { name: stateName, onEvent: {} }]
+      };
+    };
+    ensureState(from);
+    ensureState(target);
+    const resolvedEventName = resolveEventName(from, eventName);
+    nextSpec = upsertTransition(nextSpec, from, resolvedEventName, {
+      target,
+      actions: suggestion.actions
+    });
+    onChange(nextSpec);
+    setActiveState(from);
+  };
+
   const stateRows = transitionRows.filter((row) => row.from === activeState);
   const yamlPreview = useMemo(() => generateFsmYaml(value), [value]);
+  const yamlLines = useMemo(() => yamlPreview.split('\n'), [yamlPreview]);
+  const knownTokenSx = { color: 'success.dark', fontWeight: 600 } as const;
+  const customTokenSx = { color: 'warning.dark', fontWeight: 600 } as const;
+
+  const renderYamlLine = (line: string, index: number) => {
+    const stateMatch = line.match(/^ {2}([^:]+):\s*$/);
+    if (stateMatch) {
+      const stateName = stateMatch[1];
+      const isKnown = catalogStateKeys.has(normalizeStateKey(stateName));
+      return (
+        <Box key={`yaml-line-${index}`} component="span" sx={{ display: 'block' }}>
+          {'  '}
+          <Box component="span" sx={isKnown ? knownTokenSx : customTokenSx}>
+            {stateName}
+          </Box>
+          {':'}
+        </Box>
+      );
+    }
+
+    const eventMatch = line.match(/^ {6}([^:]+):\s*$/);
+    if (eventMatch) {
+      const eventName = eventMatch[1];
+      const isKnown = catalogEventKeys.has(normalizeEventKey(eventName));
+      return (
+        <Box key={`yaml-line-${index}`} component="span" sx={{ display: 'block' }}>
+          {'      '}
+          <Box component="span" sx={isKnown ? knownTokenSx : customTokenSx}>
+            {eventName}
+          </Box>
+          {':'}
+        </Box>
+      );
+    }
+
+    const actionsMatch = line.match(/^ {8}actions:\s*\[(.*)\]\s*$/);
+    if (actionsMatch) {
+      const actionsValue = actionsMatch[1].trim();
+      if (!actionsValue) {
+        return (
+          <Box key={`yaml-line-${index}`} component="span" sx={{ display: 'block' }}>
+            {line}
+          </Box>
+        );
+      }
+      const actions = actionsValue
+        .split(',')
+        .map((action) => action.trim())
+        .filter(Boolean);
+      return (
+        <Box key={`yaml-line-${index}`} component="span" sx={{ display: 'block' }}>
+          {'        actions: [ '}
+          {actions.map((action, actionIndex) => {
+            const isKnown = catalogActionKeys.has(normalizeActionKey(action));
+            return (
+              <Box component="span" key={`${action}-${actionIndex}`}>
+                <Box component="span" sx={isKnown ? knownTokenSx : customTokenSx}>
+                  {action}
+                </Box>
+                {actionIndex < actions.length - 1 ? ', ' : ''}
+              </Box>
+            );
+          })}
+          {' ]'}
+        </Box>
+      );
+    }
+
+    return (
+      <Box key={`yaml-line-${index}`} component="span" sx={{ display: 'block' }}>
+        {line}
+      </Box>
+    );
+  };
 
   const renderTransitionTable = (rows: TransitionRow[], showFrom: boolean, emptyLabel: string) => (
     <Stack spacing={1}>
@@ -644,7 +1108,7 @@ export function WorkflowTabPanels({
                   data-transition-row={rowKey}
                 >
                   {showFrom ? (
-                    <TableCell>
+                    <TableCell data-transition-field="from">
                       <TextField
                         select
                         size="small"
@@ -665,17 +1129,62 @@ export function WorkflowTabPanels({
                     </TableCell>
                   ) : null}
                   <TableCell data-transition-field="event">
-                    <TextField
-                      size="small"
+                    {(() => {
+                      const normalizedEvent = normalizeEventKey(transition.eventName);
+                      const isCustomEvent = Boolean(normalizedEvent) && !catalogEventKeys.has(normalizedEvent);
+                      const showRetryHint = normalizedEvent === 'ONRETRY';
+                      const helperText = eventError ? eventHelper : isCustomEvent ? 'Custom event (not in catalog)' : ' ';
+                      const contextualEvents = getSuggestedEventsForState(transition.from, mergedCatalog);
+                      const contextualEventSet = new Set(contextualEvents.map((event) => normalizeEventKey(event)));
+                      const eventOptions = [
+                        ...contextualEvents,
+                        ...eventSuggestions.filter((event) => !contextualEventSet.has(normalizeEventKey(event)))
+                      ];
+                      return (
+                    <Autocomplete
+                      freeSolo
+                      options={eventOptions}
+                      groupBy={groupEventSuggestion}
                       value={transition.eventName}
-                      onChange={(event) =>
-                        handleUpdateTransitionRow(transition.rowIndex, { eventName: event.target.value })
-                      }
-                      placeholder={`VALIDATE or ${retryEventName}`}
-                      error={eventError}
-                      helperText={eventError ? eventHelper : ' '}
-                      fullWidth
+                      inputValue={transition.eventName}
+                      onInputChange={(_, nextValue, reason) => {
+                        if (reason === 'input' || reason === 'clear') {
+                          handleUpdateTransitionRow(transition.rowIndex, { eventName: nextValue });
+                        }
+                      }}
+                      onChange={(_, nextValue) => {
+                        if (typeof nextValue === 'string') {
+                          handleUpdateTransitionRow(transition.rowIndex, { eventName: nextValue });
+                        }
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          size="small"
+                          placeholder={`VALIDATE or ${retryEventName}`}
+                          error={eventError}
+                          helperText={helperText}
+                          InputProps={{
+                            ...params.InputProps,
+                            endAdornment: (
+                              <>
+                                {showRetryHint ? (
+                                  <InputAdornment position="end">
+                                    <Tooltip title="Used for retry loops — typically target same state.">
+                                      <InfoOutlinedIcon fontSize="small" color="action" />
+                                    </Tooltip>
+                                  </InputAdornment>
+                                ) : null}
+                                {params.InputProps.endAdornment}
+                              </>
+                            )
+                          }}
+                          fullWidth
+                        />
+                      )}
                     />
+                      );
+                    })()}
                   </TableCell>
                   <TableCell data-transition-field="target">
                     <TextField
@@ -697,8 +1206,9 @@ export function WorkflowTabPanels({
                       </TextField>
                     </TableCell>
                   <TableCell data-transition-field="actions">
-                    <ActionMultiSelect
+                    <ActionsMultiSelect
                       value={transition.actions}
+                      options={mergedCatalog.actions}
                       onChange={(next) => handleUpdateTransitionRow(transition.rowIndex, { actions: next })}
                     />
                   </TableCell>
@@ -739,6 +1249,13 @@ export function WorkflowTabPanels({
         alignItems={{ xs: 'stretch', sm: 'center' }}
         justifyContent="space-between"
       >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".yaml,.yml"
+          onChange={handleImportInputChange}
+          style={{ display: 'none' }}
+        />
         <Button
           variant="outlined"
           startIcon={<AddIcon />}
@@ -747,72 +1264,324 @@ export function WorkflowTabPanels({
         >
           {showFrom ? 'Add Transition' : 'Add Event'}
         </Button>
-        {showFrom ? <WorkflowPresetsControl value={value} onChange={onChange} size="small" /> : null}
+        {showFrom ? (
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'stretch', sm: 'center' }}>
+            <Button
+              variant="outlined"
+              onClick={() => fileInputRef.current?.click()}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              Import FSM YAML
+            </Button>
+            <TextField
+              select
+              size="small"
+              label="Load Example FSM"
+              value={presetSelection}
+              onChange={(event) => handlePresetSelect(event.target.value)}
+              sx={{ minWidth: 260 }}
+              disabled={presetLoading || FSM_PRESETS.length === 0}
+            >
+              <MenuItem value="" disabled>
+                Select preset
+              </MenuItem>
+              {FSM_PRESETS.map((preset) => (
+                <MenuItem key={preset.id} value={preset.id}>
+                  {preset.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        ) : null}
       </Stack>
     </Stack>
   );
 
   if (activeTab === 'transitions') {
-    const filteredRows = showOnlyCurrentState
-      ? transitionRows.filter((row) => row.from === activeState)
-      : transitionRows;
+    const filteredRows = filteredTransitionRows;
+    const emptyLabel =
+      filterFailuresOnly || filterRetryOnly
+        ? 'No transitions match the current filters.'
+        : showOnlyCurrentState
+          ? 'No transitions configured for this state yet.'
+          : 'No transitions configured yet.';
+    const showSearchResults = searchQuery.trim().length > 0 || showUnusedStates;
+    const handleResultClick = (result: SearchResult) => {
+      if (result.rowKey && result.field) {
+        focusTransitionRow(result.rowKey, result.field);
+        return;
+      }
+      if (result.stateName) {
+        focusStateChip(result.stateName);
+      }
+    };
     return (
-      <Stack spacing={1.5}>
-        <Stack
-          direction={{ xs: 'column', lg: 'row' }}
-          spacing={1}
-          alignItems={{ xs: 'stretch', lg: 'center' }}
-          justifyContent="space-between"
-        >
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Button size="small" variant="outlined" onClick={() => handleQuickAdd('success')}>
-              Add Success Event
-            </Button>
-            <Button size="small" variant="outlined" onClick={() => handleQuickAdd('failureRecoverable')}>
-              Add Failure (Recoverable)
-            </Button>
-            <Button size="small" variant="outlined" onClick={() => handleQuickAdd('failureNotRecoverable')}>
-              Add Failure (NotRecoverable)
-            </Button>
-            <Button size="small" variant="outlined" onClick={() => handleQuickAdd('retry')}>
-              Add OnRetry
-            </Button>
-          </Stack>
-          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-            <FormControlLabel
-              sx={{ m: 0 }}
-              control={
-                <Switch
-                  size="small"
-                  checked={showOnlyCurrentState}
-                  onChange={(_, checked) => setShowOnlyCurrentState(checked)}
-                />
-              }
-              label="Show only current state"
-            />
-            <TextField
-              select
-              size="small"
-              label="Current state"
-              value={activeState}
-              onChange={(event) => setActiveState(event.target.value)}
-              sx={{ minWidth: 200 }}
-              disabled={!stateNames.length}
+      <>
+        <Stack direction={{ xs: 'column', xl: 'row' }} spacing={2} alignItems="flex-start">
+          <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+            <Stack
+              direction={{ xs: 'column', lg: 'row' }}
+              spacing={1}
+              alignItems={{ xs: 'stretch', lg: 'center' }}
+              justifyContent="space-between"
             >
-              {stateNames.map((state) => (
-                <MenuItem key={state} value={state}>
-                  {state}
-                </MenuItem>
-              ))}
-            </TextField>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Button size="small" variant="outlined" onClick={() => handleQuickAdd('success')}>
+                  Add Success Event
+                </Button>
+                <Button size="small" variant="outlined" onClick={() => handleQuickAdd('failureRecoverable')}>
+                  Add Failure (Recoverable)
+                </Button>
+                <Button size="small" variant="outlined" onClick={() => handleQuickAdd('failureNotRecoverable')}>
+                  Add Failure (NotRecoverable)
+                </Button>
+                <Button size="small" variant="outlined" onClick={() => handleQuickAdd('retry')}>
+                  Add OnRetry
+                </Button>
+              </Stack>
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <FormControlLabel
+                  sx={{ m: 0 }}
+                  control={
+                    <Switch
+                      size="small"
+                      checked={showOnlyCurrentState}
+                      onChange={(_, checked) => setShowOnlyCurrentState(checked)}
+                    />
+                  }
+                  label="Show only current state"
+                />
+                <TextField
+                  select
+                  size="small"
+                  label="Current state"
+                  value={activeState}
+                  onChange={(event) => setActiveState(event.target.value)}
+                  sx={{ minWidth: 200 }}
+                  disabled={!stateNames.length}
+                >
+                  {stateNames.map((state) => (
+                    <MenuItem key={state} value={state}>
+                      {state}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Stack>
+            </Stack>
+            {loadedPresetInfo ? (
+              <Alert severity="success">
+                Loaded preset: {loadedPresetInfo.label} | States: {loadedPresetInfo.states} | Transitions:{' '}
+                {loadedPresetInfo.transitions}
+              </Alert>
+            ) : null}
+            {presetError ? <Alert severity="error">{presetError}</Alert> : null}
+            {visibleTransitionSuggestions.length ? (
+              <Paper variant="outlined" sx={{ p: 1.5 }}>
+                <Stack spacing={1}>
+                  <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" flexWrap="wrap">
+                    <Typography variant="subtitle2">Suggested transitions</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {hiddenTransitionSuggestionCount > 0
+                        ? `Showing top ${visibleTransitionSuggestions.length} of ${transitionSuggestionOptions.length}`
+                        : `${transitionSuggestionOptions.length} suggestion(s) from the FSM catalog`}
+                    </Typography>
+                  </Stack>
+                  {visibleTransitionSuggestions.map((suggestion) => (
+                    <Stack
+                      key={buildTransitionSuggestionKey(
+                        suggestion.from,
+                        suggestion.event,
+                        suggestion.to,
+                        suggestion.actions
+                      )}
+                      direction={{ xs: 'column', md: 'row' }}
+                      spacing={1}
+                      alignItems={{ xs: 'flex-start', md: 'center' }}
+                      justifyContent="space-between"
+                    >
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Chip size="small" label={`From: ${suggestion.from}`} />
+                        <Chip size="small" label={`On: ${suggestion.event}`} />
+                        <Chip size="small" label={`To: ${suggestion.to}`} />
+                        {suggestion.actions.length ? (
+                          suggestion.actions.map((action) => (
+                            <Chip key={`${suggestion.from}-${suggestion.event}-${action}`} size="small" label={action} />
+                          ))
+                        ) : (
+                          <Chip size="small" variant="outlined" label="Actions: none" />
+                        )}
+                      </Stack>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography variant="caption" color="text.secondary">
+                          {suggestion.count} FSM{suggestion.count === 1 ? '' : 's'}
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => handleApplySuggestedTransition(suggestion)}
+                        >
+                          Add transition
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  ))}
+                </Stack>
+              </Paper>
+            ) : null}
+            {renderTransitionTable(filteredRows, true, emptyLabel)}
           </Stack>
+          <Paper variant="outlined" sx={{ p: 2, width: { xs: '100%', xl: 320 }, flexShrink: 0 }}>
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2">Search & Filters</Typography>
+              <TextField
+                size="small"
+                placeholder="Search states, events, actions"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                  )
+                }}
+              />
+              <Divider />
+              <Typography variant="subtitle2">Quick filters</Typography>
+              <FormControlLabel
+                sx={{ m: 0 }}
+                control={
+                  <Switch
+                    size="small"
+                    checked={filterFailuresOnly}
+                    onChange={(_, checked) => setFilterFailuresOnly(checked)}
+                  />
+                }
+                label="Show only failure transitions"
+              />
+              <FormControlLabel
+                sx={{ m: 0 }}
+                control={
+                  <Switch
+                    size="small"
+                    checked={filterRetryOnly}
+                    onChange={(_, checked) => setFilterRetryOnly(checked)}
+                  />
+                }
+                label="Show retry loops"
+              />
+              <FormControlLabel
+                sx={{ m: 0 }}
+                control={
+                  <Switch
+                    size="small"
+                    checked={showUnusedStates}
+                    onChange={(_, checked) => setShowUnusedStates(checked)}
+                  />
+                }
+                label="Show unused states"
+              />
+              <Divider />
+              <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                <Typography variant="subtitle2">Results</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+                </Typography>
+              </Stack>
+              {showSearchResults ? (
+                <Stack spacing={1}>
+                  {groupedSearchResults.unused.length ? (
+                    <Stack spacing={0.5}>
+                      <Typography variant="caption" color="text.secondary">
+                        Unused states
+                      </Typography>
+                      <List dense>
+                        {groupedSearchResults.unused.map((result) => (
+                          <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
+                            <ListItemText primary={result.label} secondary={result.detail} />
+                          </ListItemButton>
+                        ))}
+                      </List>
+                    </Stack>
+                  ) : null}
+                  {groupedSearchResults.state.length ? (
+                    <Stack spacing={0.5}>
+                      <Typography variant="caption" color="text.secondary">
+                        States
+                      </Typography>
+                      <List dense>
+                        {groupedSearchResults.state.map((result) => (
+                          <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
+                            <ListItemText primary={result.label} secondary={result.detail} />
+                          </ListItemButton>
+                        ))}
+                      </List>
+                    </Stack>
+                  ) : null}
+                  {groupedSearchResults.event.length ? (
+                    <Stack spacing={0.5}>
+                      <Typography variant="caption" color="text.secondary">
+                        Events
+                      </Typography>
+                      <List dense>
+                        {groupedSearchResults.event.map((result) => (
+                          <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
+                            <ListItemText primary={result.label} secondary={result.detail} />
+                          </ListItemButton>
+                        ))}
+                      </List>
+                    </Stack>
+                  ) : null}
+                  {groupedSearchResults.action.length ? (
+                    <Stack spacing={0.5}>
+                      <Typography variant="caption" color="text.secondary">
+                        Actions
+                      </Typography>
+                      <List dense>
+                        {groupedSearchResults.action.map((result) => (
+                          <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
+                            <ListItemText primary={result.label} secondary={result.detail} />
+                          </ListItemButton>
+                        ))}
+                      </List>
+                    </Stack>
+                  ) : null}
+                  {searchResults.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      No matching results.
+                    </Typography>
+                  ) : null}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Enter a search term to scan states, events, and actions.
+                </Typography>
+              )}
+            </Stack>
+          </Paper>
         </Stack>
-        {renderTransitionTable(
-          filteredRows,
-          true,
-          showOnlyCurrentState ? 'No transitions configured for this state yet.' : 'No transitions configured yet.'
-        )}
-      </Stack>
+        <Dialog open={presetDialogOpen} onClose={closePresetDialog} maxWidth="sm" fullWidth>
+          <DialogTitle>Apply FSM</DialogTitle>
+          <DialogContent>
+            <Stack spacing={1.5}>
+              <Typography variant="body2">Apply &quot;{pendingPreset?.label}&quot; to the workflow editor.</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Replace will overwrite the current states and transitions. Merge will add new states and transitions
+                without overwriting existing events.
+              </Typography>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closePresetDialog}>Cancel</Button>
+            <Button variant="outlined" onClick={() => applyPreset('merge')} disabled={!pendingPreset}>
+              Merge
+            </Button>
+            <Button variant="contained" onClick={() => applyPreset('replace')} disabled={!pendingPreset}>
+              Replace
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </>
     );
   }
 
@@ -903,11 +1672,38 @@ export function WorkflowTabPanels({
                   State has inbound references and cannot be deleted.
                 </Typography>
               ) : null}
-
               <Stack spacing={1}>
                 <Typography variant="subtitle2">on_event</Typography>
                 <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'stretch', md: 'center' }}>
-                  <Button size="small" variant="outlined" onClick={handleAddEvent}>
+                  <Autocomplete
+                    freeSolo
+                    options={eventSuggestions}
+                    inputValue={eventSuggestionInput}
+                    onInputChange={(_, nextValue) => setEventSuggestionInput(nextValue)}
+                    onChange={(_, nextValue) => {
+                      if (typeof nextValue === 'string' && nextValue.trim()) {
+                        handleAddEvent(nextValue);
+                        setEventSuggestionInput('');
+                      }
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        size="small"
+                        label="Suggested event"
+                        placeholder="Select or type event"
+                      />
+                    )}
+                    sx={{ minWidth: 220 }}
+                  />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      handleAddEvent(eventSuggestionInput);
+                      setEventSuggestionInput('');
+                    }}
+                  >
                     Add event
                   </Button>
                   <TextField
@@ -927,6 +1723,25 @@ export function WorkflowTabPanels({
                     <MenuItem value="retry">OnRetry</MenuItem>
                   </TextField>
                 </Stack>
+                {suggestedEventChips.length ? (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Suggested events from the FSM catalog
+                    </Typography>
+                    <Stack direction="row" gap={1} flexWrap="wrap">
+                      {suggestedEventChips.map((eventName) => (
+                        <Chip
+                          key={eventName}
+                          label={eventName}
+                          size="small"
+                          variant="outlined"
+                          icon={<AddIcon fontSize="small" />}
+                          onClick={() => handleAddEvent(eventName)}
+                        />
+                      ))}
+                    </Stack>
+                  </Stack>
+                ) : null}
 
                 {eventEntries.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
@@ -967,8 +1782,9 @@ export function WorkflowTabPanels({
                                 </MenuItem>
                               ))}
                             </TextField>
-                            <ActionMultiSelect
+                            <ActionsMultiSelect
                               value={transition.actions ?? []}
+                              options={mergedCatalog.actions}
                               onChange={(next) =>
                                 onChange(
                                   upsertTransition(value, selectedState.name, eventName, {
@@ -1048,15 +1864,43 @@ export function WorkflowTabPanels({
           </Stack>
         </Stack>
         <Divider />
-        <TextField
-          value={yamlPreview}
-          multiline
-          minRows={12}
-          InputProps={{
-            readOnly: true,
-            sx: { fontFamily: '"IBM Plex Mono", "Cascadia Mono", "Courier New", monospace', fontSize: 13 }
-          }}
-        />
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="flex-start">
+          <Box
+            sx={{
+              flex: 1,
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+              px: 1.5,
+              py: 1,
+              minHeight: 240,
+              backgroundColor: 'background.paper'
+            }}
+          >
+            <Box
+              component="pre"
+              sx={{
+                m: 0,
+                fontFamily: '"IBM Plex Mono", "Cascadia Mono", "Courier New", monospace',
+                fontSize: 13,
+                whiteSpace: 'pre'
+              }}
+            >
+              {yamlLines.map((line, index) => renderYamlLine(line, index))}
+            </Box>
+          </Box>
+          <Stack spacing={1} sx={{ minWidth: 200 }}>
+            <Typography variant="subtitle2">Legend</Typography>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: 'success.main' }} />
+              <Typography variant="body2">Known FSM element</Typography>
+            </Stack>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: 'warning.main' }} />
+              <Typography variant="body2">Custom element</Typography>
+            </Stack>
+          </Stack>
+        </Stack>
       </Stack>
     </Paper>
   );

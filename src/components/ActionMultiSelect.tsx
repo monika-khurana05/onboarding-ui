@@ -1,37 +1,32 @@
 import { Autocomplete, Chip, TextField } from '@mui/material';
 
-const actionCatalog = [
-  'persist-txn',
-  'notify-bd-error',
-  'notify-bd-intermediate',
-  'reset-mtp',
-  'initiate-psp-enrichment',
-  'do-spm-check',
-  'send-sanctions-request',
-  'queue-retry',
-  'emit-state-change',
-  'publish-clearing-event'
-];
-
 type ActionMultiSelectProps = {
   value: string[];
+  options: string[];
   onChange: (next: string[]) => void;
+  placeholder?: string;
 };
 
-export function ActionMultiSelect({ value, onChange }: ActionMultiSelectProps) {
+export function ActionMultiSelect({
+  value,
+  options,
+  onChange,
+  placeholder = 'Select or type actions'
+}: ActionMultiSelectProps) {
   return (
     <Autocomplete
       multiple
-      options={actionCatalog}
+      freeSolo
+      options={options}
       value={value}
-      onChange={(_, next) => onChange(next)}
+      onChange={(_, next) => onChange(next.map((option) => String(option).trim()).filter(Boolean))}
       filterSelectedOptions
       renderTags={(tagValue, getTagProps) =>
         tagValue.map((option, index) => (
           <Chip label={option} {...getTagProps({ index })} key={option} size="small" />
         ))
       }
-      renderInput={(params) => <TextField {...params} size="small" placeholder="Select actions" />}
+      renderInput={(params) => <TextField {...params} size="small" placeholder={placeholder} />}
       fullWidth
     />
   );

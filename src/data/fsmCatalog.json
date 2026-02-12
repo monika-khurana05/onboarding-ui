@@ -1,0 +1,47 @@
+{
+  "states": [
+    "Init",
+    "BankCodeEnrichment",
+    "PspEnrichment",
+    "SpnCheck",
+    "SpnSent",
+    "SanctionsSent",
+    "TxnRejectedSpnInvalid",
+    "DuplicatePayment",
+    "BankInvalid",
+    "PspInvalid"
+  ],
+  "events": [
+    "DupCheckCompleted",
+    "DupCheckPassed",
+    "DupCheckFailed",
+    "BankCodeEnrichmentSuccessful",
+    "BankCodeEnrichmentFailed",
+    "PspEnrichmentSuccessful",
+    "PspEnrichmentFailed",
+    "EnrichmentFailureRecoverable",
+    "EnrichmentFailureNotRecoverable",
+    "SpnEnabled",
+    "SpnDisabled",
+    "SpnEnrichmentSuccessful",
+    "SpnEnrichmentError",
+    "SpnEnrichmentFailed",
+    "OnRetry"
+  ],
+  "actions": [
+    "persist-txn",
+    "notify-bd-error",
+    "notify-bd-intermediate",
+    "reset-mtp",
+    "initiate-psp-enrichment",
+    "initiate-bank-code-enrichment",
+    "process-psp-enrichment-failure",
+    "process-bank-enrichment-failure",
+    "do-spm-check",
+    "send-sanctions-request",
+    "save-spm-result",
+    "save-spm-error-result",
+    "save-spm-failed-result",
+    "clearing-final-nack-ar-outgoing"
+  ]
+}

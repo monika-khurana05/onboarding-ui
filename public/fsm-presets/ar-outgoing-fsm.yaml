@@ -1,0 +1,79 @@
+# Placeholder Argentina Outgoing FSM (from screenshots)
+# Replace later with the real ar-outgoing-fsm.yaml from repo.
+# UI will load this at runtime from /fsm-presets/ar-outgoing-fsm.yaml
+
+statesClass: com.citi.cpx.statemanager.fsm.State
+eventsClass: com.citi.cpx.statemanager.fsm.Event
+
+states:
+  Init:
+    on_event:
+      DupCheckCompleted:
+        actions: [ on-dup-check-completed ]
+        target: Init
+      DupCheckPassed:
+        actions: [ on-dup-check-passed, initiate-bank-code-enrichment ]
+        target: BankCodeEnrichment
+      DupCheckFailed:
+        actions: [ on-dup-check-failed, persist-txn, notify-bd-error ]
+        target: DuplicatePayment
+
+  BankCodeEnrichment:
+    on_event:
+      BankCodeEnrichmentSuccessful:
+        target: PspEnrichment
+        actions: [ initiate-psp-enrichment ]
+      BankCodeEnrichmentFailed:
+        target: BankCodeEnrichment
+        actions: [ process-bank-enrichment-failure-ar-outgoing ]
+      EnrichmentFailureRecoverable:
+        target: BankInvalid
+        actions: [ process-bank-enrichment-failure, persist-txn, notify-bd-error ]
+      EnrichmentFailureNotRecoverable:
+        target: TxnRejectedBankInvalid
+        actions: [ clearing-final-nack-ar-outgoing, persist-txn, notify-bd-error ]
+      OnRetry:
+        actions: [ reset-mtp, initiate-bank-code-enrichment ]
+        target: BankCodeEnrichment
+
+  PspEnrichment:
+    on_event:
+      PspEnrichmentSuccessful:
+        target: SpnCheck
+        actions: [ do-spm-check ]
+      PspEnrichmentFailed:
+        target: PspEnrichment
+        actions: [ process-psp-enrichment-failure-ar-outgoing ]
+      EnrichmentFailureRecoverable:
+        target: PspInvalid
+        actions: [ process-psp-enrichment-failure, persist-txn, notify-bd-error ]
+      EnrichmentFailureNotRecoverable:
+        target: TxnRejectedPspInvalid
+        actions: [ clearing-final-nack-ar-outgoing, persist-txn, notify-bd-error ]
+      OnRetry:
+        actions: [ reset-mtp, initiate-psp-enrichment ]
+        target: PspEnrichment
+
+  SpnCheck:
+    on_event:
+      SpnEnabled:
+        target: SpnSent
+        actions: [ do-pre-sanctions-enrichment, persist-txn ]
+      SpnDisabled:
+        target: SanctionsSent
+        actions: [ send-sanctions-request, persist-txn, notify-bd-intermediate ]
+
+  SpnSent:
+    on_event:
+      SpnEnrichmentSuccessful:
+        target: PreSanctionsResultCheck
+        actions: [ save-spm-result, process-spm-result ]
+      SpnEnrichmentError:
+        target: SpnError
+        actions: [ save-spm-error-result, persist-txn, notify-bd-error ]
+      SpnEnrichmentFailed:
+        target: SpnFailed
+        actions: [ save-spm-failed-result, persist-txn, notify-bd-error ]
+      OnRetry:
+        target: SpnSent
+        actions: [ reset-mtp, do-pre-sanctions-enrichment, persist-txn ]
