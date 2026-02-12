@@ -4,8 +4,8 @@ import type { GraphEdge, GraphNode } from './toGraph';
 export type LayoutDirection = 'LR' | 'TB';
 
 export const DEFAULT_NODE_SIZE = {
-  width: 180,
-  height: 44
+  width: 140,
+  height: 140
 };
 
 export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[], direction: LayoutDirection = 'LR'): GraphNode[] {
@@ -13,11 +13,11 @@ export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[], direction: L
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
     rankdir: direction,
-    ranksep: 220,
-    nodesep: 120,
-    edgesep: 90,
-    marginx: 110,
-    marginy: 80
+    ranksep: 260,
+    nodesep: 160,
+    edgesep: 110,
+    marginx: 140,
+    marginy: 120
   });
 
   nodes.forEach((node) => {
