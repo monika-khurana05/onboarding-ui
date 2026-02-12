@@ -109,7 +109,7 @@ function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
     return {
       nodeBg: isDark ? '#111827' : '#E2E8F0',
       nodeBorder: isDark ? '#334155' : '#94A3B8',
-      nodeText: isDark ? '#F8FAFC' : '#0F172A',
+      nodeText: theme.palette.primary.main,
       edge: isDark ? '#CBD5E1' : '#475569',
       labelBg: isDark ? '#F8FAFC' : '#0F172A',
       labelText: isDark ? '#0F172A' : '#F8FAFC',

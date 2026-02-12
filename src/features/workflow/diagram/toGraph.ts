@@ -24,11 +24,15 @@ type TransitionRow = ReturnType<typeof listAllTransitions>[number];
 
 function buildEdgeLabel(transition: TransitionRow): string {
   const base = transition.eventName || '';
-  const actionCount = transition.actions?.length ?? 0;
-  if (actionCount > 0) {
-    return `${base} \u2022 (${actionCount} action${actionCount === 1 ? '' : 's'})`;
+  const actions = transition.actions?.filter((action) => action.trim()) ?? [];
+  if (actions.length === 0) {
+    return base;
   }
-  return base;
+  const maxActions = 3;
+  const shown = actions.slice(0, maxActions).join(', ');
+  const remaining = actions.length - maxActions;
+  const suffix = remaining > 0 ? `, +${remaining} more` : '';
+  return `${base} \u2022 ${shown}${suffix}`;
 }
 
 function buildEdgeId(from: string, eventName: string, to: string): string {
