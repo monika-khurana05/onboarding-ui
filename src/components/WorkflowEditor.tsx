@@ -14,6 +14,7 @@ import {
   AccordionSummary,
   Alert,
   Autocomplete,
+  Badge,
   Box,
   Button,
   Chip,
@@ -22,6 +23,7 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  Drawer,
   FormControlLabel,
   IconButton,
   InputAdornment,
@@ -361,6 +363,7 @@ export function WorkflowTabPanels({
   const [filterFailuresOnly, setFilterFailuresOnly] = useState(false);
   const [filterRetryOnly, setFilterRetryOnly] = useState(false);
   const [showUnusedStates, setShowUnusedStates] = useState(false);
+  const [searchPanelOpen, setSearchPanelOpen] = useState(false);
   const [presetSelection, setPresetSelection] = useState('');
   const [presetDialogOpen, setPresetDialogOpen] = useState(false);
   const [presetLoading, setPresetLoading] = useState(false);
@@ -455,6 +458,12 @@ export function WorkflowTabPanels({
       }
     }
   }, [focusIssue, focusNonce, stateNames]);
+
+  useEffect(() => {
+    if (activeTab !== 'transitions' && searchPanelOpen) {
+      setSearchPanelOpen(false);
+    }
+  }, [activeTab, searchPanelOpen]);
 
   useEffect(() => {
     if (!isRenaming) {
@@ -1317,8 +1326,8 @@ export function WorkflowTabPanels({
     };
     return (
       <>
-        <Stack direction={{ xs: 'column', xl: 'row' }} spacing={2} alignItems="flex-start">
-          <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+        <Stack spacing={2}>
+          <Stack spacing={1.5} sx={{ minWidth: 0 }}>
             <Stack
               direction={{ xs: 'column', lg: 'row' }}
               spacing={1}
@@ -1366,6 +1375,16 @@ export function WorkflowTabPanels({
                     </MenuItem>
                   ))}
                 </TextField>
+                <Badge badgeContent={searchResults.length} color="primary" invisible={searchResults.length === 0}>
+                  <Button
+                    size="small"
+                    variant={searchPanelOpen ? 'contained' : 'outlined'}
+                    onClick={() => setSearchPanelOpen((prev) => !prev)}
+                    sx={{ whiteSpace: 'nowrap' }}
+                  >
+                    Search & Filters
+                  </Button>
+                </Badge>
               </Stack>
             </Stack>
             {loadedPresetInfo ? (
@@ -1430,136 +1449,139 @@ export function WorkflowTabPanels({
             ) : null}
             {renderTransitionTable(filteredRows, true, emptyLabel)}
           </Stack>
-          <Paper variant="outlined" sx={{ p: 2, width: { xs: '100%', xl: 320 }, flexShrink: 0 }}>
-            <Stack spacing={1.5}>
-              <Typography variant="subtitle2">Search & Filters</Typography>
-              <TextField
-                size="small"
-                placeholder="Search states, events, actions"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon fontSize="small" />
-                    </InputAdornment>
-                  )
-                }}
-              />
-              <Divider />
-              <Typography variant="subtitle2">Quick filters</Typography>
-              <FormControlLabel
-                sx={{ m: 0 }}
-                control={
-                  <Switch
-                    size="small"
-                    checked={filterFailuresOnly}
-                    onChange={(_, checked) => setFilterFailuresOnly(checked)}
-                  />
-                }
-                label="Show only failure transitions"
-              />
-              <FormControlLabel
-                sx={{ m: 0 }}
-                control={
-                  <Switch
-                    size="small"
-                    checked={filterRetryOnly}
-                    onChange={(_, checked) => setFilterRetryOnly(checked)}
-                  />
-                }
-                label="Show retry loops"
-              />
-              <FormControlLabel
-                sx={{ m: 0 }}
-                control={
-                  <Switch
-                    size="small"
-                    checked={showUnusedStates}
-                    onChange={(_, checked) => setShowUnusedStates(checked)}
-                  />
-                }
-                label="Show unused states"
-              />
-              <Divider />
-              <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-                <Typography variant="subtitle2">Results</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
-                </Typography>
-              </Stack>
-              {showSearchResults ? (
-                <Stack spacing={1}>
-                  {groupedSearchResults.unused.length ? (
-                    <Stack spacing={0.5}>
-                      <Typography variant="caption" color="text.secondary">
-                        Unused states
-                      </Typography>
-                      <List dense>
-                        {groupedSearchResults.unused.map((result) => (
-                          <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
-                            <ListItemText primary={result.label} secondary={result.detail} />
-                          </ListItemButton>
-                        ))}
-                      </List>
-                    </Stack>
-                  ) : null}
-                  {groupedSearchResults.state.length ? (
-                    <Stack spacing={0.5}>
-                      <Typography variant="caption" color="text.secondary">
-                        States
-                      </Typography>
-                      <List dense>
-                        {groupedSearchResults.state.map((result) => (
-                          <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
-                            <ListItemText primary={result.label} secondary={result.detail} />
-                          </ListItemButton>
-                        ))}
-                      </List>
-                    </Stack>
-                  ) : null}
-                  {groupedSearchResults.event.length ? (
-                    <Stack spacing={0.5}>
-                      <Typography variant="caption" color="text.secondary">
-                        Events
-                      </Typography>
-                      <List dense>
-                        {groupedSearchResults.event.map((result) => (
-                          <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
-                            <ListItemText primary={result.label} secondary={result.detail} />
-                          </ListItemButton>
-                        ))}
-                      </List>
-                    </Stack>
-                  ) : null}
-                  {groupedSearchResults.action.length ? (
-                    <Stack spacing={0.5}>
-                      <Typography variant="caption" color="text.secondary">
-                        Actions
-                      </Typography>
-                      <List dense>
-                        {groupedSearchResults.action.map((result) => (
-                          <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
-                            <ListItemText primary={result.label} secondary={result.detail} />
-                          </ListItemButton>
-                        ))}
-                      </List>
-                    </Stack>
-                  ) : null}
-                  {searchResults.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary">
-                      No matching results.
-                    </Typography>
-                  ) : null}
-                </Stack>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Enter a search term to scan states, events, and actions.
-                </Typography>
-              )}
-            </Stack>
-          </Paper>
         </Stack>
+        <Drawer
+          anchor="right"
+          open={searchPanelOpen}
+          onClose={() => setSearchPanelOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          PaperProps={{ sx: { width: { xs: '100%', sm: 360 } } }}
+        >
+          <Stack spacing={1.5} sx={{ p: 2 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography variant="subtitle2">Search & Filters</Typography>
+              <IconButton aria-label="Close search panel" onClick={() => setSearchPanelOpen(false)}>
+                <CloseIcon />
+              </IconButton>
+            </Stack>
+            <TextField
+              size="small"
+              placeholder="Search states, events, actions"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                )
+              }}
+            />
+            <Divider />
+            <Typography variant="subtitle2">Quick filters</Typography>
+            <FormControlLabel
+              sx={{ m: 0 }}
+              control={
+                <Switch
+                  size="small"
+                  checked={filterFailuresOnly}
+                  onChange={(_, checked) => setFilterFailuresOnly(checked)}
+                />
+              }
+              label="Show only failure transitions"
+            />
+            <FormControlLabel
+              sx={{ m: 0 }}
+              control={
+                <Switch size="small" checked={filterRetryOnly} onChange={(_, checked) => setFilterRetryOnly(checked)} />
+              }
+              label="Show retry loops"
+            />
+            <FormControlLabel
+              sx={{ m: 0 }}
+              control={
+                <Switch size="small" checked={showUnusedStates} onChange={(_, checked) => setShowUnusedStates(checked)} />
+              }
+              label="Show unused states"
+            />
+            <Divider />
+            <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+              <Typography variant="subtitle2">Results</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+              </Typography>
+            </Stack>
+            {showSearchResults ? (
+              <Stack spacing={1}>
+                {groupedSearchResults.unused.length ? (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Unused states
+                    </Typography>
+                    <List dense>
+                      {groupedSearchResults.unused.map((result) => (
+                        <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
+                          <ListItemText primary={result.label} secondary={result.detail} />
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  </Stack>
+                ) : null}
+                {groupedSearchResults.state.length ? (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      States
+                    </Typography>
+                    <List dense>
+                      {groupedSearchResults.state.map((result) => (
+                        <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
+                          <ListItemText primary={result.label} secondary={result.detail} />
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  </Stack>
+                ) : null}
+                {groupedSearchResults.event.length ? (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Events
+                    </Typography>
+                    <List dense>
+                      {groupedSearchResults.event.map((result) => (
+                        <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
+                          <ListItemText primary={result.label} secondary={result.detail} />
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  </Stack>
+                ) : null}
+                {groupedSearchResults.action.length ? (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Actions
+                    </Typography>
+                    <List dense>
+                      {groupedSearchResults.action.map((result) => (
+                        <ListItemButton key={result.id} onClick={() => handleResultClick(result)}>
+                          <ListItemText primary={result.label} secondary={result.detail} />
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  </Stack>
+                ) : null}
+                {searchResults.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No matching results.
+                  </Typography>
+                ) : null}
+              </Stack>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Enter a search term to scan states, events, and actions.
+              </Typography>
+            )}
+          </Stack>
+        </Drawer>
         <Dialog open={presetDialogOpen} onClose={closePresetDialog} maxWidth="sm" fullWidth>
           <DialogTitle>Apply FSM</DialogTitle>
           <DialogContent>
