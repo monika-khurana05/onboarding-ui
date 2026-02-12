@@ -133,6 +133,57 @@ const groupEventSuggestion = (eventName: string) => {
   return 'Other events';
 };
 
+function buildFsmExplanation(spec: WorkflowSpec, transitions: WorkflowTransitionRow[]): string {
+  const stateNames = spec.states.map((state) => state.name).filter(Boolean);
+  const startState = spec.startState?.trim() || stateNames[0] || '';
+  if (!startState) {
+    return 'No states defined.';
+  }
+  const transitionsByState = new Map<string, WorkflowTransitionRow[]>();
+  transitions.forEach((transition) => {
+    if (!transitionsByState.has(transition.from)) {
+      transitionsByState.set(transition.from, []);
+    }
+    transitionsByState.get(transition.from)?.push(transition);
+  });
+
+  const visited = new Set<string>();
+  const parts: string[] = [];
+  let current = startState;
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (parts.length === 0) {
+      parts.push(current);
+    }
+    const outgoing = transitionsByState.get(current) ?? [];
+    if (outgoing.length === 0) {
+      break;
+    }
+    const failureTransitions = outgoing.filter((row) => isFailureEventName(row.eventName));
+    const retryTransitions = outgoing.filter((row) => isRetryEventName(row.eventName));
+    const successTransitions = outgoing.filter(
+      (row) => !isFailureEventName(row.eventName) && !isRetryEventName(row.eventName)
+    );
+    failureTransitions.slice(0, 2).forEach((row) => {
+      const label = row.eventName?.trim() || 'Failure';
+      parts.push(`If ${label} → ${row.target}`);
+    });
+    let nextTransition =
+      successTransitions[0] ??
+      outgoing.find((row) => !retryTransitions.includes(row)) ??
+      outgoing[0];
+    if (!nextTransition) {
+      break;
+    }
+    if (failureTransitions.length) {
+      parts.push('Else');
+    }
+    parts.push(nextTransition.target);
+    current = nextTransition.target;
+  }
+  return parts.join(' → ');
+}
+
 const mergeCatalogs = (base: FsmCatalog, extra?: FsmCatalog | null): FsmCatalog => {
   if (!extra) {
     return base;
@@ -388,6 +439,7 @@ export function WorkflowTabPanels({
   const diagramDirection: LayoutDirection = 'LR';
   const [diagramExporting, setDiagramExporting] = useState(false);
   const [diagramSelectedStateId, setDiagramSelectedStateId] = useState<string | null>(null);
+  const [diagramExplainOpen, setDiagramExplainOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const diagramContainerRef = useRef<HTMLDivElement | null>(null);
   const theme = useTheme();
@@ -432,6 +484,7 @@ export function WorkflowTabPanels({
   const diagramNodes = useMemo(() => diagramGraph.nodes, [diagramGraph.nodes]);
   const diagramEdges = useMemo(() => diagramGraph.edges, [diagramGraph.edges]);
   const diagramStateById = useMemo(() => diagramGraph.stateById, [diagramGraph.stateById]);
+  const diagramExplanation = useMemo(() => buildFsmExplanation(value, transitionRows), [transitionRows, value]);
 
   const visibleDiagramEdges = useMemo(
     () =>
@@ -1698,6 +1751,17 @@ export function WorkflowTabPanels({
                     control={
                       <Switch
                         size="small"
+                        checked={diagramExplainOpen}
+                        onChange={(_, checked) => setDiagramExplainOpen(checked)}
+                      />
+                    }
+                    label="Explain FSM"
+                  />
+                  <FormControlLabel
+                    sx={{ m: 0 }}
+                    control={
+                      <Switch
+                        size="small"
                         checked={showFailuresChecked}
                         onChange={(_, checked) => setDiagramShowFailures(checked)}
                         disabled={diagramHappyPathOnly}
@@ -1755,55 +1819,76 @@ export function WorkflowTabPanels({
                     bgcolor: 'background.default'
                   }}
                 >
-                  {selectedDiagramState ? (
-                    <Stack spacing={1.2}>
-                      <Typography variant="subtitle1">{selectedDiagramState.label}</Typography>
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        <Chip size="small" label={`Phase: ${selectedDiagramState.phase}`} variant="outlined" />
-                        <Chip size="small" label={`Type: ${selectedDiagramState.stateType}`} variant="outlined" />
-                        {selectedDiagramState.isTerminal ? (
-                          <Chip size="small" label="Terminal" color="success" />
-                        ) : null}
+                  <Stack spacing={2}>
+                    {diagramExplainOpen ? (
+                      <Stack spacing={1}>
+                        <Typography variant="subtitle2">Explain FSM</Typography>
+                        <Box
+                          sx={{
+                            p: 1.5,
+                            borderRadius: 1,
+                            border: 1,
+                            borderColor: 'divider',
+                            bgcolor: 'background.paper',
+                            whiteSpace: 'pre-wrap'
+                          }}
+                        >
+                          <Typography variant="body2" color="text.secondary">
+                            {diagramExplanation}
+                          </Typography>
+                        </Box>
                       </Stack>
-                      {selectedDiagramState.actionsSummary ? (
+                    ) : null}
+                    {selectedDiagramState ? (
+                      <Stack spacing={1.2}>
+                        <Typography variant="subtitle1">{selectedDiagramState.label}</Typography>
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                          <Chip size="small" label={`Phase: ${selectedDiagramState.phase}`} variant="outlined" />
+                          <Chip size="small" label={`Type: ${selectedDiagramState.stateType}`} variant="outlined" />
+                          {selectedDiagramState.isTerminal ? (
+                            <Chip size="small" label="Terminal" color="success" />
+                          ) : null}
+                        </Stack>
+                        {selectedDiagramState.actionsSummary ? (
+                          <Typography variant="body2" color="text.secondary">
+                            {selectedDiagramState.actionsSummary}
+                          </Typography>
+                        ) : null}
+                        <Divider />
+                        <Typography variant="subtitle2">Events</Typography>
+                        {selectedDiagramState.events.length ? (
+                          <List dense>
+                            {selectedDiagramState.events.map((event) => (
+                              <ListItem
+                                key={`${selectedDiagramState.label}-${event.eventName}-${event.target}`}
+                                disableGutters
+                              >
+                                <ListItemText
+                                  primary={event.eventName || 'Unnamed event'}
+                                  secondary={
+                                    event.actions.length
+                                      ? `Target: ${event.target} • Actions: ${event.actions.join(', ')}`
+                                      : `Target: ${event.target}`
+                                  }
+                                />
+                              </ListItem>
+                            ))}
+                          </List>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No outgoing events.
+                          </Typography>
+                        )}
+                      </Stack>
+                    ) : (
+                      <Stack spacing={1}>
+                        <Typography variant="subtitle2">State Details</Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {selectedDiagramState.actionsSummary}
+                          Click a state to see events and actions.
                         </Typography>
-                      ) : null}
-                      <Divider />
-                      <Typography variant="subtitle2">Events</Typography>
-                      {selectedDiagramState.events.length ? (
-                        <List dense>
-                          {selectedDiagramState.events.map((event) => (
-                            <ListItem
-                              key={`${selectedDiagramState.label}-${event.eventName}-${event.target}`}
-                              disableGutters
-                            >
-                              <ListItemText
-                                primary={event.eventName || 'Unnamed event'}
-                                secondary={
-                                  event.actions.length
-                                    ? `Target: ${event.target} • Actions: ${event.actions.join(', ')}`
-                                    : `Target: ${event.target}`
-                                }
-                              />
-                            </ListItem>
-                          ))}
-                        </List>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          No outgoing events.
-                        </Typography>
-                      )}
-                    </Stack>
-                  ) : (
-                    <Stack spacing={1}>
-                      <Typography variant="subtitle2">State Details</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Click a state to see events and actions.
-                      </Typography>
-                    </Stack>
-                  )}
+                      </Stack>
+                    )}
+                  </Stack>
                 </Paper>
               </Stack>
             </Stack>
