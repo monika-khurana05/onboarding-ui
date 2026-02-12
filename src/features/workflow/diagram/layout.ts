@@ -13,11 +13,11 @@ export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[], direction: L
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
     rankdir: direction,
-    ranksep: 180,
-    nodesep: 90,
-    edgesep: 70,
-    marginx: 80,
-    marginy: 60
+    ranksep: 220,
+    nodesep: 120,
+    edgesep: 90,
+    marginx: 110,
+    marginy: 80
   });
 
   nodes.forEach((node) => {

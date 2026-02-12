@@ -481,7 +481,7 @@ export function WorkflowTabPanels({
 
   const diagramFlowEdges = useMemo(
     () => {
-      const offsetStep = 24;
+      const offsetStep = 28;
       const loopOffsetX = diagramDirection === 'TB' ? 28 : 0;
       const loopOffsetY = diagramDirection === 'LR' ? -28 : 0;
       const groups = new Map<string, DiagramEdge[]>();
@@ -505,8 +505,11 @@ export function WorkflowTabPanels({
         edges.forEach((edge, index) => {
           const offsetValue = (index - middleIndex) * offsetStep;
           const isSelfLoop = edge.source === edge.target;
-          const labelOffsetX = diagramDirection === 'TB' ? offsetValue : 0;
-          const labelOffsetY = diagramDirection === 'LR' ? offsetValue : 0;
+          const baseOffset = edge.hasActions ? 32 : 22;
+          const sign = offsetValue === 0 ? 1 : Math.sign(offsetValue);
+          const offsetWithBase = offsetValue + sign * baseOffset;
+          const labelOffsetX = diagramDirection === 'TB' ? offsetWithBase : 0;
+          const labelOffsetY = diagramDirection === 'LR' ? offsetWithBase : 0;
           result.push({
             id: edge.id,
             source: edge.source,

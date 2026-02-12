@@ -31,6 +31,7 @@ type DiagramColors = {
   labelText: string;
   actionLabelBg: string;
   actionLabelText: string;
+  actionLineText: string;
   canvasBg: string;
   grid: string;
   minimapMask: string;
@@ -80,7 +81,7 @@ function LabelledEdge({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
         <span style={{ fontWeight: 700, fontSize: 12 }}>{lines[0]}</span>
         {lines.slice(1).map((line, index) => (
-          <span key={`${lines[0]}-${index}`} style={{ fontWeight: 500, fontSize: 11 }}>
+          <span key={`${lines[0]}-${index}`} style={{ fontWeight: 600, fontSize: 11, color: colors.actionLineText }}>
             {line}
           </span>
         ))}
@@ -128,14 +129,15 @@ function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
     const isDark = theme.palette.mode === 'dark';
     const canvasBg = isDark ? '#0B0F14' : '#F8FAFC';
     return {
-      nodeBg: isDark ? '#111827' : '#E2E8F0',
-      nodeBorder: isDark ? '#334155' : '#94A3B8',
-      nodeText: theme.palette.primary.main,
+      nodeBg: theme.palette.primary.main,
+      nodeBorder: theme.palette.primary.light,
+      nodeText: '#F8FAFC',
       edge: isDark ? '#CBD5E1' : '#475569',
       labelBg: isDark ? '#F8FAFC' : '#0F172A',
       labelText: isDark ? '#0F172A' : '#F8FAFC',
-      actionLabelBg: isDark ? '#BFDBFE' : '#93C5FD',
+      actionLabelBg: isDark ? '#DBEAFE' : '#93C5FD',
       actionLabelText: '#0F172A',
+      actionLineText: isDark ? '#1D4ED8' : '#1D4ED8',
       canvasBg,
       grid: alpha(theme.palette.text.secondary, 0.25),
       minimapMask: alpha(canvasBg, 0.85)
