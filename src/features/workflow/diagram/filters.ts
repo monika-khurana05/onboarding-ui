@@ -7,12 +7,16 @@ export type DiagramFilterOptions = {
 type EdgeLike = {
   label?: string;
   eventName?: string;
+  data?: {
+    eventName?: string;
+    kind?: string;
+  };
 };
 
 const failureTokens = ['FAILED', 'ERROR', 'NOTRECOVERABLE', 'NOT_RECOVERABLE', 'RECOVERABLE'];
 
 function getEventName(edge: EdgeLike): string {
-  return (edge.eventName ?? edge.label ?? '').trim();
+  return (edge.eventName ?? edge.data?.eventName ?? edge.label ?? '').trim();
 }
 
 function isFailureEvent(eventName: string): boolean {
@@ -26,9 +30,12 @@ function isRetryEvent(eventName: string): boolean {
 
 export function filterEdges<T extends EdgeLike>(edges: T[], options: DiagramFilterOptions): T[] {
   return edges.filter((edge) => {
+    if (edge.data?.kind === 'start') {
+      return true;
+    }
     const eventName = getEventName(edge);
-    const failure = isFailureEvent(eventName);
-    const retry = isRetryEvent(eventName);
+    const failure = edge.data?.kind === 'failure' || isFailureEvent(eventName);
+    const retry = edge.data?.kind === 'retry' || isRetryEvent(eventName);
 
     if (options.happyOnly && failure) {
       return false;

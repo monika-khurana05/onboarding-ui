@@ -1,239 +1,137 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import ReactFlow, {
   Background,
-  BaseEdge,
   Controls,
-  EdgeLabelRenderer,
   MiniMap,
   Panel,
   ReactFlowProvider,
   type Edge,
-  type EdgeProps,
   type Node,
-  useReactFlow,
-  getBezierPath
+  useReactFlow
 } from 'reactflow';
 import { Button } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
+import { CustomNode, StartNode } from './CustomNode';
+import { CustomEdge } from './CustomEdge';
+import { SwimlaneContainer } from './SwimlaneContainer';
+import type { DiagramNodeData, DiagramEdgeData, SwimlaneData, StartNodeData } from './layoutGraph';
 import 'reactflow/dist/style.css';
 
 type DiagramViewProps = {
-  nodes: Node[];
-  edges: Edge[];
+  nodes: Array<Node<DiagramNodeData | SwimlaneData | StartNodeData>>;
+  edges: Array<Edge<DiagramEdgeData>>;
+  onNodeSelect?: (node: Node<DiagramNodeData>) => void;
+  selectedNodeId?: string | null;
 };
 
-type DiagramColors = {
-  nodeBg: string;
-  nodeBorder: string;
-  nodeText: string;
-  edge: string;
-  labelBg: string;
-  labelText: string;
-  actionLabelBg: string;
-  actionLabelText: string;
-  actionLineText: string;
-  canvasBg: string;
-  grid: string;
-  minimapMask: string;
-};
-
-type LabelledEdgeData = {
-  labelOffsetX?: number;
-  labelOffsetY?: number;
-  hasActions?: boolean;
-};
-
-function LabelledEdge({
-  id,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-  markerEnd,
-  label,
-  data,
-  style,
-  colors,
-  fontFamily
-}: EdgeProps & { colors: DiagramColors; fontFamily: string }) {
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition
-  });
-  const offsetX = (data as LabelledEdgeData | undefined)?.labelOffsetX ?? 0;
-  const offsetY = (data as LabelledEdgeData | undefined)?.labelOffsetY ?? 0;
-  const hasActions = (data as LabelledEdgeData | undefined)?.hasActions ?? false;
-  const labelBg = hasActions ? colors.actionLabelBg : colors.labelBg;
-  const labelText = hasActions ? colors.actionLabelText : colors.labelText;
-  const labelLines = label ? label.split('\n') : [];
-  const lineCount = Math.max(1, labelLines.length);
-  const dx = targetX - sourceX;
-  const dy = targetY - sourceY;
-  const distance = Math.hypot(dx, dy) || 1;
-  const normalX = distance === 0 ? 0 : -dy / distance;
-  const normalY = distance === 0 ? -1 : dx / distance;
-  const labelHeight =
-    lineCount * 14 + Math.max(0, lineCount - 1) * 4 + 12;
-  const nodeRadius = 70;
-  const labelSizeOffset = Math.max(0, lineCount - 1) * 10;
-  const shortEdgeBoost = Math.max(0, 200 - distance) * 0.22;
-  const baseOffset = Math.max(nodeRadius + labelHeight / 2 + 12, (hasActions ? 56 : 44) + labelSizeOffset + shortEdgeBoost);
-  const adjustedLabelX = labelX + normalX * baseOffset + offsetX;
-  const adjustedLabelY = labelY + normalY * baseOffset + offsetY;
-
-  const renderLabel = (labelTextValue: string) => {
-    const lines = labelTextValue.split('\n');
-    if (lines.length === 1) {
-      return <span style={{ fontWeight: 700, fontSize: 12 }}>{lines[0]}</span>;
-    }
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-        <span style={{ fontWeight: 700, fontSize: 12 }}>{lines[0]}</span>
-        {lines.slice(1).map((line, index) => (
-          <span key={`${lines[0]}-${index}`} style={{ fontWeight: 600, fontSize: 11, color: colors.actionLineText }}>
-            {line}
-          </span>
-        ))}
-      </div>
-    );
-  };
-
-  return (
-    <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
-      {label ? (
-        <EdgeLabelRenderer>
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${adjustedLabelX}px,${adjustedLabelY}px)`,
-              background: labelBg,
-              color: labelText,
-              border: `1px solid ${colors.nodeBorder}`,
-              borderRadius: 6,
-              padding: '6px 8px',
-              fontSize: 12,
-              fontFamily,
-              fontWeight: 600,
-              lineHeight: 1.35,
-              textAlign: 'left',
-              maxWidth: 260,
-              pointerEvents: 'none',
-              zIndex: 2,
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.35)'
-            }}
-          >
-            {renderLabel(label)}
-          </div>
-        </EdgeLabelRenderer>
-      ) : null}
-    </>
-  );
-}
-
-function DiagramCanvas({ nodes, edges }: DiagramViewProps) {
+function DiagramCanvas({ nodes, edges, onNodeSelect, selectedNodeId }: DiagramViewProps) {
   const { fitView } = useReactFlow();
   const theme = useTheme();
-  const diagramColors = useMemo(() => {
-    const isDark = theme.palette.mode === 'dark';
-    const canvasBg = isDark ? '#0B0F14' : '#F8FAFC';
-    return {
-      nodeBg: theme.palette.primary.main,
-      nodeBorder: theme.palette.primary.light,
-      nodeText: '#F8FAFC',
-      edge: isDark ? '#CBD5E1' : '#475569',
-      labelBg: isDark ? '#F8FAFC' : '#0F172A',
-      labelText: isDark ? '#0F172A' : '#F8FAFC',
-      actionLabelBg: isDark ? '#DBEAFE' : '#93C5FD',
-      actionLabelText: '#0F172A',
-      actionLineText: isDark ? '#1D4ED8' : '#1D4ED8',
-      canvasBg,
-      grid: alpha(theme.palette.text.secondary, 0.25),
-      minimapMask: alpha(canvasBg, 0.85)
-    };
-  }, [theme]);
-  const edgeTypes = useMemo(
-    () => ({
-      labelled: (props: EdgeProps) => (
-        <LabelledEdge {...props} colors={diagramColors} fontFamily={theme.typography.fontFamily} />
-      )
-    }),
-    [diagramColors, theme.typography.fontFamily]
-  );
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
-  const styledNodes = useMemo(
-    () =>
-      nodes.map((node) => ({
-        ...node,
-        style: {
-          background: diagramColors.nodeBg,
-          border: `1px solid ${diagramColors.nodeBorder}`,
-          color: diagramColors.nodeText,
-          borderRadius: 999,
-          width: 140,
-          height: 140,
-          padding: 10,
-          textAlign: 'center',
-          fontSize: 11,
-          fontWeight: 700,
-          fontFamily: theme.typography.fontFamily,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          lineHeight: 1.2,
-          whiteSpace: 'normal',
-          overflowWrap: 'anywhere',
-          zIndex: 3,
-          ...(node.style ?? {})
+  const highlightedEdgeIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (hoveredEdgeId) {
+      ids.add(hoveredEdgeId);
+    }
+    if (hoveredNodeId) {
+      edges.forEach((edge) => {
+        if (edge.source === hoveredNodeId || edge.target === hoveredNodeId) {
+          ids.add(edge.id);
         }
-      })),
-    [nodes, diagramColors, theme]
-  );
+      });
+    }
+    return ids;
+  }, [edges, hoveredEdgeId, hoveredNodeId]);
 
-  const styledEdges = useMemo(
+  const decoratedEdges = useMemo(
     () =>
       edges.map((edge) => ({
         ...edge,
-        type: edge.type ?? 'labelled',
-        style: {
-          stroke: diagramColors.edge,
-          strokeWidth: 1.6,
-          ...(edge.style ?? {})
+        data: {
+          ...edge.data,
+          highlighted: highlightedEdgeIds.has(edge.id)
         }
       })),
-    [edges, diagramColors, theme]
+    [edges, highlightedEdgeIds]
+  );
+
+  const decoratedNodes = useMemo(
+    () =>
+      nodes.map((node) => {
+        if (node.type !== 'state') {
+          return node;
+        }
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            isSelected: node.id === selectedNodeId,
+            highlighted: node.id === hoveredNodeId
+          }
+        };
+      }),
+    [nodes, hoveredNodeId, selectedNodeId]
+  );
+
+  const nodeTypes = useMemo(
+    () => ({
+      state: CustomNode,
+      swimlane: SwimlaneContainer,
+      start: StartNode
+    }),
+    []
+  );
+
+  const edgeTypes = useMemo(
+    () => ({
+      custom: CustomEdge
+    }),
+    []
   );
 
   return (
     <ReactFlow
-      nodes={styledNodes}
-      edges={styledEdges}
+      nodes={decoratedNodes}
+      edges={decoratedEdges}
+      nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       fitView
       fitViewOptions={{ padding: 0.2 }}
       nodesDraggable={false}
       nodesConnectable={false}
-      elementsSelectable={false}
+      elementsSelectable
+      panOnScroll
+      zoomOnScroll
+      onlyRenderVisibleElements
+      onNodeClick={(_, node) => {
+        if (node.type === 'state' && onNodeSelect) {
+          onNodeSelect(node as Node<DiagramNodeData>);
+        }
+      }}
+      onNodeMouseEnter={(_, node) => {
+        if (node.type === 'state') {
+          setHoveredNodeId(node.id);
+        }
+      }}
+      onNodeMouseLeave={() => setHoveredNodeId(null)}
+      onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)}
+      onEdgeMouseLeave={() => setHoveredEdgeId(null)}
       proOptions={{ hideAttribution: true }}
       style={{
         width: '100%',
         height: '100%',
-        background: diagramColors.canvasBg
+        background: theme.palette.background.default
       }}
     >
       <MiniMap
-        nodeStrokeColor={diagramColors.nodeBorder}
-        nodeColor={diagramColors.nodeBg}
-        maskColor={diagramColors.minimapMask}
+        nodeStrokeColor={alpha(theme.palette.text.secondary, 0.5)}
+        nodeColor={alpha(theme.palette.primary.main, 0.45)}
+        maskColor={alpha(theme.palette.background.default, 0.85)}
       />
       <Controls showInteractive={false} />
-      <Background gap={18} size={1} color={diagramColors.grid} />
+      <Background gap={18} size={1} color={alpha(theme.palette.text.secondary, 0.2)} />
       <Panel position="top-right">
         <Button size="small" variant="outlined" onClick={() => fitView({ padding: 0.2 })}>
           Fit

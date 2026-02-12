@@ -29,6 +29,7 @@ import {
   IconButton,
   InputAdornment,
   List,
+  ListItem,
   ListItemButton,
   ListItemText,
   MenuItem,
@@ -43,8 +44,6 @@ import {
   TableRow,
   Tooltip,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -57,8 +56,7 @@ import { parseFsmYamlToSpec } from '../features/workflow/presets/parseFsmYamlToS
 import { DiagramView } from '../features/workflow/diagram/DiagramView';
 import { exportDiagramSvg } from '../features/workflow/diagram/export';
 import { filterEdges } from '../features/workflow/diagram/filters';
-import { layoutGraph, type LayoutDirection } from '../features/workflow/diagram/layout';
-import { toGraphFromSpec } from '../features/workflow/diagram/toGraph';
+import { layoutGraph, type LayoutDirection, type DiagramNodeData } from '../features/workflow/diagram/layoutGraph';
 import type { FsmCatalog } from '../lib/fsmCatalog';
 import { fsmCatalog, fsmSuggestions, type FsmTransitionSuggestion } from '../lib/fsmCatalog';
 import {
@@ -88,16 +86,6 @@ type WorkflowTabPanelsProps = {
 };
 
 type TransitionRow = WorkflowTransitionRow & { rowIndex: number };
-type DiagramEdge = {
-  id: string;
-  source: string;
-  target: string;
-  eventName: string;
-  label: string;
-  kind: 'happy' | 'failure' | 'retry';
-  hasActions: boolean;
-};
-
 type SearchResult = {
   id: string;
   label: string;
@@ -397,8 +385,9 @@ export function WorkflowTabPanels({
   const [diagramHappyPathOnly, setDiagramHappyPathOnly] = useState(false);
   const [diagramShowFailures, setDiagramShowFailures] = useState(true);
   const [diagramShowRetries, setDiagramShowRetries] = useState(true);
-  const [diagramDirection, setDiagramDirection] = useState<LayoutDirection>('LR');
+  const diagramDirection: LayoutDirection = 'LR';
   const [diagramExporting, setDiagramExporting] = useState(false);
+  const [diagramSelectedStateId, setDiagramSelectedStateId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const diagramContainerRef = useRef<HTMLDivElement | null>(null);
   const theme = useTheme();
@@ -439,35 +428,10 @@ export function WorkflowTabPanels({
     );
   }, [stateNames, transitionRows]);
 
-  const baseDiagramGraph = useMemo(() => toGraphFromSpec(value), [value]);
-  const layoutedDiagramNodes = useMemo(
-    () => layoutGraph(baseDiagramGraph.nodes, baseDiagramGraph.edges, diagramDirection),
-    [baseDiagramGraph.edges, baseDiagramGraph.nodes, diagramDirection]
-  );
-  const diagramEdgeLabelById = useMemo(
-    () => new Map(baseDiagramGraph.edges.map((edge) => [edge.id, edge.label])),
-    [baseDiagramGraph.edges]
-  );
-
-  const diagramEdges = useMemo<DiagramEdge[]>(
-    () =>
-      transitionRows.map((row) => {
-        const isFailure = isFailureEventName(row.eventName);
-        const isRetry = isRetryEventName(row.eventName);
-        const kind: DiagramEdge['kind'] = isFailure ? 'failure' : isRetry ? 'retry' : 'happy';
-        const id = `${row.from}__${row.eventName}__${row.target}`;
-        return {
-          id,
-          source: row.from,
-          target: row.target,
-          eventName: row.eventName,
-          label: diagramEdgeLabelById.get(id) ?? row.eventName,
-          kind,
-          hasActions: (row.actions?.length ?? 0) > 0
-        };
-      }),
-    [diagramEdgeLabelById, transitionRows]
-  );
+  const diagramGraph = useMemo(() => layoutGraph(value, diagramDirection), [diagramDirection, value]);
+  const diagramNodes = useMemo(() => diagramGraph.nodes, [diagramGraph.nodes]);
+  const diagramEdges = useMemo(() => diagramGraph.edges, [diagramGraph.edges]);
+  const diagramStateById = useMemo(() => diagramGraph.stateById, [diagramGraph.stateById]);
 
   const visibleDiagramEdges = useMemo(
     () =>
@@ -479,61 +443,23 @@ export function WorkflowTabPanels({
     [diagramEdges, diagramHappyPathOnly, diagramShowFailures, diagramShowRetries]
   );
 
-  const diagramFlowEdges = useMemo(
-    () => {
-      const offsetStep = 36;
-      const loopOffsetX = diagramDirection === 'TB' ? 28 : 0;
-      const loopOffsetY = diagramDirection === 'LR' ? -28 : 0;
-      const groups = new Map<string, DiagramEdge[]>();
-      visibleDiagramEdges.forEach((edge) => {
-        const key = `${edge.source}__${edge.target}`;
-        if (!groups.has(key)) {
-          groups.set(key, []);
-        }
-        groups.get(key)?.push(edge);
-      });
-      const result: Array<{
-        id: string;
-        source: string;
-        target: string;
-        label: string;
-        type: 'labelled';
-        data: { labelOffsetX: number; labelOffsetY: number; hasActions: boolean };
-      }> = [];
-      groups.forEach((edges) => {
-        const middleIndex = (edges.length - 1) / 2;
-        edges.forEach((edge, index) => {
-          const offsetValue = (index - middleIndex) * offsetStep;
-          const isSelfLoop = edge.source === edge.target;
-          const baseOffset = edge.hasActions ? 48 : 34;
-          const sign = offsetValue === 0 ? 1 : Math.sign(offsetValue);
-          const offsetWithBase = offsetValue + sign * baseOffset;
-          const labelOffsetX = diagramDirection === 'TB' ? offsetWithBase : 0;
-          const labelOffsetY = diagramDirection === 'LR' ? offsetWithBase : 0;
-          result.push({
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
-            label: edge.label,
-            type: 'labelled',
-            data: {
-              labelOffsetX: labelOffsetX + (isSelfLoop ? loopOffsetX : 0),
-              labelOffsetY: labelOffsetY + (isSelfLoop ? loopOffsetY : 0),
-              hasActions: edge.hasActions
-            }
-          });
-        });
-      });
-      return result;
-    },
-    [diagramDirection, visibleDiagramEdges]
-  );
-
   useEffect(() => {
     if (!activeState || !stateNames.includes(activeState)) {
       setActiveState(stateNames[0] ?? '');
     }
   }, [activeState, stateNames]);
+
+  useEffect(() => {
+    if (!diagramOpen) {
+      setDiagramSelectedStateId(null);
+    }
+  }, [diagramOpen]);
+
+  useEffect(() => {
+    if (diagramSelectedStateId && !diagramStateById.has(diagramSelectedStateId)) {
+      setDiagramSelectedStateId(null);
+    }
+  }, [diagramSelectedStateId, diagramStateById]);
 
   useEffect(() => {
     if (!focusIssue) {
@@ -1468,6 +1394,8 @@ export function WorkflowTabPanels({
         setDiagramExporting(false);
       }
     };
+    const selectedDiagramState: DiagramNodeData | null =
+      diagramSelectedStateId ? diagramStateById.get(diagramSelectedStateId) ?? null : null;
     return (
       <>
         <Stack spacing={2}>
@@ -1754,24 +1682,6 @@ export function WorkflowTabPanels({
                   </Button>
                 </Stack>
                 <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                  <ToggleButtonGroup
-                    size="small"
-                    value={diagramDirection}
-                    exclusive
-                    onChange={(_, value) => {
-                      if (value) {
-                        setDiagramDirection(value);
-                      }
-                    }}
-                    aria-label="Diagram layout direction"
-                  >
-                    <ToggleButton value="LR" aria-label="Left to right layout">
-                      LR
-                    </ToggleButton>
-                    <ToggleButton value="TB" aria-label="Top to bottom layout">
-                      TB
-                    </ToggleButton>
-                  </ToggleButtonGroup>
                   <FormControlLabel
                     sx={{ m: 0 }}
                     control={
@@ -1809,27 +1719,93 @@ export function WorkflowTabPanels({
                   />
                 </Stack>
               </Stack>
-              <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'background.default' }}>
-                <Box
-                  ref={diagramContainerRef}
+              <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} alignItems="stretch">
+                <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'background.default', flex: 1 }}>
+                  <Box
+                    ref={diagramContainerRef}
+                    sx={{
+                      width: '100%',
+                      height: { xs: 360, md: 520 },
+                      overflow: 'hidden',
+                      borderRadius: 1
+                    }}
+                  >
+                    {stateNames.length === 0 ? (
+                      <Stack alignItems="center" justifyContent="center" sx={{ height: '100%' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Define at least one state to render the diagram.
+                        </Typography>
+                      </Stack>
+                    ) : (
+                      <DiagramView
+                        nodes={diagramNodes}
+                        edges={visibleDiagramEdges}
+                        onNodeSelect={(node) => setDiagramSelectedStateId(node.id)}
+                        selectedNodeId={diagramSelectedStateId}
+                      />
+                    )}
+                  </Box>
+                </Paper>
+                <Paper
+                  variant="outlined"
                   sx={{
-                    width: '100%',
-                    height: { xs: 360, md: 520 },
-                    overflow: 'hidden',
-                    borderRadius: 1
+                    p: 2,
+                    minWidth: { xs: '100%', lg: 280 },
+                    maxWidth: { xs: '100%', lg: 320 },
+                    bgcolor: 'background.default'
                   }}
                 >
-                  {stateNames.length === 0 ? (
-                    <Stack alignItems="center" justifyContent="center" sx={{ height: '100%' }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Define at least one state to render the diagram.
-                      </Typography>
+                  {selectedDiagramState ? (
+                    <Stack spacing={1.2}>
+                      <Typography variant="subtitle1">{selectedDiagramState.label}</Typography>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Chip size="small" label={`Phase: ${selectedDiagramState.phase}`} variant="outlined" />
+                        <Chip size="small" label={`Type: ${selectedDiagramState.stateType}`} variant="outlined" />
+                        {selectedDiagramState.isTerminal ? (
+                          <Chip size="small" label="Terminal" color="success" />
+                        ) : null}
+                      </Stack>
+                      {selectedDiagramState.actionsSummary ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {selectedDiagramState.actionsSummary}
+                        </Typography>
+                      ) : null}
+                      <Divider />
+                      <Typography variant="subtitle2">Events</Typography>
+                      {selectedDiagramState.events.length ? (
+                        <List dense>
+                          {selectedDiagramState.events.map((event) => (
+                            <ListItem
+                              key={`${selectedDiagramState.label}-${event.eventName}-${event.target}`}
+                              disableGutters
+                            >
+                              <ListItemText
+                                primary={event.eventName || 'Unnamed event'}
+                                secondary={
+                                  event.actions.length
+                                    ? `Target: ${event.target} • Actions: ${event.actions.join(', ')}`
+                                    : `Target: ${event.target}`
+                                }
+                              />
+                            </ListItem>
+                          ))}
+                        </List>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No outgoing events.
+                        </Typography>
+                      )}
                     </Stack>
                   ) : (
-                    <DiagramView nodes={layoutedDiagramNodes} edges={diagramFlowEdges} />
+                    <Stack spacing={1}>
+                      <Typography variant="subtitle2">State Details</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Click a state to see events and actions.
+                      </Typography>
+                    </Stack>
                   )}
-                </Box>
-              </Paper>
+                </Paper>
+              </Stack>
             </Stack>
           </DialogContent>
           <DialogActions>
