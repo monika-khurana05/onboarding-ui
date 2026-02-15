@@ -13,11 +13,13 @@ export const healthQueryKey = ['health'] as const;
 export const repoDefaultsQueryKey = ['repo-defaults'] as const;
 
 export function useHealthQuery() {
+  const isDev = import.meta.env.MODE === 'development';
   return useQuery({
     queryKey: healthQueryKey,
     queryFn: getHealth,
     staleTime: 10_000,
-    retry: 1
+    retry: 1,
+    refetchInterval: isDev ? 30_000 : false
   });
 }
 

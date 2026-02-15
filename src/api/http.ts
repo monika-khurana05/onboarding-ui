@@ -38,6 +38,25 @@ function parseErrorBody(body: unknown): ApiErrorResponseDto | null {
   return null;
 }
 
+function buildApiUrl(path: string, baseUrl: string): string {
+  const resolvedBaseUrl = new URL(baseUrl, window.location.origin);
+  const basePath =
+    resolvedBaseUrl.pathname === '/' ? '' : resolvedBaseUrl.pathname.replace(/\/$/, '');
+  let normalizedPath = path.trim();
+
+  if (basePath) {
+    if (normalizedPath === basePath) {
+      normalizedPath = '';
+    } else if (normalizedPath.startsWith(`${basePath}/`)) {
+      normalizedPath = normalizedPath.slice(basePath.length);
+    }
+  }
+
+  normalizedPath = normalizedPath.replace(/^\/+/, '');
+  const basePrefix = `${resolvedBaseUrl.origin}${basePath}/`;
+  return new URL(normalizedPath, basePrefix).toString();
+}
+
 export function getErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.message) {
     return error.message;
@@ -52,13 +71,10 @@ export function getErrorMessage(error: unknown): string {
 }
 
 export async function httpRequest<T>(path: string, options: HttpRequestOptions = {}): Promise<T> {
-  if (!env.apiBaseUrl) {
-    throw new Error('VITE_API_BASE_URL is not configured.');
-  }
-
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), options.timeoutMs ?? 15000);
-  const url = new URL(path, env.apiBaseUrl).toString();
+  const baseUrl = env.apiBaseUrl || '/api';
+  const url = buildApiUrl(path, baseUrl);
   const correlationId = createCorrelationId();
 
   try {

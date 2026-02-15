@@ -55,24 +55,35 @@ npm install
 
 ## Environment Variables
 
-Create a `.env` file using `.env.example`:
+Create a `.env` file using `.env.example` (or override with `.env.local`):
 
 ```env
 VITE_API_BASE_URL=http://localhost:8080
 VITE_AUTH_TOKEN=
+VITE_ENABLE_MSW=false
 ```
 
-- `VITE_API_BASE_URL`: required to call backend APIs.
+- `VITE_API_BASE_URL`: backend base URL. Use `http://localhost:8080` or `/api` (Vite dev proxy).
 - `VITE_AUTH_TOKEN`: optional bearer token.
+- `VITE_ENABLE_MSW`: enable mock handlers (`true` or `false`).
 
-If backend requires no auth, leave `VITE_AUTH_TOKEN` blank.
+If `VITE_API_BASE_URL` is blank, the UI defaults to `/api`.
+For local development, `.env.development` sets `VITE_API_BASE_URL=http://localhost:8080`.
+To use the proxy instead, override with `VITE_API_BASE_URL=/api` in `.env.local`.
 Environment badge is auto-derived from `VITE_API_BASE_URL` (`DEV`, `UAT`, `PROD`).
 
-## Run
+## Run UI
 
 ```bash
 npm run dev
 ```
+
+The UI runs at `http://localhost:5173` by default.
+
+## Run Backend
+
+Start the backend service so it listens on `http://localhost:8080`.
+If you use a local backend repo, run its dev/start command so the endpoints in the "Backend Endpoints Integrated" section are available.
 
 ## Build
 

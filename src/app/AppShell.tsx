@@ -29,8 +29,10 @@ import {
 import { type ReactElement, useMemo, useState } from 'react';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useGlobalError } from './GlobalErrorContext';
+import { ApiError } from '../lib/apiClient';
 import { env } from '../lib/env';
 import { deriveEnvironmentFromApiUrl, environmentChipColor } from '../lib/environment';
+import { useHealthQuery } from '../features/onboarding-flow/hooks';
 
 type NavItem = {
   label: string;
@@ -65,6 +67,18 @@ export function AppShell() {
 
   const deploymentEnvironment = deriveEnvironmentFromApiUrl(env.apiBaseUrl);
   const environmentColor = environmentChipColor(deploymentEnvironment);
+  const healthQuery = useHealthQuery();
+
+  const healthStatus = healthQuery.isError ? 'unavailable' : healthQuery.data?.status ?? 'checking';
+  const normalizedStatus = healthStatus.toLowerCase();
+  const isHealthDegraded =
+    !healthQuery.isError && normalizedStatus !== 'checking' && !['ok', 'healthy', 'up'].includes(normalizedStatus);
+  const healthChipColor =
+    healthQuery.isError || isHealthDegraded ? 'warning' : healthStatus === 'checking' ? 'default' : 'success';
+  const healthService = healthQuery.data?.service;
+  const healthVersion = healthQuery.data?.version;
+  const correlationId = healthQuery.error instanceof ApiError ? healthQuery.error.correlationId : undefined;
+  const healthDetails = [healthService, healthVersion ? `v${healthVersion}` : null].filter(Boolean).join(' · ');
 
   const crumbs = useMemo(() => {
     const segments = location.pathname.split('/').filter(Boolean);
@@ -160,7 +174,25 @@ export function AppShell() {
               Enterprise Onboarding Pipeline
             </Typography>
           </Stack>
-          <Box sx={{ ml: 'auto' }}>
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ ml: 'auto' }}>
+            <Stack spacing={0.25} alignItems="flex-end">
+              <Chip
+                label={`Health: ${healthStatus}`}
+                size="small"
+                color={healthChipColor}
+                variant={healthQuery.isError || isHealthDegraded ? 'outlined' : 'filled'}
+                aria-label={`Service health ${healthStatus}`}
+              />
+              {healthQuery.isError ? (
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                  Correlation: {correlationId ?? 'unknown'}
+                </Typography>
+              ) : healthDetails ? (
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                  {healthDetails}
+                </Typography>
+              ) : null}
+            </Stack>
             <Chip
               label={deploymentEnvironment}
               size="small"
@@ -168,7 +200,7 @@ export function AppShell() {
               variant="filled"
               aria-label={`Environment ${deploymentEnvironment}`}
             />
-          </Box>
+          </Stack>
         </Toolbar>
       </AppBar>
 

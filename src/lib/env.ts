@@ -16,8 +16,11 @@ const resolved = parsed.success
   ? parsed.data
   : { VITE_API_BASE_URL: '', VITE_AUTH_TOKEN: '', VITE_ENABLE_MSW: 'false' };
 
+const trimmedApiBaseUrl = resolved.VITE_API_BASE_URL.trim();
+const trimmedAuthToken = resolved.VITE_AUTH_TOKEN.trim();
+
 export const env = {
-  apiBaseUrl: resolved.VITE_API_BASE_URL.trim() || undefined,
-  authToken: resolved.VITE_AUTH_TOKEN.trim() || undefined,
+  apiBaseUrl: trimmedApiBaseUrl || '/api',
+  authToken: trimmedAuthToken || undefined,
   enableMsw: resolved.VITE_ENABLE_MSW === 'true'
 };
