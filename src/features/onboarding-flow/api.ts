@@ -138,28 +138,32 @@ function mapVersionResult(raw: unknown): SnapshotVersionResult {
 }
 
 export async function getHealth(): Promise<HealthResponse> {
-  const raw = await apiFetch<unknown>('/health');
-  const parsed = healthSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { status: 'degraded' };
-  }
-  const checks = parsed.data.checks
-    ? Object.fromEntries(
-        Object.entries(parsed.data.checks).filter((entry): entry is [string, string | number | boolean] => {
-          return (
-            typeof entry[1] === 'string' || typeof entry[1] === 'number' || typeof entry[1] === 'boolean'
-          );
-        })
-      )
-    : undefined;
+  try {
+    const raw = await apiFetch<unknown>('/health');
+    const parsed = healthSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { status: 'unknown' };
+    }
+    const checks = parsed.data.checks
+      ? Object.fromEntries(
+          Object.entries(parsed.data.checks).filter((entry): entry is [string, string | number | boolean] => {
+            return (
+              typeof entry[1] === 'string' || typeof entry[1] === 'number' || typeof entry[1] === 'boolean'
+            );
+          })
+        )
+      : undefined;
 
-  return {
-    status: parsed.data.status,
-    service: parsed.data.service,
-    version: parsed.data.version,
-    timestamp: parsed.data.timestamp,
-    checks
-  };
+    return {
+      status: parsed.data.status,
+      service: parsed.data.service,
+      version: parsed.data.version,
+      timestamp: parsed.data.timestamp,
+      checks
+    };
+  } catch {
+    return { status: 'unknown' };
+  }
 }
 
 export async function getRepoDefaults(): Promise<RepoDefaultsResponse> {

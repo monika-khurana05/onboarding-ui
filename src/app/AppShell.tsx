@@ -72,9 +72,15 @@ export function AppShell() {
   const healthStatus = healthQuery.isError ? 'unavailable' : healthQuery.data?.status ?? 'checking';
   const normalizedStatus = healthStatus.toLowerCase();
   const isHealthDegraded =
-    !healthQuery.isError && normalizedStatus !== 'checking' && !['ok', 'healthy', 'up'].includes(normalizedStatus);
+    !healthQuery.isError &&
+    normalizedStatus !== 'checking' &&
+    !['ok', 'healthy', 'up', 'unknown'].includes(normalizedStatus);
   const healthChipColor =
-    healthQuery.isError || isHealthDegraded ? 'warning' : healthStatus === 'checking' ? 'default' : 'success';
+    healthQuery.isError || isHealthDegraded
+      ? 'warning'
+      : ['checking', 'unknown'].includes(normalizedStatus)
+        ? 'default'
+        : 'success';
   const healthService = healthQuery.data?.service;
   const healthVersion = healthQuery.data?.version;
   const correlationId = healthQuery.error instanceof ApiError ? healthQuery.error.correlationId : undefined;

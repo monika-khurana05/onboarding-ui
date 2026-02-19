@@ -18,8 +18,9 @@ export function useHealthQuery() {
     queryKey: healthQueryKey,
     queryFn: getHealth,
     staleTime: 10_000,
-    retry: 1,
-    refetchInterval: isDev ? 30_000 : false
+    retry: 0,
+    refetchInterval: isDev ? 30_000 : false,
+    meta: { suppressGlobalError: true }
   });
 }
 
