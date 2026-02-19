@@ -9,6 +9,12 @@ export type CapabilityCatalogEntry = {
 
 export const capabilityCatalog: CapabilityCatalogEntry[] = [
   {
+    key: 'DUP_CHECK',
+    label: 'Dup Check',
+    description: 'Configure duplicate checking keys and matching fields.',
+    epicUrl: 'https://google.com'
+  },
+  {
     key: 'PAYMENT_INITIATION',
     label: 'Payment Initiation',
     description: 'Initiate payments across all channels, with enrichment and validations.',

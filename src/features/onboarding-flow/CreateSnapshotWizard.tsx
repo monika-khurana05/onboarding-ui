@@ -46,6 +46,8 @@ import { validationCatalog, type ValidationCatalogItem } from '../../catalog/val
 import {
   capabilityKeys,
   type CapabilityKey,
+  type DupCheckStaticParams,
+  type SnapshotCapability,
   type RulesConfig,
   type SnapshotModel,
   type WorkflowSpec,
@@ -66,6 +68,10 @@ type ParamsDrawerContext = {
   title: string;
   description?: string;
   params?: Record<string, any>;
+  staticParams?: Record<string, string>;
+  staticParamFields?: ReadonlyArray<{ key: string; label: string }>;
+  onSaveStaticParams?: (params: Record<string, string>) => void;
+  onReset?: () => void;
   onSave: (params: Record<string, any>) => void;
 } | null;
 
@@ -94,6 +100,18 @@ const defaultEnabledCapabilities = new Set<CapabilityKey>([
   'PLATFORM_RESILIENCY'
 ]);
 
+const dupCheckStaticParamFields = [
+  { key: 'bankSettlementType', label: 'bankSettlementType' },
+  { key: 'paymentID', label: 'paymentID' },
+  { key: 'debitAcctID', label: 'debitAcctID' },
+  { key: 'creditAcctID', label: 'creditAcctID' },
+  { key: 'clearingSystemMemId', label: 'clearingSystemMemId' },
+  { key: 'ccy', label: 'ccy' }
+] as const;
+
+type DupCheckStaticParamKey = (typeof dupCheckStaticParamFields)[number]['key'];
+const dupCheckStaticParamKeys: DupCheckStaticParamKey[] = dupCheckStaticParamFields.map((field) => field.key);
+
 const capabilityLabelLookup = new Map<CapabilityKey, string>(
   capabilityCatalog.map((item) => [item.key, item.label])
 );
@@ -106,6 +124,10 @@ const validationCatalogIds = new Set(validationCatalog.map((item) => item.id));
 const enrichmentCatalogIds = new Set(enrichmentCatalog.map((item) => item.id));
 const validationLabelLookup = new Map(validationCatalog.map((item) => [item.id, item.className]));
 const enrichmentLabelLookup = new Map(enrichmentCatalog.map((item) => [item.id, item.className]));
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object';
+}
 
 function normalizeSelectedIds(value: unknown, allowedIds: Set<string>): string[] {
   if (!Array.isArray(value)) {
@@ -166,6 +188,42 @@ const defaultWorkflow: WorkflowSpec = {
     }
   ]
 };
+
+function buildEmptyDupCheckStaticParams(): DupCheckStaticParams {
+  return dupCheckStaticParamKeys.reduce<DupCheckStaticParams>((acc, key) => {
+    acc[key] = '';
+    return acc;
+  }, {});
+}
+
+function normalizeDupCheckStaticParams(value: unknown): DupCheckStaticParams {
+  const candidate = isRecord(value) ? value : {};
+  return dupCheckStaticParamKeys.reduce<DupCheckStaticParams>((acc, key) => {
+    const entry = candidate[key];
+    acc[key] = typeof entry === 'string' ? entry : entry == null ? '' : String(entry);
+    return acc;
+  }, {});
+}
+
+function normalizeCapabilities(rawCapabilities: unknown): SnapshotCapability[] {
+  const rawList = Array.isArray(rawCapabilities) ? rawCapabilities : [];
+  const capabilityMap = new Map(rawList.map((cap) => [cap.capabilityKey, cap]));
+  return capabilityKeys.map((key) => {
+    const existing = capabilityMap.get(key) as SnapshotCapability | undefined;
+    const base = {
+      capabilityKey: key,
+      enabled: existing?.enabled ?? defaultEnabledCapabilities.has(key),
+      params: existing?.params
+    };
+    if (key === 'DUP_CHECK') {
+      return {
+        ...base,
+        staticParams: normalizeDupCheckStaticParams(existing?.staticParams)
+      };
+    }
+    return base;
+  });
+}
 
 function normalizeTransitionSpec(value: unknown): TransitionSpec {
   if (!value || typeof value !== 'object') {
@@ -252,10 +310,7 @@ function normalizeWorkflowSpec(raw: Partial<WorkflowSpec> & { transitions?: unkn
 const defaultSnapshot: SnapshotModel = {
   countryCode: '',
   region: undefined,
-  capabilities: capabilityKeys.map((key) => ({
-    capabilityKey: key,
-    enabled: defaultEnabledCapabilities.has(key)
-  })),
+  capabilities: normalizeCapabilities([]),
   validations: [],
   enrichments: [],
   selectedValidations: [],
@@ -285,16 +340,7 @@ function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
       }
     : undefined;
 
-  const rawCapabilities = Array.isArray(raw.capabilities) ? raw.capabilities : [];
-  const capabilityMap = new Map(rawCapabilities.map((cap) => [cap.capabilityKey, cap]));
-  const normalizedCapabilities = capabilityKeys.map((key) => {
-    const existing = capabilityMap.get(key);
-    return {
-      capabilityKey: key,
-      enabled: existing?.enabled ?? defaultEnabledCapabilities.has(key),
-      params: existing?.params
-    };
-  });
+  const normalizedCapabilities = normalizeCapabilities(raw.capabilities);
   const normalizedSelectedValidations = orderSelection(
     normalizeSelectedIds(raw.selectedValidations, validationCatalogIds),
     validationCatalog
@@ -422,11 +468,13 @@ export function CreateSnapshotWizard({
         normalizeSelectedIds(draft.selectedEnrichments, enrichmentCatalogIds),
         enrichmentCatalog
       );
+      const normalizedCapabilities = draft.capabilities ? normalizeCapabilities(draft.capabilities) : null;
       updateSnapshot((prev) => ({
         ...prev,
         workflow: workflowDraft ?? prev.workflow,
         selectedValidations,
-        selectedEnrichments
+        selectedEnrichments,
+        capabilities: normalizedCapabilities ?? prev.capabilities
       }));
     }
     setDraftHydrated(true);
@@ -439,7 +487,8 @@ export function CreateSnapshotWizard({
     saveOnboardingDraft({
       workflow: snapshot.workflow,
       selectedValidations: snapshot.selectedValidations,
-      selectedEnrichments: snapshot.selectedEnrichments
+      selectedEnrichments: snapshot.selectedEnrichments,
+      capabilities: snapshot.capabilities
     });
   }, [draftHydrated, snapshot.workflow, snapshot.selectedValidations, snapshot.selectedEnrichments]);
 
@@ -476,6 +525,10 @@ export function CreateSnapshotWizard({
 
   const enabledCapabilities = snapshot.capabilities.filter((capability) => capability.enabled);
   const hasCapabilitiesEnabled = enabledCapabilities.length > 0;
+  const dupCheckCapability = snapshot.capabilities.find((capability) => capability.capabilityKey === 'DUP_CHECK');
+  const dupCheckStaticEntries = dupCheckCapability?.staticParams
+    ? Object.entries(dupCheckCapability.staticParams).filter(([, value]) => Boolean(value && String(value).trim()))
+    : [];
 
   const workflowKeyValid = snapshot.workflow.workflowKey.trim().length > 0;
   const stateNames = useMemo(
@@ -671,13 +724,8 @@ export function CreateSnapshotWizard({
     }
   };
 
-  const openParamsDrawer = (
-    title: string,
-    params: Record<string, any> | undefined,
-    onSave: (next: Record<string, any>) => void,
-    description?: string
-  ) => {
-    setParamsDrawerContext({ title, params, onSave, description });
+  const openParamsDrawer = (context: ParamsDrawerContext) => {
+    setParamsDrawerContext(context);
   };
 
   const handleSaveSnapshot = async () => {
@@ -879,6 +927,12 @@ export function CreateSnapshotWizard({
                                 <Typography variant="body2" color="text.secondary">
                                   {item.description}
                                 </Typography>
+                                {item.key === 'DUP_CHECK' ? (
+                                  <Typography variant="caption" color="text.secondary">
+                                    Static fields: bankSettlementType, paymentID, debitAcctID, creditAcctID,
+                                    clearingSystemMemId, ccy
+                                  </Typography>
+                                ) : null}
                                 <Link
                                   href={item.epicUrl}
                                   target="_blank"
@@ -930,18 +984,48 @@ export function CreateSnapshotWizard({
                                 startIcon={<BuildOutlinedIcon />}
                                 disabled={!enabled}
                                 onClick={() =>
-                                  openParamsDrawer(
-                                    `${item.label} Params`,
-                                    capability?.params,
-                                    (params) =>
+                                  openParamsDrawer({
+                                    title: `${item.label} Params`,
+                                    description: item.description,
+                                    params: capability?.params,
+                                    staticParams:
+                                      item.key === 'DUP_CHECK'
+                                        ? (capability?.staticParams as Record<string, string> | undefined)
+                                        : undefined,
+                                    staticParamFields:
+                                      item.key === 'DUP_CHECK' ? dupCheckStaticParamFields : undefined,
+                                    onSave: (params) =>
                                       updateSnapshot((prev) => ({
                                         ...prev,
                                         capabilities: prev.capabilities.map((cap) =>
                                           cap.capabilityKey === item.key ? { ...cap, params } : cap
                                         )
                                       })),
-                                    item.description
-                                  )
+                                    onSaveStaticParams:
+                                      item.key === 'DUP_CHECK'
+                                        ? (staticParams) =>
+                                            updateSnapshot((prev) => ({
+                                              ...prev,
+                                              capabilities: prev.capabilities.map((cap) =>
+                                                cap.capabilityKey === 'DUP_CHECK'
+                                                  ? { ...cap, staticParams }
+                                                  : cap
+                                              )
+                                            }))
+                                        : undefined,
+                                    onReset:
+                                      item.key === 'DUP_CHECK'
+                                        ? () =>
+                                            updateSnapshot((prev) => ({
+                                              ...prev,
+                                              capabilities: prev.capabilities.map((cap) =>
+                                                cap.capabilityKey === 'DUP_CHECK'
+                                                  ? { ...cap, params: {}, staticParams: buildEmptyDupCheckStaticParams() }
+                                                  : cap
+                                              )
+                                            }))
+                                        : undefined
+                                  })
                                 }
                               >
                                 Configure
@@ -1252,6 +1336,29 @@ export function CreateSnapshotWizard({
                 ) : (
                   <Alert severity="info">No capabilities are enabled.</Alert>
                 )}
+                {dupCheckCapability?.enabled ? (
+                  <Stack spacing={1}>
+                    <Typography variant="caption" color="text.secondary">
+                      Dup Check Static Params
+                    </Typography>
+                    {dupCheckStaticEntries.length ? (
+                      <Stack spacing={0.5}>
+                        {dupCheckStaticEntries.map(([key, value]) => (
+                          <Typography key={key} variant="body2">
+                            <Box component="span" sx={{ fontWeight: 600 }}>
+                              {key}
+                            </Box>
+                            : {String(value)}
+                          </Typography>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No static params configured.
+                      </Typography>
+                    )}
+                  </Stack>
+                ) : null}
               </Stack>
             </Paper>
             <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
@@ -1413,6 +1520,10 @@ export function CreateSnapshotWizard({
         title={paramsDrawerContext?.title}
         description={paramsDrawerContext?.description}
         params={paramsDrawerContext?.params}
+        staticParams={paramsDrawerContext?.staticParams}
+        staticParamFields={paramsDrawerContext?.staticParamFields}
+        onSaveStaticParams={paramsDrawerContext?.onSaveStaticParams}
+        onReset={paramsDrawerContext?.onReset}
         onSave={(params) => paramsDrawerContext?.onSave(params)}
         onClose={() => setParamsDrawerContext(null)}
       />

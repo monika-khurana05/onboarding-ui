@@ -21,6 +21,11 @@ type ParamsEditorDrawerProps = {
   title?: string;
   description?: string;
   params?: Record<string, any>;
+  staticParams?: Record<string, string>;
+  staticParamFields?: ReadonlyArray<{ key: string; label: string }>;
+  staticSectionHelperText?: string;
+  onSaveStaticParams?: (params: Record<string, string>) => void;
+  onReset?: () => void;
   onClose: () => void;
   onSave: (params: Record<string, any>) => void;
 };
@@ -69,6 +74,11 @@ export function ParamsEditorDrawer({
   title = 'Configure Params',
   description = 'Configure params aligned to the CPX runtime diagram. Use JSON for advanced values.',
   params,
+  staticParams,
+  staticParamFields,
+  staticSectionHelperText = 'Used to compute duplicate check key or matching logic.',
+  onSaveStaticParams,
+  onReset,
   onClose,
   onSave
 }: ParamsEditorDrawerProps) {
@@ -76,8 +86,19 @@ export function ParamsEditorDrawer({
   const [entries, setEntries] = useState<ParamEntry[]>([]);
   const [jsonValue, setJsonValue] = useState('{}');
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [staticValues, setStaticValues] = useState<Record<string, string>>({});
 
   const initialJson = useMemo(() => JSON.stringify(params ?? {}, null, 2), [params]);
+  const initialStaticValues = useMemo(() => {
+    if (!staticParamFields?.length) {
+      return {};
+    }
+    return staticParamFields.reduce<Record<string, string>>((acc, field) => {
+      const value = staticParams?.[field.key];
+      acc[field.key] = typeof value === 'string' ? value : value == null ? '' : String(value);
+      return acc;
+    }, {});
+  }, [staticParamFields, staticParams]);
 
   useEffect(() => {
     if (!open) {
@@ -87,7 +108,8 @@ export function ParamsEditorDrawer({
     setJsonValue(initialJson);
     setJsonError(null);
     setMode('kv');
-  }, [initialJson, open, params]);
+    setStaticValues(initialStaticValues);
+  }, [initialJson, initialStaticValues, open, params]);
 
   const canSave = mode === 'kv' || !jsonError;
 
@@ -97,11 +119,32 @@ export function ParamsEditorDrawer({
         return;
       }
       onSave(JSON.parse(jsonValue));
+      if (onSaveStaticParams && staticParamFields?.length) {
+        onSaveStaticParams({ ...staticValues });
+      }
       onClose();
       return;
     }
     onSave(buildParamsFromEntries(entries));
+    if (onSaveStaticParams && staticParamFields?.length) {
+      onSaveStaticParams({ ...staticValues });
+    }
     onClose();
+  };
+
+  const handleReset = () => {
+    setEntries([]);
+    setJsonValue('{}');
+    setJsonError(null);
+    setMode('kv');
+    if (staticParamFields?.length) {
+      const resetValues = staticParamFields.reduce<Record<string, string>>((acc, field) => {
+        acc[field.key] = '';
+        return acc;
+      }, {});
+      setStaticValues(resetValues);
+    }
+    onReset?.();
   };
 
   return (
@@ -132,6 +175,29 @@ export function ParamsEditorDrawer({
               {description}
             </Typography>
           </Stack>
+          {staticParamFields?.length ? (
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2">Static Params</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {staticSectionHelperText}
+              </Typography>
+              <Stack spacing={1}>
+                {staticParamFields.map((field) => (
+                  <TextField
+                    key={field.key}
+                    label={field.label}
+                    size="small"
+                    value={staticValues[field.key] ?? ''}
+                    onChange={(event) =>
+                      setStaticValues((prev) => ({ ...prev, [field.key]: event.target.value }))
+                    }
+                    fullWidth
+                  />
+                ))}
+              </Stack>
+              <Divider />
+            </Stack>
+          ) : null}
           <Tabs value={mode} onChange={(_, value) => setMode(value as 'kv' | 'json')}>
             <Tab value="kv" label="Key/Value" />
             <Tab value="json" label="JSON" />
@@ -206,13 +272,22 @@ export function ParamsEditorDrawer({
           </Box>
         </Stack>
         <Divider sx={{ my: 2 }} />
-        <Stack direction="row" justifyContent="flex-end" spacing={1}>
-          <Button variant="text" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="contained" onClick={handleSave} disabled={!canSave}>
-            Save Params
-          </Button>
+        <Stack direction="row" justifyContent="space-between" spacing={1}>
+          <Stack direction="row" spacing={1}>
+            {onReset ? (
+              <Button variant="text" color="warning" onClick={handleReset}>
+                Reset
+              </Button>
+            ) : null}
+          </Stack>
+          <Stack direction="row" spacing={1}>
+            <Button variant="text" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="contained" onClick={handleSave} disabled={!canSave}>
+              Save Params
+            </Button>
+          </Stack>
         </Stack>
       </Box>
     </Drawer>

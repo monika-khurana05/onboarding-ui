@@ -1,4 +1,5 @@
 export const capabilityKeys = [
+  'DUP_CHECK',
   'PAYMENT_INITIATION',
   'PAYMENT_ORCHESTRATION',
   'CLIENT_ONBOARDING',
@@ -16,10 +17,20 @@ export const capabilityKeys = [
 
 export type CapabilityKey = (typeof capabilityKeys)[number];
 
+export type DupCheckStaticParams = {
+  bankSettlementType?: string;
+  paymentID?: string;
+  debitAcctID?: string;
+  creditAcctID?: string;
+  clearingSystemMemId?: string;
+  ccy?: string;
+};
+
 export type SnapshotCapability = {
   capabilityKey: CapabilityKey;
   enabled: boolean;
   params?: Record<string, any>;
+  staticParams?: DupCheckStaticParams;
 };
 
 export type SnapshotRule = {
