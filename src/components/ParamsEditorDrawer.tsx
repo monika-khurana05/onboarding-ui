@@ -177,11 +177,15 @@ export function ParamsEditorDrawer({
           </Stack>
           {staticParamFields?.length ? (
             <Stack spacing={1.5}>
-              <Typography variant="subtitle2">Static Params</Typography>
-              <Typography variant="caption" color="text.secondary">
-                {staticSectionHelperText}
-              </Typography>
-              <Stack spacing={1}>
+              <Stack spacing={0.25}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  Static Params
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {staticSectionHelperText}
+                </Typography>
+              </Stack>
+              <Stack spacing={1.25}>
                 {staticParamFields.map((field) => (
                   <TextField
                     key={field.key}
@@ -191,6 +195,13 @@ export function ParamsEditorDrawer({
                     onChange={(event) =>
                       setStaticValues((prev) => ({ ...prev, [field.key]: event.target.value }))
                     }
+                    InputLabelProps={{
+                      shrink: true,
+                      sx: { color: 'text.secondary', fontSize: 12, fontWeight: 600 }
+                    }}
+                    inputProps={{ style: { fontSize: 13 } }}
+                    helperText={`Key: ${field.key}`}
+                    FormHelperTextProps={{ sx: { color: 'text.secondary', fontSize: 11 } }}
                     fullWidth
                   />
                 ))}

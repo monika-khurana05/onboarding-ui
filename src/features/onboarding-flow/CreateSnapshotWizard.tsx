@@ -101,12 +101,12 @@ const defaultEnabledCapabilities = new Set<CapabilityKey>([
 ]);
 
 const dupCheckStaticParamFields = [
-  { key: 'bankSettlementType', label: 'bankSettlementType' },
-  { key: 'paymentID', label: 'paymentID' },
-  { key: 'debitAcctID', label: 'debitAcctID' },
-  { key: 'creditAcctID', label: 'creditAcctID' },
-  { key: 'clearingSystemMemId', label: 'clearingSystemMemId' },
-  { key: 'ccy', label: 'ccy' }
+  { key: 'bankSettlementType', label: 'Bank Settlement Type' },
+  { key: 'paymentID', label: 'Payment ID' },
+  { key: 'debitAcctID', label: 'Debit Account ID' },
+  { key: 'creditAcctID', label: 'Credit Account ID' },
+  { key: 'clearingSystemMemId', label: 'Clearing System Member ID' },
+  { key: 'ccy', label: 'Currency (CCY)' }
 ] as const;
 
 type DupCheckStaticParamKey = (typeof dupCheckStaticParamFields)[number]['key'];
