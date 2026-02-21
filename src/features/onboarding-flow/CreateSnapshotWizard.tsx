@@ -1,6 +1,5 @@
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
 import CloseIcon from '@mui/icons-material/Close';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SaveIcon from '@mui/icons-material/Save';
 import {
@@ -28,13 +27,12 @@ import {
   Tab,
   Tabs,
   TextField,
-  Tooltip,
   Typography
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { JsonMonacoPanel } from '../../components/JsonMonacoPanel';
 import { CatalogSelector, type CatalogColumn } from '../../components/CatalogSelector';
 import { ParamsEditorDrawer } from '../../components/ParamsEditorDrawer';
@@ -43,7 +41,6 @@ import { WorkflowDefinitionFields, WorkflowTabPanels, type WorkflowTabKey } from
 import { createSnapshot, createSnapshotVersion } from '../../api/client';
 import type { SnapshotDetailDto } from '../../api/types';
 import { useGlobalError } from '../../app/GlobalErrorContext';
-import { useAiPreview } from '../../ai/AiPreviewContext';
 import { enrichmentCatalog, type EnrichmentCatalogItem } from '../../catalog/enrichmentCatalog';
 import { validationCatalog, type ValidationCatalogItem } from '../../catalog/validationCatalog';
 import {
@@ -429,7 +426,6 @@ export function CreateSnapshotWizard({
 }: CreateSnapshotWizardProps) {
   const navigate = useNavigate();
   const { showError } = useGlobalError();
-  const { enabled: aiPreviewEnabled, setEnabled: setAiPreviewEnabled } = useAiPreview();
   const [activeStep, setActiveStep] = useState(0);
   const [stepAnimationDirection, setStepAnimationDirection] = useState<'forward' | 'backward'>('forward');
   const [advancedJson, setAdvancedJson] = useState(false);
@@ -674,24 +670,6 @@ export function CreateSnapshotWizard({
   ];
 
   const canProceed = stepValidations[activeStep] && !(advancedJson && jsonError);
-
-  const aiNavLinks = [
-    { label: 'Requirement Analysis', to: '/ai/requirements' },
-    { label: 'Payload Mapping', to: '/ai/mapping' },
-    { label: 'Test Case Generation', to: '/ai/testing' }
-  ];
-  const renderAiLinkGroup = () => (
-    <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
-      <Typography variant="caption" color="text.secondary">
-        Go to:
-      </Typography>
-      {aiNavLinks.map((link) => (
-        <Link key={link.to} component={RouterLink} to={link.to} variant="caption" underline="hover">
-          {link.label}
-        </Link>
-      ))}
-    </Stack>
-  );
 
   const validationColumns = useMemo<CatalogColumn<ValidationCatalogItem>[]>(
     () => [
@@ -950,7 +928,6 @@ export function CreateSnapshotWizard({
                       Toggle each capability to match the onboarding scope for this snapshot.
                     </Typography>
                   </Stack>
-                  {renderAiLinkGroup()}
                 </Stack>
                 <Grid container spacing={2}>
                   {capabilityCatalog.map((item) => {
@@ -1148,7 +1125,6 @@ export function CreateSnapshotWizard({
                       Select the validation and enrichment rules that should run before workflow execution.
                     </Typography>
                   </Stack>
-                  {renderAiLinkGroup()}
                 </Stack>
                 <Tabs
                   value={catalogTab}
@@ -1202,7 +1178,6 @@ export function CreateSnapshotWizard({
                       Why this matters: the CPX State Manager uses this FSM to enforce lifecycle guarantees.
                     </Typography>
                   </Stack>
-                  {renderAiLinkGroup()}
                 </Stack>
                 <Grid container spacing={2.5}>
                   <Grid size={{ xs: 12 }}>
@@ -1514,15 +1489,6 @@ export function CreateSnapshotWizard({
                 </Stack>
               </Stack>
             </Paper>
-            <SectionCard title="AI Tools" subtitle="AI tools are available as separate pages:">
-              <Stack spacing={1}>
-                {aiNavLinks.map((link) => (
-                  <Link key={link.to} component={RouterLink} to={link.to} underline="hover">
-                    {link.label}
-                  </Link>
-                ))}
-              </Stack>
-            </SectionCard>
             <SectionCard title="Snapshot JSON Preview" subtitle="Payload that will be persisted to CPX backend.">
               <JsonMonacoPanel
                 ariaLabel="Snapshot JSON preview"
@@ -1550,57 +1516,6 @@ export function CreateSnapshotWizard({
               sx={{ m: 0, '& .MuiFormControlLabel-label': { textAlign: 'left' } }}
               control={<Switch checked={advancedJson} onChange={(_, checked) => setAdvancedJson(checked)} />}
               label="Advanced JSON"
-            />
-            <FormControlLabel
-              sx={{ m: 0, alignItems: 'flex-start', '& .MuiFormControlLabel-label': { textAlign: 'left' } }}
-              control={
-                <Switch checked={aiPreviewEnabled} onChange={(_, checked) => setAiPreviewEnabled(checked)} />
-              }
-              label={
-                <Stack spacing={0.25}>
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <Typography variant="body2">AI Assisted Mode (Preview)</Typography>
-                    <Tooltip
-                      arrow
-                      placement="top"
-                      title={
-                        <Stack spacing={0.5}>
-                          <Typography variant="caption">AI preview moved to:</Typography>
-                          <Stack spacing={0.25}>
-                            {aiNavLinks.map((link) => (
-                              <Link
-                                key={link.to}
-                                component={RouterLink}
-                                to={link.to}
-                                color="inherit"
-                                underline="hover"
-                                variant="caption"
-                              >
-                                {link.label}
-                              </Link>
-                            ))}
-                          </Stack>
-                        </Stack>
-                      }
-                    >
-                      <IconButton
-                        size="small"
-                        aria-label="AI preview links"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }}
-                        sx={{ p: 0.25 }}
-                      >
-                        <InfoOutlinedIcon fontSize="inherit" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary">
-                    Demo mode using mocked responses. R2D2 integration pending.
-                  </Typography>
-                </Stack>
-              }
             />
           </Stack>
         }

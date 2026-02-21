@@ -159,13 +159,43 @@ export function DashboardPage() {
         </Grid>
       </CardSection>
 
-      <CardSection title="Quick Start" subtitle="Create, preview, then automate.">
+      <CardSection title="Quick Start" subtitle="Analyze requirements, map payloads, then build, preview, and test.">
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
               <Stack spacing={1}>
                 <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
                   Step 1
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Requirement Analysis
+                </Typography>
+                <InlineHelpText>
+                  Extract requirements, map capabilities, and capture open questions.
+                </InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 2
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Payload Mapping
+                </Typography>
+                <InlineHelpText>
+                  Review draft mapping grids and export ICD-ready drafts.
+                </InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 3
                 </Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                   Create Snapshot
@@ -180,10 +210,10 @@ export function DashboardPage() {
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
               <Stack spacing={1}>
                 <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Step 2
+                  Step 4
                 </Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Preview Generation
+                  Generate Preview
                 </Typography>
                 <InlineHelpText>
                   Validate generated files repo-by-repo before automation.
@@ -195,12 +225,25 @@ export function DashboardPage() {
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
               <Stack spacing={1}>
                 <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Step 3
+                  Step 5
                 </Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Create PR (future)
+                  Jobs
                 </Typography>
-                <InlineHelpText>Open PRs, approvals, and deploy when automation ships.</InlineHelpText>
+                <InlineHelpText>Track async runs, approvals, and automation status.</InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 6
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Test Case Generation
+                </Typography>
+                <InlineHelpText>Generate scenario packs and test skeletons from payloads.</InlineHelpText>
               </Stack>
             </Paper>
           </Grid>

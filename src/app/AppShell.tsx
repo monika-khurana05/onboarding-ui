@@ -47,12 +47,12 @@ const drawerWidth = 270;
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: <DashboardCustomizeIcon /> },
-  { label: 'Create Snapshot', to: '/snapshots/new', icon: <FactCheckIcon /> },
-  { label: 'Generate Preview', to: '/generate/preview', icon: <QueryStatsIcon /> },
   { label: 'Requirement Analysis', to: '/ai/requirements', icon: <RuleIcon /> },
   { label: 'Payload Mapping', to: '/ai/mapping', icon: <TableChartIcon /> },
-  { label: 'Test Case Generation', to: '/ai/testing', icon: <ScienceIcon /> },
+  { label: 'Create Snapshot', to: '/snapshots/new', icon: <FactCheckIcon /> },
+  { label: 'Generate Preview', to: '/generate/preview', icon: <QueryStatsIcon /> },
   { label: 'Jobs', to: '/jobs', icon: <InfoOutlinedIcon /> },
+  { label: 'Test Case Generation', to: '/ai/testing', icon: <ScienceIcon /> },
   { label: 'Settings/About', to: '/settings', icon: <SettingsIcon /> }
 ];
 
