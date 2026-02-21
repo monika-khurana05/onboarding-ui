@@ -61,8 +61,7 @@ const navItems: NavItem[] = [
   {
     label: 'Create Assembly Pod',
     to: '/onboarding/create-assembly-pod',
-    icon: <Inventory2OutlinedIcon />,
-    requiresAssemblyAccess: true
+    icon: <Inventory2OutlinedIcon />
   },
   { label: 'Generate Preview', to: '/generate/preview', icon: <QueryStatsIcon /> },
   { label: 'Jobs', to: '/jobs', icon: <InfoOutlinedIcon /> },

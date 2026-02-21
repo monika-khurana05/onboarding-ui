@@ -29,7 +29,6 @@ import { InlineHelpText } from '../components/InlineHelpText';
 import { JsonMonacoPanel } from '../components/JsonMonacoPanel';
 import { PageContainer } from '../components/PageContainer';
 import { StatusChip } from '../components/StatusChip';
-import { getAssemblyPodAccessRoles, hasAssemblyPodAccess } from '../lib/accessControl';
 import {
   loadAssemblyConfigDraft,
   saveAssemblyConfigDraft,
@@ -518,7 +517,6 @@ export function CreateAssemblyPodPage() {
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [originalRowSnapshot, setOriginalRowSnapshot] = useState<AssemblyCapabilityConfig | null>(null);
 
-  const hasAccess = hasAssemblyPodAccess();
   const pendingPrs = prStatusRows.filter((row) => row.prStatus !== 'success');
   const allReady = pendingPrs.length === 0;
   const ownerList = useMemo(() => {
@@ -803,25 +801,6 @@ export function CreateAssemblyPodPage() {
     }),
     [countryCode, direction, environment, ownerList, snapshotVersion]
   );
-
-  if (!hasAccess) {
-    return (
-      <PageContainer
-        title="Create Assembly Pod"
-        subtitle="Aggregate capability owner configuration and package assembly PR bundles."
-      >
-        <CardSection
-          title="Access Restricted"
-          subtitle="This workflow is limited to onboarding admins and capability owners."
-        >
-          <Alert severity="warning">
-            Your current role does not permit access to assembly pod configuration. Required roles:{' '}
-            {getAssemblyPodAccessRoles().join(', ')}.
-          </Alert>
-        </CardSection>
-      </PageContainer>
-    );
-  }
 
   return (
     <PageContainer
