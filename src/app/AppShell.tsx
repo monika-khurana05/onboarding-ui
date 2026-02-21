@@ -1,6 +1,7 @@
 import DashboardCustomizeIcon from '@mui/icons-material/DashboardCustomize';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import QueryStatsIcon from '@mui/icons-material/QueryStats';
 import RuleIcon from '@mui/icons-material/Rule';
@@ -33,6 +34,7 @@ import { type ReactElement, useMemo, useState } from 'react';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useGlobalError } from './GlobalErrorContext';
 import { ApiError } from '../lib/apiClient';
+import { hasAssemblyPodAccess } from '../lib/accessControl';
 import { env } from '../lib/env';
 import { deriveEnvironmentFromApiUrl, environmentChipColor } from '../lib/environment';
 import { useHealthQuery } from '../features/onboarding-flow/hooks';
@@ -41,6 +43,12 @@ type NavItem = {
   label: string;
   to: string;
   icon: ReactElement;
+  requiresAssemblyAccess?: boolean;
+};
+
+type Crumb = {
+  label: string;
+  to?: string;
 };
 
 const drawerWidth = 270;
@@ -50,11 +58,25 @@ const navItems: NavItem[] = [
   { label: 'Requirement Analysis', to: '/ai/requirements', icon: <RuleIcon /> },
   { label: 'Payload Mapping', to: '/ai/mapping', icon: <TableChartIcon /> },
   { label: 'Create Snapshot', to: '/snapshots/new', icon: <FactCheckIcon /> },
+  {
+    label: 'Create Assembly Pod',
+    to: '/onboarding/create-assembly-pod',
+    icon: <Inventory2OutlinedIcon />,
+    requiresAssemblyAccess: true
+  },
   { label: 'Generate Preview', to: '/generate/preview', icon: <QueryStatsIcon /> },
   { label: 'Jobs', to: '/jobs', icon: <InfoOutlinedIcon /> },
   { label: 'Test Case Generation', to: '/ai/testing', icon: <ScienceIcon /> },
   { label: 'Settings/About', to: '/settings', icon: <SettingsIcon /> }
 ];
+
+const breadcrumbOverrides: Record<string, Crumb[]> = {
+  '/onboarding/create-assembly-pod': [
+    { label: 'Home', to: '/' },
+    { label: 'Country Onboarding' },
+    { label: 'Create Assembly Pod' }
+  ]
+};
 
 function toTitle(segment: string) {
   return segment
@@ -74,6 +96,11 @@ export function AppShell() {
   const deploymentEnvironment = deriveEnvironmentFromApiUrl(env.apiBaseUrl);
   const environmentColor = environmentChipColor(deploymentEnvironment);
   const healthQuery = useHealthQuery();
+  const canAccessAssemblyPod = hasAssemblyPodAccess();
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => !item.requiresAssemblyAccess || canAccessAssemblyPod),
+    [canAccessAssemblyPod]
+  );
 
   const healthStatus = healthQuery.isError ? 'unavailable' : healthQuery.data?.status ?? 'checking';
   const normalizedStatus = healthStatus.toLowerCase();
@@ -93,12 +120,16 @@ export function AppShell() {
   const healthDetails = [healthService, healthVersion ? `v${healthVersion}` : null].filter(Boolean).join(' · ');
 
   const crumbs = useMemo(() => {
+    const override = breadcrumbOverrides[location.pathname];
+    if (override) {
+      return override;
+    }
     const segments = location.pathname.split('/').filter(Boolean);
     if (segments.length === 0) {
       return [{ label: 'Dashboard', to: '/' }];
     }
 
-    const all = [{ label: 'Dashboard', to: '/' }];
+    const all: Crumb[] = [{ label: 'Dashboard', to: '/' }];
     let current = '';
     for (const segment of segments) {
       current += `/${segment}`;
@@ -120,7 +151,7 @@ export function AppShell() {
         </Stack>
       </Toolbar>
       <List role="navigation" aria-label="Primary navigation">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const selected = (() => {
             if (item.to === '/') {
               return location.pathname === item.to;
@@ -252,8 +283,8 @@ export function AppShell() {
           <Stack spacing={2}>
             <Breadcrumbs aria-label="Breadcrumb">
               {crumbs.map((crumb, index) =>
-                index === crumbs.length - 1 ? (
-                  <Typography color="text.primary" key={crumb.to}>
+                index === crumbs.length - 1 || !crumb.to ? (
+                  <Typography color="text.primary" key={`${crumb.label}-${index}`}>
                     {crumb.label}
                   </Typography>
                 ) : (
@@ -262,7 +293,7 @@ export function AppShell() {
                     underline="hover"
                     color="inherit"
                     to={crumb.to}
-                    key={crumb.to}
+                    key={`${crumb.label}-${index}`}
                   >
                     {crumb.label}
                   </Link>

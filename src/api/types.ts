@@ -29,6 +29,84 @@ export type RepoDefaultsResponseDto = {
   defaultRef?: string;
 };
 
+export type SnapshotContextDto = {
+  countryCode?: string;
+  snapshotVersion?: number;
+  version?: number;
+  direction?: string;
+  environment?: string;
+  snapshot?: {
+    version?: number;
+    currentVersion?: number;
+  };
+};
+
+export type AssemblyConfigCapabilityDto = {
+  capability: string;
+  primaryArtifact?: {
+    groupId?: string;
+    artifactId?: string;
+    version?: string;
+  };
+  additionalArtifacts?: Array<{
+    groupId?: string;
+    artifactId?: string;
+    version?: string;
+    notes?: string;
+  }>;
+  ownerName?: string;
+  status?: string;
+  pipelineKey?: string;
+  kafkaTopics?: string[];
+  kafkaBindings?: Array<{
+    purpose?: string;
+    topicName?: string;
+    clusterAlias?: string;
+    consumerGroup?: string;
+    keySchema?: string;
+    valueSchema?: string;
+    partitionCount?: number;
+    replicationFactor?: number;
+    notes?: string;
+  }>;
+  mongoEnabled?: boolean;
+  mongoSslEnable?: boolean;
+  mongoServers?: string[];
+  mongoDatabase?: string;
+  mongoUsername?: string;
+  mongoPasswordRef?: string;
+  mongoAuthDb?: string;
+  trustStoreLocation?: string;
+  trustStoreType?: string;
+  trustStorePasswordRef?: string;
+  mongoCollections?: Array<{
+    name?: string;
+    purpose?: string;
+    retentionDays?: number;
+    indexesNotes?: string;
+  }>;
+  batchingMongoWriterSize?: number;
+  threadCount?: number;
+  configFiles?: string[];
+  configPaths?: string[];
+  capabilityParams?: Array<{ key: string; value: string }>;
+  lastUpdated?: string;
+};
+
+export type AssemblyConfigRequestDto = {
+  countryCode: string;
+  snapshotVersion?: number;
+  direction?: string;
+  environment?: string;
+  capabilities: AssemblyConfigCapabilityDto[];
+};
+
+export type AssemblyConfigResponseDto = {
+  status?: string;
+  message?: string;
+  requestId?: string;
+};
+
 export type CreateSnapshotRequestDto = {
   countryCode: string;
   snapshot: SnapshotModel;

@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import { AppShell } from './AppShell';
+import { CreateAssemblyPodPage } from '../pages/CreateAssemblyPodPage';
 import { CreateSnapshotPage } from '../pages/CreateSnapshotPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { GeneratePreviewPage } from '../pages/GeneratePreviewPage';
@@ -17,6 +18,7 @@ export function AppRoutes() {
       <Route element={<AppShell />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/snapshots/new" element={<CreateSnapshotPage />} />
+        <Route path="/onboarding/create-assembly-pod" element={<CreateAssemblyPodPage />} />
         <Route path="/snapshots/:snapshotId" element={<SnapshotDetailsPage />} />
         <Route path="/generate/preview" element={<GeneratePreviewPage />} />
         <Route path="/ai/requirements" element={<RequirementAnalysisPage />} />

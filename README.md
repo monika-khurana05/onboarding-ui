@@ -20,6 +20,7 @@
 - `/` Dashboard
 - `/snapshots/new` Create Snapshot Wizard
 - `/snapshots/:snapshotId` Snapshot Details
+- `/onboarding/create-assembly-pod` Create Assembly Pod
 - `/generate/preview` Preview Generation
 - `/jobs` Jobs placeholder (Phase 3 PR automation)
 - `/settings` Settings/About
@@ -61,11 +62,13 @@ Create a `.env` file using `.env.example` (or override with `.env.local`):
 VITE_API_BASE_URL=http://localhost:8080
 VITE_AUTH_TOKEN=
 VITE_ENABLE_MSW=false
+VITE_USER_ROLES=onboarding-admin,capability-owner
 ```
 
 - `VITE_API_BASE_URL`: backend base URL. Use `http://localhost:8080` or `/api` (Vite dev proxy).
 - `VITE_AUTH_TOKEN`: optional bearer token.
 - `VITE_ENABLE_MSW`: enable mock handlers (`true` or `false`).
+- `VITE_USER_ROLES`: optional comma-separated roles that unlock restricted navigation (for example, `onboarding-admin` or `capability-owner`).
 
 If `VITE_API_BASE_URL` is blank, the UI defaults to `/api`.
 For local development, `.env.development` sets `VITE_API_BASE_URL=http://localhost:8080`.

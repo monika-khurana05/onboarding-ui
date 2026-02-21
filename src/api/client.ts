@@ -1,11 +1,14 @@
 import { ApiError, httpRequest } from './http';
 import type {
   CapabilityMetadataDto,
+  AssemblyConfigRequestDto,
+  AssemblyConfigResponseDto,
   CreateSnapshotRequestDto,
   CreateSnapshotResponseDto,
   PreviewGenerateRequestDto,
   PreviewGenerateResponseDto,
   RepoDefaultsResponseDto,
+  SnapshotContextDto,
   RepoPacksResponseDto,
   RepoPackDto,
   SnapshotDetailDto,
@@ -15,6 +18,20 @@ import type {
 
 export async function getRepoDefaults(): Promise<RepoDefaultsResponseDto> {
   return httpRequest<RepoDefaultsResponseDto>('/repo-defaults');
+}
+
+export async function getSnapshotContext(countryCode: string): Promise<SnapshotContextDto> {
+  const query = `?country=${encodeURIComponent(countryCode)}`;
+  return httpRequest<SnapshotContextDto>(`/onboarding/snapshot/context${query}`);
+}
+
+export async function persistAssemblyConfig(
+  req: AssemblyConfigRequestDto
+): Promise<AssemblyConfigResponseDto> {
+  return httpRequest<AssemblyConfigResponseDto>('/onboarding/assembly/config', {
+    method: 'POST',
+    body: JSON.stringify(req)
+  });
 }
 
 export async function createSnapshot(req: CreateSnapshotRequestDto): Promise<CreateSnapshotResponseDto> {
