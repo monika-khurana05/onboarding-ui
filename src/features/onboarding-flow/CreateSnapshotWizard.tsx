@@ -1,5 +1,6 @@
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SaveIcon from '@mui/icons-material/Save';
 import {
@@ -27,12 +28,13 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { JsonMonacoPanel } from '../../components/JsonMonacoPanel';
 import { CatalogSelector, type CatalogColumn } from '../../components/CatalogSelector';
 import { ParamsEditorDrawer } from '../../components/ParamsEditorDrawer';
@@ -41,12 +43,14 @@ import { WorkflowDefinitionFields, WorkflowTabPanels, type WorkflowTabKey } from
 import { createSnapshot, createSnapshotVersion } from '../../api/client';
 import type { SnapshotDetailDto } from '../../api/types';
 import { useGlobalError } from '../../app/GlobalErrorContext';
+import { useAiPreview } from '../../ai/AiPreviewContext';
 import { enrichmentCatalog, type EnrichmentCatalogItem } from '../../catalog/enrichmentCatalog';
 import { validationCatalog, type ValidationCatalogItem } from '../../catalog/validationCatalog';
 import {
   capabilityKeys,
   type CapabilityKey,
-  type DupCheckStaticParams,
+  type DupCheckConfig,
+  type DupCheckKeyField,
   type SnapshotCapability,
   type RulesConfig,
   type SnapshotModel,
@@ -68,9 +72,9 @@ type ParamsDrawerContext = {
   title: string;
   description?: string;
   params?: Record<string, any>;
-  staticParams?: Record<string, string>;
-  staticParamFields?: ReadonlyArray<{ key: string; label: string }>;
-  onSaveStaticParams?: (params: Record<string, string>) => void;
+  dupCheckConfig?: DupCheckConfig;
+  dupCheckFields?: ReadonlyArray<{ key: DupCheckKeyField; label: string }>;
+  onSaveDupCheck?: (config: DupCheckConfig) => void;
   onReset?: () => void;
   onSave: (params: Record<string, any>) => void;
 } | null;
@@ -100,7 +104,7 @@ const defaultEnabledCapabilities = new Set<CapabilityKey>([
   'PLATFORM_RESILIENCY'
 ]);
 
-const dupCheckStaticParamFields = [
+const dupCheckKeyFieldOptions = [
   { key: 'bankSettlementType', label: 'Bank Settlement Type' },
   { key: 'paymentID', label: 'Payment ID' },
   { key: 'debitAcctID', label: 'Debit Account ID' },
@@ -109,8 +113,9 @@ const dupCheckStaticParamFields = [
   { key: 'ccy', label: 'Currency (CCY)' }
 ] as const;
 
-type DupCheckStaticParamKey = (typeof dupCheckStaticParamFields)[number]['key'];
-const dupCheckStaticParamKeys: DupCheckStaticParamKey[] = dupCheckStaticParamFields.map((field) => field.key);
+const dupCheckKeyFieldKeys: DupCheckKeyField[] = dupCheckKeyFieldOptions.map((field) => field.key);
+const defaultDupCheckKeyFields: DupCheckKeyField[] = ['ccy', 'paymentID'];
+const defaultDupCheckDelimiter = '|';
 
 const capabilityLabelLookup = new Map<CapabilityKey, string>(
   capabilityCatalog.map((item) => [item.key, item.label])
@@ -189,20 +194,49 @@ const defaultWorkflow: WorkflowSpec = {
   ]
 };
 
-function buildEmptyDupCheckStaticParams(): DupCheckStaticParams {
-  return dupCheckStaticParamKeys.reduce<DupCheckStaticParams>((acc, key) => {
-    acc[key] = '';
-    return acc;
-  }, {});
+function normalizeDupCheckConfig(value: unknown): DupCheckConfig {
+  const candidate = isRecord(value) ? value : {};
+  const rawFields = Array.isArray(candidate.keyFields) ? candidate.keyFields : [];
+  const cleanedFields = rawFields
+    .map((field) => (typeof field === 'string' ? field.trim() : ''))
+    .filter((field): field is DupCheckKeyField => dupCheckKeyFieldKeys.includes(field as DupCheckKeyField));
+  const normalizedFields = dupCheckKeyFieldKeys.filter((field) => cleanedFields.includes(field));
+  const delimiterCandidate = typeof candidate.delimiter === 'string' ? candidate.delimiter.trim() : '';
+  const delimiter = delimiterCandidate || defaultDupCheckDelimiter;
+  const caseMode = candidate.caseMode === 'INSENSITIVE' ? 'INSENSITIVE' : 'SENSITIVE';
+  return {
+    keyFields: normalizedFields,
+    delimiter,
+    caseMode
+  };
 }
 
-function normalizeDupCheckStaticParams(value: unknown): DupCheckStaticParams {
-  const candidate = isRecord(value) ? value : {};
-  return dupCheckStaticParamKeys.reduce<DupCheckStaticParams>((acc, key) => {
-    const entry = candidate[key];
-    acc[key] = typeof entry === 'string' ? entry : entry == null ? '' : String(entry);
-    return acc;
-  }, {});
+function deriveDupCheckKeyFieldsFromLegacy(value: unknown): DupCheckKeyField[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  return dupCheckKeyFieldKeys.filter((key) => {
+    const entry = value[key];
+    if (typeof entry === 'boolean') {
+      return entry;
+    }
+    if (typeof entry === 'string') {
+      return entry.trim().length > 0;
+    }
+    return Boolean(entry);
+  });
+}
+
+function ensureDupCheckDefaults(config?: DupCheckConfig): DupCheckConfig {
+  const normalized = normalizeDupCheckConfig(config);
+  if (normalized.keyFields.length === 0) {
+    return {
+      ...normalized,
+      keyFields: [...defaultDupCheckKeyFields],
+      delimiter: normalized.delimiter?.trim() ? normalized.delimiter : defaultDupCheckDelimiter
+    };
+  }
+  return normalized;
 }
 
 function normalizeCapabilities(rawCapabilities: unknown): SnapshotCapability[] {
@@ -216,9 +250,16 @@ function normalizeCapabilities(rawCapabilities: unknown): SnapshotCapability[] {
       params: existing?.params
     };
     if (key === 'DUP_CHECK') {
+      const normalizedDupCheck = normalizeDupCheckConfig(existing?.dupCheck);
+      const legacyFields = normalizedDupCheck.keyFields.length
+        ? normalizedDupCheck.keyFields
+        : deriveDupCheckKeyFieldsFromLegacy((existing as { staticParams?: unknown })?.staticParams);
       return {
         ...base,
-        staticParams: normalizeDupCheckStaticParams(existing?.staticParams)
+        dupCheck: {
+          ...normalizedDupCheck,
+          keyFields: legacyFields
+        }
       };
     }
     return base;
@@ -388,6 +429,7 @@ export function CreateSnapshotWizard({
 }: CreateSnapshotWizardProps) {
   const navigate = useNavigate();
   const { showError } = useGlobalError();
+  const { enabled: aiPreviewEnabled, setEnabled: setAiPreviewEnabled } = useAiPreview();
   const [activeStep, setActiveStep] = useState(0);
   const [stepAnimationDirection, setStepAnimationDirection] = useState<'forward' | 'backward'>('forward');
   const [advancedJson, setAdvancedJson] = useState(false);
@@ -474,7 +516,8 @@ export function CreateSnapshotWizard({
         workflow: workflowDraft ?? prev.workflow,
         selectedValidations,
         selectedEnrichments,
-        capabilities: normalizedCapabilities ?? prev.capabilities
+        capabilities: normalizedCapabilities ?? prev.capabilities,
+        rulesConfig: draft.rulesConfig ?? prev.rulesConfig
       }));
     }
     setDraftHydrated(true);
@@ -488,9 +531,17 @@ export function CreateSnapshotWizard({
       workflow: snapshot.workflow,
       selectedValidations: snapshot.selectedValidations,
       selectedEnrichments: snapshot.selectedEnrichments,
-      capabilities: snapshot.capabilities
+      capabilities: snapshot.capabilities,
+      rulesConfig: snapshot.rulesConfig
     });
-  }, [draftHydrated, snapshot.workflow, snapshot.selectedValidations, snapshot.selectedEnrichments]);
+  }, [
+    draftHydrated,
+    snapshot.workflow,
+    snapshot.selectedValidations,
+    snapshot.selectedEnrichments,
+    snapshot.capabilities,
+    snapshot.rulesConfig
+  ]);
 
   const handleJsonChange = (next: string) => {
     setJsonValue(next);
@@ -526,9 +577,9 @@ export function CreateSnapshotWizard({
   const enabledCapabilities = snapshot.capabilities.filter((capability) => capability.enabled);
   const hasCapabilitiesEnabled = enabledCapabilities.length > 0;
   const dupCheckCapability = snapshot.capabilities.find((capability) => capability.capabilityKey === 'DUP_CHECK');
-  const dupCheckStaticEntries = dupCheckCapability?.staticParams
-    ? Object.entries(dupCheckCapability.staticParams).filter(([, value]) => Boolean(value && String(value).trim()))
-    : [];
+  const dupCheckConfig = dupCheckCapability?.dupCheck;
+  const dupCheckKeyFields = dupCheckConfig?.keyFields ?? [];
+  const dupCheckDelimiter = dupCheckConfig?.delimiter ?? defaultDupCheckDelimiter;
 
   const workflowKeyValid = snapshot.workflow.workflowKey.trim().length > 0;
   const stateNames = useMemo(
@@ -624,6 +675,23 @@ export function CreateSnapshotWizard({
 
   const canProceed = stepValidations[activeStep] && !(advancedJson && jsonError);
 
+  const aiNavLinks = [
+    { label: 'Requirement Analysis', to: '/ai/requirements' },
+    { label: 'Payload Mapping', to: '/ai/mapping' },
+    { label: 'Test Case Generation', to: '/ai/testing' }
+  ];
+  const renderAiLinkGroup = () => (
+    <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+      <Typography variant="caption" color="text.secondary">
+        Go to:
+      </Typography>
+      {aiNavLinks.map((link) => (
+        <Link key={link.to} component={RouterLink} to={link.to} variant="caption" underline="hover">
+          {link.label}
+        </Link>
+      ))}
+    </Stack>
+  );
 
   const validationColumns = useMemo<CatalogColumn<ValidationCatalogItem>[]>(
     () => [
@@ -870,11 +938,19 @@ export function CreateSnapshotWizard({
             ) : null}
             <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2}>
-                <Stack spacing={0.5}>
-                  <Typography variant="subtitle1">Capability Catalog</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Toggle each capability to match the onboarding scope for this snapshot.
-                  </Typography>
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1}
+                  alignItems={{ sm: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle1">Capability Catalog</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Toggle each capability to match the onboarding scope for this snapshot.
+                    </Typography>
+                  </Stack>
+                  {renderAiLinkGroup()}
                 </Stack>
                 <Grid container spacing={2}>
                   {capabilityCatalog.map((item) => {
@@ -923,13 +999,15 @@ export function CreateSnapshotWizard({
                                 {icon}
                               </Stack>
                               <Stack spacing={0.5}>
-                                <Typography variant="subtitle2">{item.label}</Typography>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <Typography variant="subtitle2">{item.label}</Typography>
+                                </Stack>
                                 <Typography variant="body2" color="text.secondary">
                                   {item.description}
                                 </Typography>
                                 {item.key === 'DUP_CHECK' ? (
                                   <Typography variant="caption" color="text.secondary">
-                                    Static fields: bankSettlementType, paymentID, debitAcctID, creditAcctID,
+                                    Key fields: bankSettlementType, paymentID, debitAcctID, creditAcctID,
                                     clearingSystemMemId, ccy
                                   </Typography>
                                 ) : null}
@@ -968,9 +1046,19 @@ export function CreateSnapshotWizard({
                                     onChange={(_, checked) =>
                                       updateSnapshot((prev) => ({
                                         ...prev,
-                                        capabilities: prev.capabilities.map((cap) =>
-                                          cap.capabilityKey === item.key ? { ...cap, enabled: checked } : cap
-                                        )
+                                        capabilities: prev.capabilities.map((cap) => {
+                                          if (cap.capabilityKey !== item.key) {
+                                            return cap;
+                                          }
+                                          if (item.key === 'DUP_CHECK') {
+                                            return {
+                                              ...cap,
+                                              enabled: checked,
+                                              dupCheck: checked ? ensureDupCheckDefaults(cap.dupCheck) : cap.dupCheck
+                                            };
+                                          }
+                                          return { ...cap, enabled: checked };
+                                        })
                                       }))
                                     }
                                     aria-label={`Enable ${item.label}`}
@@ -988,12 +1076,8 @@ export function CreateSnapshotWizard({
                                     title: `${item.label} Params`,
                                     description: item.description,
                                     params: capability?.params,
-                                    staticParams:
-                                      item.key === 'DUP_CHECK'
-                                        ? (capability?.staticParams as Record<string, string> | undefined)
-                                        : undefined,
-                                    staticParamFields:
-                                      item.key === 'DUP_CHECK' ? dupCheckStaticParamFields : undefined,
+                                    dupCheckConfig: item.key === 'DUP_CHECK' ? capability?.dupCheck : undefined,
+                                    dupCheckFields: item.key === 'DUP_CHECK' ? dupCheckKeyFieldOptions : undefined,
                                     onSave: (params) =>
                                       updateSnapshot((prev) => ({
                                         ...prev,
@@ -1001,15 +1085,13 @@ export function CreateSnapshotWizard({
                                           cap.capabilityKey === item.key ? { ...cap, params } : cap
                                         )
                                       })),
-                                    onSaveStaticParams:
+                                    onSaveDupCheck:
                                       item.key === 'DUP_CHECK'
-                                        ? (staticParams) =>
+                                        ? (dupCheck) =>
                                             updateSnapshot((prev) => ({
                                               ...prev,
                                               capabilities: prev.capabilities.map((cap) =>
-                                                cap.capabilityKey === 'DUP_CHECK'
-                                                  ? { ...cap, staticParams }
-                                                  : cap
+                                                cap.capabilityKey === 'DUP_CHECK' ? { ...cap, dupCheck } : cap
                                               )
                                             }))
                                         : undefined,
@@ -1020,7 +1102,15 @@ export function CreateSnapshotWizard({
                                               ...prev,
                                               capabilities: prev.capabilities.map((cap) =>
                                                 cap.capabilityKey === 'DUP_CHECK'
-                                                  ? { ...cap, params: {}, staticParams: buildEmptyDupCheckStaticParams() }
+                                                  ? {
+                                                      ...cap,
+                                                      params: {},
+                                                      dupCheck: {
+                                                        keyFields: [],
+                                                        delimiter: defaultDupCheckDelimiter,
+                                                        caseMode: 'SENSITIVE'
+                                                      }
+                                                    }
                                                   : cap
                                               )
                                             }))
@@ -1046,11 +1136,19 @@ export function CreateSnapshotWizard({
           <Stack spacing={3}>
             <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2}>
-                <Stack spacing={0.5}>
-                  <Typography variant="subtitle1">Validation & Enrichment</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Select the validation and enrichment rules that should run before workflow execution.
-                  </Typography>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={1}
+                  alignItems={{ md: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle1">Validation & Enrichment</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Select the validation and enrichment rules that should run before workflow execution.
+                    </Typography>
+                  </Stack>
+                  {renderAiLinkGroup()}
                 </Stack>
                 <Tabs
                   value={catalogTab}
@@ -1092,11 +1190,19 @@ export function CreateSnapshotWizard({
           <Stack spacing={3}>
             <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2.5}>
-                <Stack spacing={0.5}>
-                  <Typography variant="subtitle1">Workflow Definition</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Why this matters: the CPX State Manager uses this FSM to enforce lifecycle guarantees.
-                  </Typography>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={1}
+                  alignItems={{ md: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle1">Workflow Definition</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Why this matters: the CPX State Manager uses this FSM to enforce lifecycle guarantees.
+                    </Typography>
+                  </Stack>
+                  {renderAiLinkGroup()}
                 </Stack>
                 <Grid container spacing={2.5}>
                   <Grid size={{ xs: 12 }}>
@@ -1120,7 +1226,14 @@ export function CreateSnapshotWizard({
                           <Tab value="state" label={renderWorkflowTabLabel('State View', workflowLintCounts.state)} />
                           <Tab value="yaml" label={renderWorkflowTabLabel('YAML Preview', workflowLintCounts.yaml)} />
                         </Tabs>
-                        <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end">
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          alignItems="center"
+                          justifyContent="flex-end"
+                          useFlexGap
+                          flexWrap="wrap"
+                        >
                           <Badge
                             color={workflowLint.errors.length > 0 ? 'error' : 'warning'}
                             badgeContent={workflowLintIssueCount}
@@ -1339,22 +1452,26 @@ export function CreateSnapshotWizard({
                 {dupCheckCapability?.enabled ? (
                   <Stack spacing={1}>
                     <Typography variant="caption" color="text.secondary">
-                      Dup Check Static Params
+                      Dup Check Key
                     </Typography>
-                    {dupCheckStaticEntries.length ? (
+                    {dupCheckKeyFields.length ? (
                       <Stack spacing={0.5}>
-                        {dupCheckStaticEntries.map(([key, value]) => (
-                          <Typography key={key} variant="body2">
-                            <Box component="span" sx={{ fontWeight: 600 }}>
-                              {key}
-                            </Box>
-                            : {String(value)}
-                          </Typography>
-                        ))}
+                        <Typography variant="body2">
+                          <Box component="span" sx={{ fontWeight: 600 }}>
+                            Key fields
+                          </Box>
+                          : {dupCheckKeyFields.join(', ')}
+                        </Typography>
+                        <Typography variant="body2">
+                          <Box component="span" sx={{ fontWeight: 600 }}>
+                            Delimiter
+                          </Box>
+                          : {dupCheckDelimiter || defaultDupCheckDelimiter}
+                        </Typography>
                       </Stack>
                     ) : (
                       <Typography variant="body2" color="text.secondary">
-                        No static params configured.
+                        No key fields configured.
                       </Typography>
                     )}
                   </Stack>
@@ -1397,6 +1514,15 @@ export function CreateSnapshotWizard({
                 </Stack>
               </Stack>
             </Paper>
+            <SectionCard title="AI Tools" subtitle="AI tools are available as separate pages:">
+              <Stack spacing={1}>
+                {aiNavLinks.map((link) => (
+                  <Link key={link.to} component={RouterLink} to={link.to} underline="hover">
+                    {link.label}
+                  </Link>
+                ))}
+              </Stack>
+            </SectionCard>
             <SectionCard title="Snapshot JSON Preview" subtitle="Payload that will be persisted to CPX backend.">
               <JsonMonacoPanel
                 ariaLabel="Snapshot JSON preview"
@@ -1419,11 +1545,64 @@ export function CreateSnapshotWizard({
         title="Create Snapshot Wizard"
         subtitle="Complete the CPX onboarding snapshot in guided steps with clear validation at each stage."
         actions={
-          <FormControlLabel
-            sx={{ m: 0, '& .MuiFormControlLabel-label': { textAlign: 'left' } }}
-            control={<Switch checked={advancedJson} onChange={(_, checked) => setAdvancedJson(checked)} />}
-            label="Advanced JSON"
-          />
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+            <FormControlLabel
+              sx={{ m: 0, '& .MuiFormControlLabel-label': { textAlign: 'left' } }}
+              control={<Switch checked={advancedJson} onChange={(_, checked) => setAdvancedJson(checked)} />}
+              label="Advanced JSON"
+            />
+            <FormControlLabel
+              sx={{ m: 0, alignItems: 'flex-start', '& .MuiFormControlLabel-label': { textAlign: 'left' } }}
+              control={
+                <Switch checked={aiPreviewEnabled} onChange={(_, checked) => setAiPreviewEnabled(checked)} />
+              }
+              label={
+                <Stack spacing={0.25}>
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <Typography variant="body2">AI Assisted Mode (Preview)</Typography>
+                    <Tooltip
+                      arrow
+                      placement="top"
+                      title={
+                        <Stack spacing={0.5}>
+                          <Typography variant="caption">AI preview moved to:</Typography>
+                          <Stack spacing={0.25}>
+                            {aiNavLinks.map((link) => (
+                              <Link
+                                key={link.to}
+                                component={RouterLink}
+                                to={link.to}
+                                color="inherit"
+                                underline="hover"
+                                variant="caption"
+                              >
+                                {link.label}
+                              </Link>
+                            ))}
+                          </Stack>
+                        </Stack>
+                      }
+                    >
+                      <IconButton
+                        size="small"
+                        aria-label="AI preview links"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        sx={{ p: 0.25 }}
+                      >
+                        <InfoOutlinedIcon fontSize="inherit" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    Demo mode using mocked responses. R2D2 integration pending.
+                  </Typography>
+                </Stack>
+              }
+            />
+          </Stack>
         }
       >
         <Typography variant="body2" color="text.secondary">
@@ -1520,9 +1699,9 @@ export function CreateSnapshotWizard({
         title={paramsDrawerContext?.title}
         description={paramsDrawerContext?.description}
         params={paramsDrawerContext?.params}
-        staticParams={paramsDrawerContext?.staticParams}
-        staticParamFields={paramsDrawerContext?.staticParamFields}
-        onSaveStaticParams={paramsDrawerContext?.onSaveStaticParams}
+        dupCheckConfig={paramsDrawerContext?.dupCheckConfig}
+        dupCheckFields={paramsDrawerContext?.dupCheckFields}
+        onSaveDupCheck={paramsDrawerContext?.onSaveDupCheck}
         onReset={paramsDrawerContext?.onReset}
         onSave={(params) => paramsDrawerContext?.onSave(params)}
         onClose={() => setParamsDrawerContext(null)}
@@ -1530,3 +1709,4 @@ export function CreateSnapshotWizard({
     </Stack>
   );
 }
+

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>b20590200593a54c0bb858bc</MsgId>
+      <CreDtTm>2026-01-19T05:00:02.650Z</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>199.12</CtrlSum>
+      <InitgPty>
+        <Nm>TEST CUST</Nm>
+      </InitgPty>
+    </GrpHdr>
+
+    <PmtInf>
+      <PmtInfId>48E08GQA2DQ2QAAAC</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <PmtTpInf>
+        <SvcLvl><Cd>URGP</Cd></SvcLvl>
+        <LclInstrm><Prtry>C993</Prtry></LclInstrm>
+      </PmtTpInf>
+      <ReqdExctnDt>2026-01-19</ReqdExctnDt>
+
+      <Dbtr>
+        <Nm>TEST CUST</Nm>
+      </Dbtr>
+      <DbtrAcct>
+        <Id><Othr><Id>04251860294</Id></Othr></Id>
+      </DbtrAcct>
+
+      <CdtTrfTxInf>
+        <CdtrAgt>
+          <FinInstnId>
+            <ClrSysMmbId><MmbId>336</MmbId></ClrSysMmbId>
+            <Othr><Id>31872495</Id></Othr>
+            <BrcId><Id>0001</Id></BrcId>
+            <Othr>
+              <Id>37427555000124</Id>
+              <SchmeNm><Cd>TXID</Cd></SchmeNm>
+            </Othr>
+          </FinInstnId>
+        </CdtrAgt>
+
+        <Cdtr>
+          <Nm>Thiago De Oliveira Monteiro</Nm>
+          <PstlAdr>
+            <AdrLine>Rua cento e dezessete 4 jardim Int</AdrLine>
+          </PstlAdr>
+        </Cdtr>
+
+        <CdtrAcct>
+          <Id><Othr><Id>90595050</Id></Othr></Id>
+          <Tp><Cd>CACC</Cd></Tp>
+        </CdtrAcct>
+      </CdtTrfTxInf>
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>

@@ -1,10 +1,11 @@
-import type { SnapshotCapability } from '../../models/snapshot';
+import type { RulesConfig, SnapshotCapability } from '../../models/snapshot';
 
 export type OnboardingDraft = {
   workflow?: Record<string, unknown>;
   selectedValidations: string[];
   selectedEnrichments: string[];
   capabilities?: SnapshotCapability[];
+  rulesConfig?: RulesConfig;
 };
 
 const STORAGE_KEY = 'onboarding:draft:v1';
@@ -40,6 +41,16 @@ function normalizeCapabilities(value: unknown): SnapshotCapability[] | undefined
   return value as SnapshotCapability[];
 }
 
+function normalizeRulesConfig(value: unknown): RulesConfig | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const validations = Array.isArray(value.validations) ? value.validations : [];
+  const enrichments = Array.isArray(value.enrichments) ? value.enrichments : [];
+  const metadata = isRecord(value.metadata) ? (value.metadata as RulesConfig['metadata']) : undefined;
+  return { metadata, validations, enrichments };
+}
+
 function extractWorkflow(value: Record<string, unknown>): Record<string, unknown> | undefined {
   const workflowCandidate = value.workflow;
   if (isRecord(workflowCandidate)) {
@@ -66,7 +77,8 @@ export function loadOnboardingDraft(): OnboardingDraft | null {
       workflow: extractWorkflow(parsed),
       selectedValidations: normalizeStringArray(parsed.selectedValidations),
       selectedEnrichments: normalizeStringArray(parsed.selectedEnrichments),
-      capabilities: normalizeCapabilities(parsed.capabilities)
+      capabilities: normalizeCapabilities(parsed.capabilities),
+      rulesConfig: normalizeRulesConfig(parsed.rulesConfig)
     };
   } catch (error) {
     console.warn('Failed to parse onboarding draft. Clearing stored draft.', error);

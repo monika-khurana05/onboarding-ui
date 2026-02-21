@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "mode": "DEMO_PREVIEW",
+    "provider": "R2D2_PENDING",
+    "generatedAt": "2026-02-21T00:00:00Z",
+    "countryCode": "AR"
+  },
+  "summary": {
+    "headline": "Synthetic smoke pack generated using deterministic masking + realistic failure modes.",
+    "confidence": 0.86,
+    "impact": { "testingCycleTimeReductionPct": 45, "coverageNote": "Adds rejects, cutoffs, compliance flags" }
+  },
+  "maskingPolicy": {
+    "principles": ["No PII/PCI", "Preserve format/length", "Deterministic seed", "Referential consistency"],
+    "rules": [
+      { "fieldPath": "debtorAcctId", "method": "TOKENIZE", "params": { "seed": "AR-SEED-01" } },
+      { "fieldPath": "creditorAcctId", "method": "TOKENIZE", "params": { "seed": "AR-SEED-01" } },
+      { "fieldPath": "paymentId", "method": "UUID_LIKE" }
+    ]
+  },
+  "scenarios": [
+    {
+      "scenarioId": "AR-SMOKE-001",
+      "type": "POSITIVE",
+      "title": "Outgoing payment happy path",
+      "inputs": { "ccy": "ARS", "amount": 100.0, "debtorAcctId": "TOK_DEB_001", "creditorAcctId": "TOK_CR_002", "paymentId": "PAY_0001" },
+      "expected": { "state": "COMPLETED", "checks": ["validation_ok", "enrichment_ok", "workflow_ok"] }
+    },
+    {
+      "scenarioId": "AR-NEG-001",
+      "type": "NEGATIVE",
+      "title": "Duplicate submission rejected",
+      "inputs": { "ccy": "ARS", "amount": 100.0, "debtorAcctId": "TOK_DEB_001", "creditorAcctId": "TOK_CR_002", "paymentId": "PAY_0001" },
+      "expected": { "state": "REJECTED", "errorCode": "DUPLICATE_PAYMENT" }
+    }
+  ]
+}

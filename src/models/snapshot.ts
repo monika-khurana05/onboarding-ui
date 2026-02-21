@@ -17,20 +17,25 @@ export const capabilityKeys = [
 
 export type CapabilityKey = (typeof capabilityKeys)[number];
 
-export type DupCheckStaticParams = {
-  bankSettlementType?: string;
-  paymentID?: string;
-  debitAcctID?: string;
-  creditAcctID?: string;
-  clearingSystemMemId?: string;
-  ccy?: string;
+export type DupCheckKeyField =
+  | 'bankSettlementType'
+  | 'paymentID'
+  | 'debitAcctID'
+  | 'creditAcctID'
+  | 'clearingSystemMemId'
+  | 'ccy';
+
+export type DupCheckConfig = {
+  keyFields: DupCheckKeyField[];
+  delimiter?: string;
+  caseMode?: 'SENSITIVE' | 'INSENSITIVE';
 };
 
 export type SnapshotCapability = {
   capabilityKey: CapabilityKey;
   enabled: boolean;
   params?: Record<string, any>;
-  staticParams?: DupCheckStaticParams;
+  dupCheck?: DupCheckConfig;
 };
 
 export type SnapshotRule = {

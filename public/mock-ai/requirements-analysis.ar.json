@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "mode": "DEMO_PREVIEW",
+    "provider": "R2D2_PENDING",
+    "generatedAt": "2026-02-21T00:00:00Z",
+    "countryCode": "AR",
+    "sourceDocuments": [
+      { "id": "AR-REG-001", "title": "Argentina Instant Payments Scheme Spec (Mock)", "type": "pdf" },
+      { "id": "AR-OPS-002", "title": "Operational Mandates & Cutover Rules (Mock)", "type": "doc" }
+    ]
+  },
+  "summary": {
+    "headline": "AI extracted 12 requirements. 7 map to existing global capabilities, 3 are config-only deltas, 2 need SME clarification.",
+    "impact": {
+      "discoveryTimeReductionPct": 60,
+      "manualErrorReductionPct": 40,
+      "reuseOpportunityPct": 70
+    }
+  },
+  "suggestedDomainCapabilities": [
+    { "capabilityKey": "PAYMENT_INITIATION", "confidence": 0.92, "reason": "Validations + enrichment needed pre-workflow" },
+    { "capabilityKey": "PAYMENT_ORCHESTRATION", "confidence": 0.88, "reason": "AR workflow transitions + state controls" }
+  ],
+  "requirements": [
+    {
+      "id": "AR-REQ-001",
+      "category": "Validation",
+      "priority": "MUST",
+      "text": "Duplicate submissions must be detected using a composite key derived from currency and payment identifier.",
+      "confidence": 0.91,
+      "evidence": [
+        { "docId": "AR-REG-001", "excerpt": "Duplicate submissions shall be detected by ccy + payment id.", "pageHint": "p.12" }
+      ],
+      "suggestions": {
+        "validations": [
+          {
+            "catalogId": "validation:DuplicateCheckRule",
+            "existsInCatalog": false,
+            "changeType": "NEW_CATALOG_ITEM",
+            "proposedConfig": {
+              "keyParts": ["ccy", "paymentId"],
+              "windowSeconds": 300
+            }
+          }
+        ],
+        "enrichments": []
+      },
+      "openQuestions": []
+    },
+    {
+      "id": "AR-REQ-002",
+      "category": "Enrichment",
+      "priority": "MUST",
+      "text": "Clearing member identifier must be present for outgoing payments; derive it from client profile when absent.",
+      "confidence": 0.84,
+      "evidence": [
+        { "docId": "AR-REG-001", "excerpt": "ClearingSystemMemId mandatory; if missing derive from profile.", "pageHint": "p.18" }
+      ],
+      "suggestions": {
+        "validations": [],
+        "enrichments": [
+          {
+            "catalogId": "enrichment:DebtorMembershipEnricher",
+            "existsInCatalog": true,
+            "changeType": "CONFIG_ONLY",
+            "proposedConfig": {
+              "deriveField": "clearingSystemMemId",
+              "source": "membershipCollection",
+              "required": true
+            }
+          }
+        ]
+      },
+      "openQuestions": [
+        { "id": "Q-AR-002-A", "text": "Confirm the authoritative membership attribute used to derive clearingSystemMemId.", "owner": "SA", "status": "OPEN" }
+      ]
+    }
+  ],
+  "fsmSuggestions": {
+    "confidence": 0.78,
+    "notes": "Draft transitions to align validation to enrichment to clearing flow. Verify against AR baseline FSM preset.",
+    "proposedTransitions": [
+      { "from": "VALIDATION", "event": "VALIDATION_OK", "to": "ENRICHMENT", "actions": ["runValidations"] },
+      { "from": "ENRICHMENT", "event": "ENRICHMENT_OK", "to": "CLEARING", "actions": ["applyEnrichments", "deriveClearingMemberId"] }
+    ]
+  },
+  "traceability": {
+    "repoImpact": [
+      { "repo": "cpx-validation", "type": "CONFIG", "reason": "Add/enable duplicate check + required field rules" },
+      { "repo": "cpx-enrichment", "type": "CONFIG", "reason": "Derive clearingSystemMemId from membership/client profile" },
+      { "repo": "cpx-state-manager", "type": "CONFIG", "reason": "FSM transition updates" }
+    ],
+    "testCases": [
+      {
+        "id": "TC-AR-001",
+        "type": "SMOKE",
+        "title": "Duplicate key rejects second submission",
+        "steps": ["Send payment (ccy=ARS,paymentId=123)", "Send same payment again", "Expect duplicate rejection"],
+        "expected": "Rejected as duplicate"
+      }
+    ]
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "meta": {
+    "mode": "DEMO_PREVIEW",
+    "provider": "R2D2_PENDING",
+    "generatedAt": "2026-02-21T00:00:00Z",
+    "sheetId": "xpay-canonical-v1"
+  },
+  "summary": {
+    "headline": "AI drafted canonical mapping rows for PAIN.001 -> CCAPI JSON -> XPAY POJO -> FNDT Message.",
+    "confidence": 0.83,
+    "stats": { "rows": 5, "directMappings": 4, "transformations": 1, "needsSMEReview": 1 }
+  },
+  "rows": [
+    {
+      "description": "File creation date time",
+      "inputPain001v6Field": "Document/CstmrCdtTrfInitn/GrpHdr/CreDtTm",
+      "outputFndtMessage": "Document/CstmrCdtTrfInitn/GrpHdr/CreDtTm",
+      "ccapiJsonTags": ["application", "transaction_creation_date_time"],
+      "xpayCanonicalPojoMapping": "pPSource.fitOfiCstmrCdtTrfInitn.grpHdr.creDtTm",
+      "transformation": "Direct Mapping",
+      "logic": "Payment Create Date and Time in UTC. Format: YYYY-MM-DDTHH:MM:SS.sssZ",
+      "sampleValue": "2026-01-19T04:59:58.777Z",
+      "confidence": 0.92,
+      "openQuestion": null
+    },
+    {
+      "description": "Initiating Party name",
+      "inputPain001v6Field": "Document/CstmrCdtTrfInitn/GrpHdr/InitgPty/Nm",
+      "outputFndtMessage": "Document/CstmrCdtTrfInitn/GrpHdr/InitgPty/Nm",
+      "ccapiJsonTags": ["debtor_name"],
+      "xpayCanonicalPojoMapping": "fitOfiCstmrCdtTrfInitn.grpHdr.initgPty.nm",
+      "transformation": "Direct Mapping",
+      "logic": "If initiation is from CCAPI, confirm how InitgPty is populated.",
+      "sampleValue": "BRP15ACITBRBTOXX",
+      "confidence": 0.78,
+      "openQuestion": "If initiation is from CCAPI, how are they populating InitgPty?"
+    },
+    {
+      "description": "Payment method",
+      "inputPain001v6Field": "Document/CstmrCdtTrfInitn/PmtInf/PmtMtd",
+      "outputFndtMessage": "Document/CstmrCdtTrfInitn/PmtInf/PmtMtd",
+      "ccapiJsonTags": ["transType"],
+      "xpayCanonicalPojoMapping": "transType",
+      "transformation": "Direct Mapping",
+      "logic": "Always CT or RF. In BR XML API flow this is sent as TRF.",
+      "sampleValue": "CT",
+      "confidence": 0.86,
+      "openQuestion": null
+    },
+    {
+      "description": "Payment date",
+      "inputPain001v6Field": "Document/CstmrCdtTrfInitn/PmtInf/ReqdExctnDt",
+      "outputFndtMessage": "Document/CstmrCdtTrfInitn/PmtInf/ReqdExctnDt",
+      "ccapiJsonTags": ["transaction_value_date"],
+      "xpayCanonicalPojoMapping": "fitOfiCstmrCdtTrfInitn.pmtInf.reqdExctnDt",
+      "transformation": "Direct Mapping",
+      "logic": "Execution date/value date. Confirm timezone normalization.",
+      "sampleValue": "2026-01-19",
+      "confidence": 0.81,
+      "openQuestion": null
+    },
+    {
+      "description": "Amount (string->decimal)",
+      "inputPain001v6Field": "Document/CstmrCdtTrfInitn/PmtInf/CdtTrfTxInf/Amt/InstdAmt",
+      "outputFndtMessage": ".../Amt/InstdAmt",
+      "ccapiJsonTags": ["amount"],
+      "xpayCanonicalPojoMapping": "payment.amount.value",
+      "transformation": "DECIMAL_PARSE(scale=2)",
+      "logic": "Parse string amount into numeric decimal with scale=2.",
+      "sampleValue": "100.00",
+      "confidence": 0.82,
+      "openQuestion": null
+    }
+  ]
+}

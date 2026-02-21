@@ -7,6 +7,9 @@ import { JobsPage } from '../pages/JobsPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { SnapshotDetailsPage } from '../pages/SnapshotDetailsPage';
+import { RequirementAnalysisPage } from '../features/ai-requirements/RequirementAnalysisPage';
+import { PayloadMappingPage } from '../features/ai-mapping/PayloadMappingPage';
+import { TestCaseGenerationPage } from '../features/ai-testing/TestCaseGenerationPage';
 
 export function AppRoutes() {
   return (
@@ -16,6 +19,9 @@ export function AppRoutes() {
         <Route path="/snapshots/new" element={<CreateSnapshotPage />} />
         <Route path="/snapshots/:snapshotId" element={<SnapshotDetailsPage />} />
         <Route path="/generate/preview" element={<GeneratePreviewPage />} />
+        <Route path="/ai/requirements" element={<RequirementAnalysisPage />} />
+        <Route path="/ai/mapping" element={<PayloadMappingPage />} />
+        <Route path="/ai/testing" element={<TestCaseGenerationPage />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

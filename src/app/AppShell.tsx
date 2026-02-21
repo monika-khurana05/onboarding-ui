@@ -3,7 +3,10 @@ import FactCheckIcon from '@mui/icons-material/FactCheck';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import QueryStatsIcon from '@mui/icons-material/QueryStats';
+import RuleIcon from '@mui/icons-material/Rule';
+import ScienceIcon from '@mui/icons-material/Science';
 import SettingsIcon from '@mui/icons-material/Settings';
+import TableChartIcon from '@mui/icons-material/TableChart';
 import {
   Alert,
   AppBar,
@@ -46,6 +49,9 @@ const navItems: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: <DashboardCustomizeIcon /> },
   { label: 'Create Snapshot', to: '/snapshots/new', icon: <FactCheckIcon /> },
   { label: 'Generate Preview', to: '/generate/preview', icon: <QueryStatsIcon /> },
+  { label: 'Requirement Analysis', to: '/ai/requirements', icon: <RuleIcon /> },
+  { label: 'Payload Mapping', to: '/ai/mapping', icon: <TableChartIcon /> },
+  { label: 'Test Case Generation', to: '/ai/testing', icon: <ScienceIcon /> },
   { label: 'Jobs', to: '/jobs', icon: <InfoOutlinedIcon /> },
   { label: 'Settings/About', to: '/settings', icon: <SettingsIcon /> }
 ];
