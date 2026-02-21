@@ -169,8 +169,8 @@ export type TestScenarioPack = {
     happyPath: boolean;
     missingMandatory: boolean;
     invalidFormats: boolean;
-    duplicateSubmission: boolean;
-    cutoffEdge: boolean;
+    duplicate: boolean;
+    cutoff: boolean;
     creditorAgentVariations: boolean;
   };
 };

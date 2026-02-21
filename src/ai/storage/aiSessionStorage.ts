@@ -45,6 +45,16 @@ function normalizeCountryCode(countryCode: string) {
   return countryCode.trim().toUpperCase();
 }
 
+function normalizeFlow(flow?: string) {
+  return flow ? flow.trim().toUpperCase() : undefined;
+}
+
+function buildTestKey(countryCode: string, flow: string | undefined, suffix: string) {
+  const normalizedCountry = normalizeCountryCode(countryCode);
+  const normalizedFlow = normalizeFlow(flow);
+  return normalizedFlow ? `ai.tests.${normalizedCountry}.${normalizedFlow}.${suffix}` : `ai.tests.${normalizedCountry}.${suffix}`;
+}
+
 function normalizeSheetId(sheetId: string) {
   return sheetId.trim();
 }
@@ -79,52 +89,102 @@ export function loadTestPlan(countryCode: string): SyntheticDataPlan | null {
   return safeGet<SyntheticDataPlan>(key);
 }
 
-export function saveTestBaseXml(countryCode: string, xml: string): void {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.baseXml`;
+export function saveTestBaseXml(countryCode: string, xml: string, flow?: string): void {
+  const key = buildTestKey(countryCode, flow, 'baseXml');
   safeSet(key, xml);
 }
 
-export function loadTestBaseXml(countryCode: string): string | null {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.baseXml`;
-  return safeGet<string>(key);
+export function loadTestBaseXml(countryCode: string, flow?: string): string | null {
+  const key = buildTestKey(countryCode, flow, 'baseXml');
+  const value = safeGet<string>(key);
+  if (value) {
+    return value;
+  }
+  if (flow) {
+    const legacyKey = `ai.tests.${normalizeCountryCode(countryCode)}.baseXml`;
+    return safeGet<string>(legacyKey);
+  }
+  return value;
 }
 
-export function saveTestSampleXmls(countryCode: string, samples: TestSampleXml[]): void {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.samples`;
+export function saveTestSampleXmls(countryCode: string, samples: TestSampleXml[], flow?: string): void {
+  const key = buildTestKey(countryCode, flow, 'samples');
   safeSet(key, samples);
 }
 
-export function loadTestSampleXmls(countryCode: string): TestSampleXml[] | null {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.samples`;
-  return safeGet<TestSampleXml[]>(key);
+export function loadTestSampleXmls(countryCode: string, flow?: string): TestSampleXml[] | null {
+  const key = buildTestKey(countryCode, flow, 'samples');
+  const value = safeGet<TestSampleXml[]>(key);
+  if (value && value.length) {
+    return value;
+  }
+  if (flow) {
+    const legacyKey = `ai.tests.${normalizeCountryCode(countryCode)}.samples`;
+    return safeGet<TestSampleXml[]>(legacyKey);
+  }
+  return value;
 }
 
-export function saveParsedPain001(countryCode: string, parsed: ParsedPain001): void {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.parsed`;
+export function saveParsedPain001(countryCode: string, parsed: ParsedPain001, flow?: string): void {
+  const key = buildTestKey(countryCode, flow, 'parsed');
   safeSet(key, parsed);
 }
 
-export function loadParsedPain001(countryCode: string): ParsedPain001 | null {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.parsed`;
-  return safeGet<ParsedPain001>(key);
+export function loadParsedPain001(countryCode: string, flow?: string): ParsedPain001 | null {
+  const key = buildTestKey(countryCode, flow, 'parsed');
+  const value = safeGet<ParsedPain001>(key);
+  if (value) {
+    return value;
+  }
+  if (flow) {
+    const legacyKey = `ai.tests.${normalizeCountryCode(countryCode)}.parsed`;
+    return safeGet<ParsedPain001>(legacyKey);
+  }
+  return value;
 }
 
-export function saveScenarioPack(countryCode: string, pack: TestScenarioPack): void {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.scenarioPack`;
+export function saveScenarioPack(countryCode: string, pack: TestScenarioPack, flow?: string): void {
+  const key = buildTestKey(countryCode, flow, 'scenarioPack');
   safeSet(key, pack);
 }
 
-export function loadScenarioPack(countryCode: string): TestScenarioPack | null {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.scenarioPack`;
-  return safeGet<TestScenarioPack>(key);
+export function loadScenarioPack(countryCode: string, flow?: string): TestScenarioPack | null {
+  const key = buildTestKey(countryCode, flow, 'scenarioPack');
+  const value = safeGet<TestScenarioPack>(key);
+  if (value) {
+    return value;
+  }
+  if (flow) {
+    const legacyKey = `ai.tests.${normalizeCountryCode(countryCode)}.scenarioPack`;
+    return safeGet<TestScenarioPack>(legacyKey);
+  }
+  return value;
 }
 
-export function saveKafkaPublishConfig(countryCode: string, config: KafkaPublishConfig): void {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.kafkaConfig`;
+export function saveKafkaPublishConfig(countryCode: string, config: KafkaPublishConfig, flow?: string): void {
+  const key = buildTestKey(countryCode, flow, 'kafkaConfig');
   safeSet(key, config);
 }
 
-export function loadKafkaPublishConfig(countryCode: string): KafkaPublishConfig | null {
-  const key = `ai.tests.${normalizeCountryCode(countryCode)}.kafkaConfig`;
-  return safeGet<KafkaPublishConfig>(key);
+export function loadKafkaPublishConfig(countryCode: string, flow?: string): KafkaPublishConfig | null {
+  const key = buildTestKey(countryCode, flow, 'kafkaConfig');
+  const value = safeGet<KafkaPublishConfig>(key);
+  if (value) {
+    return value;
+  }
+  if (flow) {
+    const legacyKey = `ai.tests.${normalizeCountryCode(countryCode)}.kafkaConfig`;
+    return safeGet<KafkaPublishConfig>(legacyKey);
+  }
+  return value;
+}
+
+export function saveLastPrimarySampleId(countryCode: string, flow: string, sampleId: string | null): void {
+  const key = buildTestKey(countryCode, flow, 'lastPrimarySampleId');
+  safeSet(key, sampleId);
+}
+
+export function loadLastPrimarySampleId(countryCode: string, flow: string): string | null {
+  const key = buildTestKey(countryCode, flow, 'lastPrimarySampleId');
+  return safeGet<string>(key);
 }

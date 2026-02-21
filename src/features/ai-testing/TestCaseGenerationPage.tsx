@@ -1,11 +1,20 @@
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Button,
   Checkbox,
   Chip,
+  CircularProgress,
   Divider,
   Drawer,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
+  IconButton,
   MenuItem,
   Paper,
   Stack,
@@ -16,10 +25,12 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
+import { ExpandMore, Replay } from '@mui/icons-material';
 import { useMutation } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getKafkaValidationResults, publishKafkaTestCases } from '../../api/client';
 import { getErrorMessage } from '../../api/http';
@@ -29,34 +40,32 @@ import { SectionCard } from '../../components/SectionCard';
 import { mockAiService } from '../../ai/services/mockAiService';
 import {
   loadKafkaPublishConfig,
-  loadParsedPain001,
+  loadLastPrimarySampleId,
   loadRequirementsAnalysis as loadRequirementsAnalysisFromStorage,
   loadScenarioPack,
-  loadTestBaseXml,
   loadTestSampleXmls,
   saveKafkaPublishConfig,
-  saveParsedPain001,
+  saveLastPrimarySampleId,
   saveRequirementsAnalysis,
   saveScenarioPack,
-  saveTestBaseXml,
   saveTestSampleXmls,
   type TestSampleXml
 } from '../../ai/storage/aiSessionStorage';
 import type { ParsedPain001, RequirementsAnalysis, SampleMessage, TestScenario, TestScenarioPack } from '../../ai/types';
 import { parsePain001 } from '../../ai/testing/xmlPain001Parser';
-import { generateTestScenarioPack, type ScenarioOptions } from '../../ai/testing/testScenarioGenerator';
+import { generateScenarioPack, type ScenarioOptions } from '../../ai/testing/testScenarioGenerator';
 import { setStage } from '../../status/onboardingStatusStorage';
 import type { Flow } from '../../status/types';
 import { ValidationRunPanel } from '../../ai/testing/components/ValidationRunPanel';
 
-type ParseStatus = 'idle' | 'success' | 'error';
+type ParseState = 'IDLE' | 'PARSING' | 'PARSED' | 'ERROR';
 
 const scenarioToggleLabels: Array<{ key: keyof ScenarioOptions; label: string }> = [
   { key: 'happyPath', label: 'Happy path' },
   { key: 'missingMandatory', label: 'Missing mandatory fields' },
   { key: 'invalidFormats', label: 'Invalid formats' },
-  { key: 'duplicateSubmission', label: 'Duplicate submission' },
-  { key: 'cutoffEdge', label: 'Cutoff/Date edge cases' },
+  { key: 'duplicate', label: 'Duplicate submission' },
+  { key: 'cutoff', label: 'Cutoff/Date edge cases' },
   { key: 'creditorAgentVariations', label: 'Creditor agent/account variations' }
 ];
 
@@ -64,8 +73,11 @@ type SampleEntry = {
   id: string;
   xml: string;
   parsed: ParsedPain001 | null;
-  parseStatus: ParseStatus;
-  parseErrors: string[];
+  parseState: ParseState;
+  parseError?: string;
+  messageType?: string;
+  msgId?: string;
+  xmlHash: string;
 };
 
 function normalizeCountryCode(value: string) {
@@ -78,20 +90,33 @@ function createSampleEntry(xml = '', id?: string): SampleEntry {
     id: entryId,
     xml,
     parsed: null,
-    parseStatus: 'idle',
-    parseErrors: []
+    parseState: 'IDLE',
+    parseError: undefined,
+    messageType: undefined,
+    msgId: undefined,
+    xmlHash: ''
   };
 }
 
-function parseSampleEntry(entry: SampleEntry): SampleEntry {
-  if (!entry.xml.trim()) {
-    return { ...entry, parsed: null, parseStatus: 'idle', parseErrors: [] };
+function computeXmlHash(xml: string): string {
+  const trimmed = xml.trim();
+  if (!trimmed) {
+    return '';
   }
-  const result = parsePain001(entry.xml);
-  if (result.ok) {
-    return { ...entry, parsed: result.data, parseStatus: 'success', parseErrors: [] };
+  const head = trimmed.slice(0, 60);
+  const tail = trimmed.slice(-60);
+  return `${trimmed.length}:${head}:${tail}`;
+}
+
+function splitBulkXml(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return [];
   }
-  return { ...entry, parsed: null, parseStatus: 'error', parseErrors: result.errors };
+  return trimmed
+    .split(/(?=<\?xml|<Document)/g)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
 }
 
 function downloadText(content: string, fileName: string, mimeType: string) {
@@ -192,6 +217,16 @@ export function TestCaseGenerationPage() {
   const [flow, setFlow] = useState<Flow>(flowFromQuery);
   const [sampleEntries, setSampleEntries] = useState<SampleEntry[]>(() => [createSampleEntry()]);
   const [activeSampleId, setActiveSampleId] = useState<string | null>(null);
+  const [primarySampleId, setPrimarySampleId] = useState<string | null>(null);
+  const [autoSelectPrimary, setAutoSelectPrimary] = useState(true);
+  const [bulkPasteOpen, setBulkPasteOpen] = useState(false);
+  const [bulkPasteValue, setBulkPasteValue] = useState('');
+  const [parseNonce, setParseNonce] = useState(0);
+  const parseTimerRef = useRef<number | null>(null);
+  const sampleSaveTimerRef = useRef<number | null>(null);
+  const lastSavedSampleDigestRef = useRef('');
+  const lastParseNonceRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [generationErrors, setGenerationErrors] = useState<string[]>([]);
   const [requirements, setRequirements] = useState<RequirementsAnalysis | null>(null);
   const [requirementsSource, setRequirementsSource] = useState<'storage' | 'mock' | null>(null);
@@ -201,8 +236,8 @@ export function TestCaseGenerationPage() {
     happyPath: true,
     missingMandatory: true,
     invalidFormats: true,
-    duplicateSubmission: true,
-    cutoffEdge: true,
+    duplicate: true,
+    cutoff: true,
     creditorAgentVariations: true
   });
   const [scenarioPack, setScenarioPack] = useState<TestScenarioPack | null>(null);
@@ -234,19 +269,22 @@ export function TestCaseGenerationPage() {
     [activeSample, sampleEntries]
   );
   const activeXml = activeSample?.xml ?? '';
-  const activeParsed = activeSample?.parsed ?? null;
 
-  const filledSamples = useMemo(
-    () => sampleEntries.filter((entry) => entry.xml.trim()),
-    [sampleEntries]
-  );
+  const filledSamples = useMemo(() => sampleEntries.filter((entry) => entry.xml.trim()), [sampleEntries]);
   const parsedSamples = useMemo(
     () =>
-      filledSamples.filter(
-        (entry) => entry.parseStatus === 'success' && entry.parsed
+      sampleEntries.filter(
+        (entry) => entry.parseState === 'PARSED' && entry.parsed
       ) as SampleEntry[],
-    [filledSamples]
+    [sampleEntries]
   );
+  const sampleIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    sampleEntries.forEach((entry, index) => {
+      map.set(entry.id, index);
+    });
+    return map;
+  }, [sampleEntries]);
   const parsedSampleMessages = useMemo<SampleMessage[]>(
     () =>
       parsedSamples.map((entry) => ({
@@ -256,27 +294,198 @@ export function TestCaseGenerationPage() {
       })),
     [parsedSamples]
   );
+  const parsedMsgIds = useMemo(() => parsedSamples.map((entry) => entry.msgId ?? '—'), [parsedSamples]);
+  const parsedMsgIdSummary = useMemo(() => {
+    if (parsedMsgIds.length === 0) {
+      return '—';
+    }
+    const preview = parsedMsgIds.slice(0, 3).join(', ');
+    const remaining = parsedMsgIds.length - 3;
+    return remaining > 0 ? `${preview} +${remaining} more` : preview;
+  }, [parsedMsgIds]);
 
   const parseSummary = useMemo(() => {
     const total = filledSamples.length;
     const parsedCount = parsedSamples.length;
-    const errorCount = filledSamples.filter((entry) => entry.parseStatus === 'error').length;
-    const status: ParseStatus =
-      total === 0 ? 'idle' : errorCount > 0 ? 'error' : parsedCount > 0 ? 'success' : 'idle';
-    return { total, parsedCount, errorCount, status };
+    const errorCount = filledSamples.filter((entry) => entry.parseState === 'ERROR').length;
+    const parsingCount = filledSamples.filter((entry) => entry.parseState === 'PARSING').length;
+    return { total, parsedCount, errorCount, parsingCount };
   }, [filledSamples, parsedSamples]);
+  const parseSummaryLabel =
+    parseSummary.total === 0
+      ? 'No samples'
+      : `${parseSummary.parsedCount} parsed / ${parseSummary.errorCount} error${
+          parseSummary.errorCount === 1 ? '' : 's'
+        }`;
+  const parseSummaryTone =
+    parseSummary.errorCount > 0 ? 'error' : parseSummary.parsedCount > 0 ? 'success' : 'default';
 
   const parseErrorSummaries = useMemo(
     () =>
       sampleEntries
         .map((entry, index) => ({
+          id: entry.id,
           label: `Sample ${index + 1}`,
           hasContent: Boolean(entry.xml.trim()),
-          errors: entry.parseErrors
+          error: entry.parseError
         }))
-        .filter((entry) => entry.hasContent && entry.errors.length > 0),
+        .filter((entry) => entry.hasContent && entry.error),
     [sampleEntries]
   );
+
+  useEffect(() => {
+    if (parsedSamples.length === 0) {
+      setPrimarySampleId(null);
+      return;
+    }
+
+    const selectedValid = primarySampleId ? parsedSamples.some((entry) => entry.id === primarySampleId) : false;
+    if (autoSelectPrimary) {
+      setPrimarySampleId(parsedSamples[0].id);
+      return;
+    }
+
+    if (!selectedValid) {
+      setPrimarySampleId(parsedSamples[0].id);
+      setAutoSelectPrimary(true);
+    }
+  }, [parsedSamples, primarySampleId, autoSelectPrimary]);
+
+  const primarySample = useMemo(
+    () => parsedSamples.find((entry) => entry.id === primarySampleId) ?? parsedSamples[0] ?? null,
+    [parsedSamples, primarySampleId]
+  );
+  const primaryParsed = primarySample?.parsed ?? null;
+  const primarySampleIndex = useMemo(
+    () => (primarySample ? sampleIndexById.get(primarySample.id) ?? -1 : -1),
+    [primarySample, sampleIndexById]
+  );
+
+  const xmlDigest = useMemo(
+    () => sampleEntries.map((entry) => `${entry.id}:${computeXmlHash(entry.xml)}`).join('|'),
+    [sampleEntries]
+  );
+
+  useEffect(() => {
+    const forceParse = parseNonce !== lastParseNonceRef.current;
+    lastParseNonceRef.current = parseNonce;
+
+    setSampleEntries((prev) => {
+      let markedChange = false;
+      const markedEntries = prev.map((entry) => {
+        const trimmed = entry.xml.trim();
+        if (!trimmed) {
+          const shouldReset =
+            entry.parseState !== 'IDLE' ||
+            entry.parsed ||
+            entry.parseError ||
+            entry.messageType ||
+            entry.msgId ||
+            entry.xmlHash;
+          if (!shouldReset) {
+            return entry;
+          }
+          markedChange = true;
+          return {
+            ...entry,
+            parsed: null,
+            parseState: 'IDLE',
+            parseError: undefined,
+            messageType: undefined,
+            msgId: undefined,
+            xmlHash: ''
+          };
+        }
+        const hash = computeXmlHash(entry.xml);
+        const needsParse = forceParse || hash !== entry.xmlHash;
+        if (!needsParse) {
+          return entry;
+        }
+        if (entry.parseState === 'PARSING' && !entry.parseError && !entry.parsed) {
+          return entry;
+        }
+        markedChange = true;
+        return {
+          ...entry,
+          parsed: null,
+          parseState: 'PARSING',
+          parseError: undefined,
+          messageType: undefined,
+          msgId: undefined
+        };
+      });
+      return markedChange ? markedEntries : prev;
+    });
+
+    if (parseTimerRef.current !== null) {
+      window.clearTimeout(parseTimerRef.current);
+    }
+
+    parseTimerRef.current = window.setTimeout(() => {
+      setSampleEntries((prev) => {
+        let didChange = false;
+        const next = prev.map((entry) => {
+          const trimmed = entry.xml.trim();
+          if (!trimmed) {
+            const shouldReset =
+              entry.parseState !== 'IDLE' ||
+              entry.parsed ||
+              entry.parseError ||
+              entry.messageType ||
+              entry.msgId ||
+              entry.xmlHash;
+            if (!shouldReset) {
+              return entry;
+            }
+            didChange = true;
+            return {
+              ...entry,
+              parsed: null,
+              parseState: 'IDLE',
+              parseError: undefined,
+              messageType: undefined,
+              msgId: undefined,
+              xmlHash: ''
+            };
+          }
+          const hash = computeXmlHash(entry.xml);
+          const needsParse = forceParse || hash !== entry.xmlHash || entry.parseState === 'PARSING';
+          if (!needsParse) {
+            return entry;
+          }
+          const result = parsePain001(entry.xml);
+          didChange = true;
+          if (result.ok) {
+            return {
+              ...entry,
+              parsed: result.data,
+              parseState: 'PARSED',
+              parseError: undefined,
+              messageType: result.data.messageType,
+              msgId: result.data.groupHeader.msgId ?? undefined,
+              xmlHash: hash
+            };
+          }
+          return {
+            ...entry,
+            parsed: null,
+            parseState: 'ERROR',
+            parseError: result.errors.join(' '),
+            messageType: undefined,
+            msgId: undefined,
+            xmlHash: hash
+          };
+        });
+        return didChange ? next : prev;
+      });
+    }, 400);
+
+    return () => {
+      if (parseTimerRef.current !== null) {
+        window.clearTimeout(parseTimerRef.current);
+      }
+    };
+  }, [xmlDigest, parseNonce]);
 
   const publishMutation = useMutation({
     mutationFn: publishKafkaTestCases,
@@ -304,38 +513,17 @@ export function TestCaseGenerationPage() {
     if (!normalizedCountry) {
       return;
     }
-    const savedPack = loadScenarioPack(normalizedCountry);
-    const savedSamples = loadTestSampleXmls(normalizedCountry);
-    const savedXml = loadTestBaseXml(normalizedCountry);
-    const savedParsed = loadParsedPain001(normalizedCountry);
+    const savedPack = loadScenarioPack(normalizedCountry, flow);
+    const savedSamples = loadTestSampleXmls(normalizedCountry, flow);
+    const savedPrimarySampleId = loadLastPrimarySampleId(normalizedCountry, flow);
 
     let nextEntries: SampleEntry[] = [];
-    if (savedPack?.samples?.length) {
-      nextEntries = savedPack.samples.map((sample) => ({
-        id: sample.sampleId ?? createSampleEntry(sample.xml).id,
-        xml: sample.xml,
-        parsed: sample.parsed,
-        parseStatus: 'success',
-        parseErrors: []
-      }));
-    } else if (savedSamples?.length) {
-      nextEntries = savedSamples.map((sample) =>
-        parseSampleEntry(createSampleEntry(sample.xml, sample.id))
-      );
+    if (savedSamples?.length) {
+      nextEntries = savedSamples.map((sample) => createSampleEntry(sample.xml, sample.id));
+    } else if (savedPack?.samples?.length) {
+      nextEntries = savedPack.samples.map((sample) => createSampleEntry(sample.xml, sample.sampleId));
     } else if (savedPack?.baseXml) {
-      const entry = createSampleEntry(savedPack.baseXml);
-      if (savedPack.parsed) {
-        entry.parsed = savedPack.parsed;
-        entry.parseStatus = 'success';
-      }
-      nextEntries = [entry];
-    } else if (savedXml) {
-      const entry = createSampleEntry(savedXml);
-      if (savedParsed) {
-        entry.parsed = savedParsed;
-        entry.parseStatus = 'success';
-      }
-      nextEntries = [entry];
+      nextEntries = [createSampleEntry(savedPack.baseXml)];
     } else {
       nextEntries = [createSampleEntry()];
     }
@@ -343,6 +531,14 @@ export function TestCaseGenerationPage() {
     setSampleEntries(nextEntries);
     setActiveSampleId(nextEntries[0]?.id ?? null);
     setGenerationErrors([]);
+
+    if (savedPrimarySampleId) {
+      setPrimarySampleId(savedPrimarySampleId);
+      setAutoSelectPrimary(false);
+    } else {
+      setPrimarySampleId(null);
+      setAutoSelectPrimary(true);
+    }
 
     if (savedPack) {
       setScenarioPack(savedPack);
@@ -353,7 +549,7 @@ export function TestCaseGenerationPage() {
       setSelectedScenarioIds(new Set());
       setLoadStatus('idle');
     }
-    const savedKafkaConfig = loadKafkaPublishConfig(normalizedCountry);
+    const savedKafkaConfig = loadKafkaPublishConfig(normalizedCountry, flow);
     if (savedKafkaConfig) {
       setKafkaClusterAlias(savedKafkaConfig.clusterAlias ?? '');
       setKafkaTopicName(savedKafkaConfig.topicName ?? '');
@@ -369,7 +565,7 @@ export function TestCaseGenerationPage() {
     setValidationResponse(null);
     setPublishError(null);
     setValidationError(null);
-  }, [normalizedCountry]);
+  }, [normalizedCountry, flow]);
 
   useEffect(() => {
     if (!normalizedCountry) {
@@ -395,12 +591,31 @@ export function TestCaseGenerationPage() {
     if (!normalizedCountry) {
       return;
     }
-    const samplesToSave: TestSampleXml[] = sampleEntries.map((entry) => ({ id: entry.id, xml: entry.xml }));
-    saveTestSampleXmls(normalizedCountry, samplesToSave);
-    if (sampleEntries.length > 0) {
-      saveTestBaseXml(normalizedCountry, sampleEntries[0].xml);
+    const digest = xmlDigest;
+    if (digest === lastSavedSampleDigestRef.current) {
+      return;
     }
-  }, [normalizedCountry, sampleEntries]);
+    if (sampleSaveTimerRef.current !== null) {
+      window.clearTimeout(sampleSaveTimerRef.current);
+    }
+    sampleSaveTimerRef.current = window.setTimeout(() => {
+      const samplesToSave: TestSampleXml[] = sampleEntries.map((entry) => ({ id: entry.id, xml: entry.xml }));
+      saveTestSampleXmls(normalizedCountry, samplesToSave, flow);
+      lastSavedSampleDigestRef.current = digest;
+    }, 400);
+    return () => {
+      if (sampleSaveTimerRef.current !== null) {
+        window.clearTimeout(sampleSaveTimerRef.current);
+      }
+    };
+  }, [normalizedCountry, flow, sampleEntries, xmlDigest]);
+
+  useEffect(() => {
+    if (!normalizedCountry) {
+      return;
+    }
+    saveLastPrimarySampleId(normalizedCountry, flow, primarySampleId);
+  }, [normalizedCountry, flow, primarySampleId]);
 
   useEffect(() => {
     if (!normalizedCountry) {
@@ -412,14 +627,15 @@ export function TestCaseGenerationPage() {
       messageKey: kafkaMessageKey.trim() || undefined,
       executionId: executionId.trim() || undefined,
       lastPublishedAt: publishResponse?.submittedAt
-    });
+    }, flow);
   }, [
     executionId,
     kafkaClusterAlias,
     kafkaMessageKey,
     kafkaTopicName,
     normalizedCountry,
-    publishResponse?.submittedAt
+    publishResponse?.submittedAt,
+    flow
   ]);
 
   const handleLoadSample = useCallback(async () => {
@@ -435,8 +651,11 @@ export function TestCaseGenerationPage() {
         ...baseEntry,
         xml: sample,
         parsed: null,
-        parseStatus: 'idle',
-        parseErrors: []
+        parseState: 'IDLE',
+        parseError: undefined,
+        messageType: undefined,
+        msgId: undefined,
+        xmlHash: ''
       };
       if (targetIndex < next.length) {
         next[targetIndex] = updated;
@@ -455,20 +674,10 @@ export function TestCaseGenerationPage() {
     setLoadStatus('sample');
   }, [activeSampleId]);
 
-  const handleParseXml = useCallback(() => {
-    const nextEntries = sampleEntries.map((entry) => parseSampleEntry(entry));
-    setSampleEntries(nextEntries);
-    const firstSuccess = nextEntries.find(
-      (entry) => entry.parseStatus === 'success' && entry.parsed
-    );
-    if (firstSuccess) {
-      setActiveSampleId(firstSuccess.id);
-      if (normalizedCountry) {
-        saveParsedPain001(normalizedCountry, firstSuccess.parsed as ParsedPain001);
-      }
-    }
+  const handleReparseNow = useCallback(() => {
+    setParseNonce((prev) => prev + 1);
     setGenerationErrors([]);
-  }, [normalizedCountry, sampleEntries]);
+  }, []);
 
   const handleClear = useCallback(() => {
     const resetEntry = createSampleEntry();
@@ -488,6 +697,72 @@ export function TestCaseGenerationPage() {
     setActiveSampleId(entry.id);
     setGenerationErrors([]);
   }, []);
+
+  const handleAppendSamples = useCallback((xmlSamples: string[]) => {
+    const payloads = xmlSamples.map((sample) => sample.trim()).filter(Boolean);
+    if (payloads.length === 0) {
+      return;
+    }
+    let nextActiveId: string | null = null;
+    setSampleEntries((prev) => {
+      const next = [...prev];
+      let insertIndex = next.findIndex((entry) => !entry.xml.trim());
+      payloads.forEach((xml) => {
+        if (insertIndex >= 0) {
+          const baseEntry = next[insertIndex];
+          const updated: SampleEntry = {
+            ...baseEntry,
+            xml,
+            parsed: null,
+            parseState: 'IDLE',
+            parseError: undefined,
+            messageType: undefined,
+            msgId: undefined,
+            xmlHash: ''
+          };
+          next[insertIndex] = updated;
+          if (!nextActiveId) {
+            nextActiveId = updated.id;
+          }
+          insertIndex = next.findIndex((entry, index) => index > insertIndex && !entry.xml.trim());
+        } else {
+          const entry = createSampleEntry(xml);
+          next.push(entry);
+          if (!nextActiveId) {
+            nextActiveId = entry.id;
+          }
+        }
+      });
+      return next;
+    });
+    if (nextActiveId) {
+      setActiveSampleId(nextActiveId);
+    }
+    setGenerationErrors([]);
+  }, []);
+
+  const handleUploadXmlFiles = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? []);
+      if (files.length === 0) {
+        return;
+      }
+      try {
+        const contents = await Promise.all(files.map((file) => file.text()));
+        handleAppendSamples(contents);
+      } finally {
+        event.target.value = '';
+      }
+    },
+    [handleAppendSamples]
+  );
+
+  const handleConfirmBulkPaste = useCallback(() => {
+    const chunks = splitBulkXml(bulkPasteValue);
+    handleAppendSamples(chunks);
+    setBulkPasteOpen(false);
+    setBulkPasteValue('');
+  }, [bulkPasteValue, handleAppendSamples]);
 
   const handleRemoveSample = useCallback(
     (entryId: string) => {
@@ -516,7 +791,16 @@ export function TestCaseGenerationPage() {
     setSampleEntries((prev) =>
       prev.map((entry) =>
         entry.id === entryId
-          ? { ...entry, xml: nextXml, parsed: null, parseStatus: 'idle', parseErrors: [] }
+          ? {
+              ...entry,
+              xml: nextXml,
+              parsed: null,
+              parseState: 'IDLE',
+              parseError: undefined,
+              messageType: undefined,
+              msgId: undefined,
+              xmlHash: ''
+            }
           : entry
       )
     );
@@ -563,13 +847,8 @@ export function TestCaseGenerationPage() {
       setGenerationErrors(['Add at least one XML sample before generating scenarios.']);
       return;
     }
-    const unparsed = filledSamples.filter((entry) => entry.parseStatus !== 'success');
-    if (unparsed.length > 0) {
-      setGenerationErrors(['Parse all XML samples before generating scenarios.']);
-      return;
-    }
     if (parsedSampleMessages.length === 0) {
-      setGenerationErrors(['No valid XML samples were parsed.']);
+      setGenerationErrors(['Parse at least one XML sample before generating scenarios.']);
       return;
     }
 
@@ -599,15 +878,15 @@ export function TestCaseGenerationPage() {
       }
     }
 
-    const pack = generateTestScenarioPack(
-      parsedSampleMessages,
-      scenarioOptions,
-      normalizedCountry,
+    const pack = generateScenarioPack({
+      countryCode: normalizedCountry,
       flow,
-      requirementContext
-    );
+      parsedSamples: parsedSampleMessages,
+      requirementsContext: requirementContext,
+      toggles: scenarioOptions
+    });
     setScenarioPack(pack);
-    saveScenarioPack(normalizedCountry, pack);
+    saveScenarioPack(normalizedCountry, pack, flow);
     setSelectedScenarioIds(new Set(pack.scenarios.map((scenario) => scenario.scenarioId)));
     setLoadStatus('generated');
     setGenerationErrors([]);
@@ -779,10 +1058,13 @@ export function TestCaseGenerationPage() {
   }, [scenarioPack]);
 
   const sampleLabelById = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { label: string; msgId?: string | null }>();
     const samples = scenarioPack?.samples ?? [];
     samples.forEach((sample, index) => {
-      map.set(sample.sampleId, `Sample ${index + 1}`);
+      map.set(sample.sampleId, {
+        label: `Sample ${index + 1}`,
+        msgId: sample.parsed?.groupHeader.msgId
+      });
     });
     return map;
   }, [scenarioPack]);
@@ -886,21 +1168,21 @@ export function TestCaseGenerationPage() {
 
   const summaryItems = useMemo(
     () =>
-      activeParsed
+      primaryParsed
         ? [
-            ['Message Type', activeParsed.messageType],
-            ['MsgId', activeParsed.groupHeader.msgId],
-            ['CreDtTm', activeParsed.groupHeader.creDtTm],
-            ['NbOfTxs', activeParsed.groupHeader.nbOfTxs],
-            ['CtrlSum', activeParsed.groupHeader.ctrlSum],
-            ['Currency', activeParsed.currency],
-            ['Requested Execution Date', activeParsed.paymentInfo.reqdExctnDt]
+            ['Message Type', primaryParsed.messageType],
+            ['MsgId', primaryParsed.groupHeader.msgId],
+            ['CreDtTm', primaryParsed.groupHeader.creDtTm],
+            ['NbOfTxs', primaryParsed.groupHeader.nbOfTxs],
+            ['CtrlSum', primaryParsed.groupHeader.ctrlSum],
+            ['Currency', primaryParsed.currency],
+            ['Requested Execution Date', primaryParsed.paymentInfo.reqdExctnDt]
           ]
         : [],
-    [activeParsed]
+    [primaryParsed]
   );
 
-  const extractedGroups = useMemo(() => buildFieldRows(activeParsed), [activeParsed]);
+  const extractedGroups = useMemo(() => buildFieldRows(primaryParsed), [primaryParsed]);
 
   return (
     <Stack spacing={3}>
@@ -913,27 +1195,74 @@ export function TestCaseGenerationPage() {
         subtitle="Paste one or more Kafka PAIN.001 XML samples, parse, and review extracted fields."
       >
         <Stack spacing={2}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
+            <Button variant="outlined" onClick={handleAddSample}>
+              Add Sample
+            </Button>
+            <Button variant="outlined" onClick={() => fileInputRef.current?.click()}>
+              Upload XML Files
+            </Button>
+            <Button variant="outlined" onClick={() => setBulkPasteOpen(true)}>
+              Paste Bulk XML
+            </Button>
+            <Button variant="outlined" onClick={handleLoadSample}>
+              Load Sample PAIN.001
+            </Button>
+            <Button variant="text" onClick={handleClear}>
+              Clear
+            </Button>
+            {loadStatus !== 'idle' ? (
+              <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                Last action: {loadStatus}
+              </Typography>
+            ) : null}
+          </Stack>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".xml,text/xml"
+            hidden
+            onChange={handleUploadXmlFiles}
+          />
           {sampleEntries.map((entry, index) => {
             const hasContent = Boolean(entry.xml.trim());
             const statusLabel = !hasContent
               ? 'Empty'
-              : entry.parseStatus === 'success'
-              ? 'Parsed'
-              : entry.parseStatus === 'error'
-              ? 'Error'
-              : 'Idle';
+              : entry.parseState === 'PARSED'
+              ? 'PARSED'
+              : entry.parseState === 'ERROR'
+              ? 'ERROR'
+              : entry.parseState === 'PARSING'
+              ? 'PARSING'
+              : 'IDLE';
             const statusTone =
-              entry.parseStatus === 'success'
+              entry.parseState === 'PARSED'
                 ? 'success'
-                : entry.parseStatus === 'error'
+                : entry.parseState === 'ERROR'
                 ? 'error'
                 : 'default';
+            const statusChip = (
+              <Chip
+                label={statusLabel}
+                size="small"
+                color={statusTone}
+                variant="outlined"
+                icon={entry.parseState === 'PARSING' ? <CircularProgress size={12} /> : undefined}
+              />
+            );
+            const statusNode =
+              entry.parseState === 'ERROR' && entry.parseError ? (
+                <Tooltip title={entry.parseError}>{statusChip}</Tooltip>
+              ) : (
+                statusChip
+              );
             return (
               <Paper key={entry.id} variant="outlined" sx={{ p: 2 }}>
                 <Stack spacing={1}>
                   <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
                     <Typography variant="subtitle2">Sample {index + 1}</Typography>
-                    <Chip label={statusLabel} size="small" color={statusTone} variant="outlined" />
+                    {statusNode}
                     {activeSample?.id === entry.id ? (
                       <Chip label="Preview" size="small" color="info" variant="outlined" />
                     ) : null}
@@ -958,62 +1287,107 @@ export function TestCaseGenerationPage() {
               </Paper>
             );
           })}
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
-            <Button variant="outlined" onClick={handleAddSample}>
-              Add Sample
-            </Button>
-            <Button variant="outlined" onClick={handleLoadSample}>
-              Load Sample PAIN.001
-            </Button>
-            <Button variant="contained" onClick={handleParseXml}>
-              Parse Samples
-            </Button>
-            <Button variant="text" onClick={handleClear}>
-              Clear
-            </Button>
-            {loadStatus !== 'idle' ? (
-              <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-                Last action: {loadStatus}
-              </Typography>
-            ) : null}
-          </Stack>
 
           <Stack spacing={1}>
-            <Stack direction="row" spacing={1} alignItems="center">
+            <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
               <Typography variant="subtitle1">Parse Status</Typography>
-              <Chip
-                label={
-                  parseSummary.total === 0
-                    ? 'No samples'
-                    : parseSummary.errorCount > 0
-                    ? `${parseSummary.errorCount} error${parseSummary.errorCount === 1 ? '' : 's'}`
-                    : `${parseSummary.parsedCount}/${parseSummary.total} parsed`
+              <Chip label={parseSummaryLabel} color={parseSummaryTone} size="small" variant="outlined" />
+              {parseSummary.parsingCount > 0 ? (
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <CircularProgress size={12} />
+                  <Typography variant="caption" color="text.secondary">
+                    Parsing...
+                  </Typography>
+                </Stack>
+              ) : null}
+              <Tooltip title="Re-parse now">
+                <span>
+                  <IconButton size="small" onClick={handleReparseNow} disabled={filledSamples.length === 0}>
+                    <Replay fontSize="inherit" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Stack>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} useFlexGap flexWrap="wrap">
+              <TextField
+                select
+                label="Primary Sample"
+                value={primarySampleId ?? ''}
+                onChange={(event) => {
+                  setPrimarySampleId(event.target.value);
+                  setAutoSelectPrimary(false);
+                }}
+                disabled={parsedSamples.length === 0}
+                helperText={parsedSamples.length === 0 ? 'Parse a sample to select primary.' : undefined}
+                sx={{ minWidth: 240 }}
+              >
+                {parsedSamples.map((entry) => {
+                  const index = sampleIndexById.get(entry.id) ?? 0;
+                  return (
+                    <MenuItem key={entry.id} value={entry.id}>
+                      Sample {index + 1} — MsgId: {entry.msgId ?? '—'}
+                    </MenuItem>
+                  );
+                })}
+              </TextField>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={autoSelectPrimary}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setAutoSelectPrimary(checked);
+                      if (checked && parsedSamples.length > 0) {
+                        setPrimarySampleId(parsedSamples[0].id);
+                      }
+                      if (!checked && !primarySampleId && parsedSamples.length > 0) {
+                        setPrimarySampleId(parsedSamples[0].id);
+                      }
+                    }}
+                  />
                 }
-                color={parseSummary.status === 'success' ? 'success' : parseSummary.status === 'error' ? 'error' : 'default'}
-                size="small"
-                variant="outlined"
+                label="Auto-select Primary Sample"
               />
             </Stack>
             {parseErrorSummaries.length ? (
-              <Alert severity="error">
-                {parseErrorSummaries.map((entry) =>
-                  entry.errors.map((message) => (
-                    <Typography key={`${entry.label}-${message}`} variant="body2">
-                      {entry.label}: {message}
-                    </Typography>
-                  ))
-                )}
-              </Alert>
+              <Accordion variant="outlined">
+                <AccordionSummary expandIcon={<ExpandMore />}>
+                  <Typography variant="subtitle2">Errors ({parseErrorSummaries.length})</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Stack spacing={1}>
+                    {parseErrorSummaries.map((entry) => (
+                      <Stack
+                        key={entry.id}
+                        direction={{ xs: 'column', sm: 'row' }}
+                        spacing={1}
+                        alignItems={{ sm: 'center' }}
+                        justifyContent="space-between"
+                      >
+                        <Stack spacing={0.25}>
+                          <Typography variant="body2">{entry.label}</Typography>
+                          <Typography variant="caption" color="error">
+                            {entry.error}
+                          </Typography>
+                        </Stack>
+                        <Button size="small" color="error" onClick={() => handleRemoveSample(entry.id)}>
+                          Remove sample
+                        </Button>
+                      </Stack>
+                    ))}
+                  </Stack>
+                </AccordionDetails>
+              </Accordion>
             ) : null}
           </Stack>
 
-          {activeParsed ? (
+          {primaryParsed ? (
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Stack spacing={1}>
                 <Typography variant="subtitle1">Parsed Summary</Typography>
-                {activeSampleIndex >= 0 ? (
+                {primarySampleIndex >= 0 ? (
                   <Typography variant="caption" color="text.secondary">
-                    Previewing Sample {activeSampleIndex + 1} of {sampleEntries.length}.
+                    Using Primary Sample {primarySampleIndex + 1} of {sampleEntries.length}.
                   </Typography>
                 ) : null}
                 <Stack spacing={0.5}>
@@ -1030,9 +1404,9 @@ export function TestCaseGenerationPage() {
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Stack spacing={1}>
               <Typography variant="subtitle1">Extracted Canonical Fields</Typography>
-              {activeSampleIndex >= 0 ? (
+              {primarySampleIndex >= 0 ? (
                 <Typography variant="caption" color="text.secondary">
-                  Using Sample {activeSampleIndex + 1} for field extraction.
+                  Using Primary Sample {primarySampleIndex + 1} for field extraction.
                 </Typography>
               ) : null}
               <TableContainer>
@@ -1080,6 +1454,40 @@ export function TestCaseGenerationPage() {
               </Typography>
             </Stack>
           </Paper>
+
+          <Dialog open={bulkPasteOpen} onClose={() => setBulkPasteOpen(false)} fullWidth maxWidth="md">
+            <DialogTitle>Paste Bulk XML Samples</DialogTitle>
+            <DialogContent>
+              <Stack spacing={1} sx={{ mt: 1 }}>
+                <TextField
+                  label="XML documents"
+                  value={bulkPasteValue}
+                  onChange={(event) => setBulkPasteValue(event.target.value)}
+                  placeholder="Paste multiple XML documents here. Each document should begin with <?xml or <Document."
+                  fullWidth
+                  multiline
+                  minRows={10}
+                  InputProps={{ sx: { fontFamily: 'monospace', fontSize: 12 } }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  We will split on &quot;&lt;?xml&quot; or &quot;&lt;Document&quot; to create separate samples.
+                </Typography>
+              </Stack>
+            </DialogContent>
+            <DialogActions>
+              <Button
+                onClick={() => {
+                  setBulkPasteOpen(false);
+                  setBulkPasteValue('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button variant="contained" onClick={handleConfirmBulkPaste} disabled={!bulkPasteValue.trim()}>
+                Add Samples
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Stack>
       </SectionCard>
 
@@ -1153,6 +1561,14 @@ export function TestCaseGenerationPage() {
               </Stack>
             </Stack>
           </Paper>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
+            <Typography variant="caption" color="text.secondary">
+              Parsed Samples: {parsedSamples.length}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              MsgIds: {parsedMsgIdSummary}
+            </Typography>
+          </Stack>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
             {scenarioToggleLabels.map((toggle) => (
               <FormControlLabel
@@ -1167,9 +1583,14 @@ export function TestCaseGenerationPage() {
               />
             ))}
           </Stack>
-          <Button variant="contained" onClick={handleGenerateScenarios}>
+          <Button variant="contained" onClick={handleGenerateScenarios} disabled={parsedSamples.length === 0}>
             Generate Test Scenarios
           </Button>
+          {parsedSamples.length === 0 ? (
+            <Typography variant="caption" color="text.secondary">
+              Upload at least one valid PAIN.001 XML message.
+            </Typography>
+          ) : null}
           {generationErrors.length ? (
             <Alert severity="error">
               {generationErrors.map((message) => (
@@ -1189,7 +1610,7 @@ export function TestCaseGenerationPage() {
                     <TableHead>
                       <TableRow>
                         <TableCell>Scenario ID</TableCell>
-                        <TableCell>Sample</TableCell>
+                        <TableCell>Base Sample</TableCell>
                         <TableCell>Type</TableCell>
                         <TableCell>Title</TableCell>
                         <TableCell>Mutations</TableCell>
@@ -1204,7 +1625,13 @@ export function TestCaseGenerationPage() {
                           <TableCell>{scenario.scenarioId}</TableCell>
                           <TableCell>
                             {scenario.sourceSampleId
-                              ? sampleLabelById.get(scenario.sourceSampleId) ?? scenario.sourceSampleId
+                              ? (() => {
+                                  const details = sampleLabelById.get(scenario.sourceSampleId);
+                                  if (!details) {
+                                    return scenario.sourceSampleId;
+                                  }
+                                  return `${details.label}${details.msgId ? ` / ${details.msgId}` : ''}`;
+                                })()
                               : '—'}
                           </TableCell>
                           <TableCell>{scenario.type}</TableCell>
@@ -1509,7 +1936,13 @@ export function TestCaseGenerationPage() {
                 <Typography variant="caption" color="text.secondary">
                   {activeScenario.scenarioId}
                   {activeScenario.sourceSampleId
-                    ? ` · ${sampleLabelById.get(activeScenario.sourceSampleId) ?? activeScenario.sourceSampleId}`
+                    ? (() => {
+                        const details = sampleLabelById.get(activeScenario.sourceSampleId);
+                        if (!details) {
+                          return ` · ${activeScenario.sourceSampleId}`;
+                        }
+                        return ` · ${details.label}${details.msgId ? ` / ${details.msgId}` : ''}`;
+                      })()
                     : ''}
                   {` · ${activeScenario.expectedOutcome.state}`}
                 </Typography>

@@ -2,7 +2,6 @@ import { Alert, Button, Chip, LinearProgress, MenuItem, Stack, TextField, Typogr
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TestScenarioPack } from '../../types';
 import type { Flow } from '../../../status/types';
-import { TopicSelector } from './TopicSelector';
 import { RunResultsTable } from './RunResultsTable';
 import type { TopicConfig } from '../validation/types';
 import type { CreateRunRequest, RunStatusResponse, ScenarioResult, SseEvent } from '../validation/apiTypes';
@@ -28,49 +27,21 @@ const terminalStatuses: RunStatusResponse['status'][] = ['COMPLETED', 'FAILED', 
 const LAST_RUN_PREFIX = 'ai.validation.lastRun.';
 const RUN_PREFIX = 'ai.validation.run.';
 
-function presetTopics(preset: Exclude<PipelinePreset, 'CUSTOM'>): TopicConfig[] {
+function presetTopic(preset: Exclude<PipelinePreset, 'CUSTOM'>): TopicConfig {
   if (preset === 'INCOMING') {
-    return [
-      {
-        serviceName: 'Payment Reception',
-        entryPoint: 'incoming',
-        topicName: 'cpx.payments.incoming.in',
-        headersTemplate: {}
-      },
-      {
-        serviceName: 'Validation',
-        entryPoint: 'validation',
-        topicName: 'cpx.validation.in',
-        headersTemplate: {}
-      },
-      {
-        serviceName: 'Clearing/Posting',
-        entryPoint: 'clearing-posting',
-        topicName: 'cpx.posting.in',
-        headersTemplate: {}
-      }
-    ];
+    return {
+      serviceName: 'Payment Reception',
+      entryPoint: 'IN',
+      topicName: 'cpx.payments.incoming.in',
+      headersTemplate: {}
+    };
   }
-  return [
-    {
-      serviceName: 'Payment Initiation',
-      entryPoint: 'outgoing',
-      topicName: 'cpx.payments.outgoing.in',
-      headersTemplate: {}
-    },
-    {
-      serviceName: 'Validation',
-      entryPoint: 'validation',
-      topicName: 'cpx.validation.in',
-      headersTemplate: {}
-    },
-    {
-      serviceName: 'Posting',
-      entryPoint: 'posting',
-      topicName: 'cpx.posting.in',
-      headersTemplate: {}
-    }
-  ];
+  return {
+    serviceName: 'Payment Initiation',
+    entryPoint: 'IN',
+    topicName: 'cpx.payments.outgoing.in',
+    headersTemplate: {}
+  };
 }
 
 function statusTone(status?: RunStatusResponse['status']) {
@@ -136,7 +107,7 @@ export function ValidationRunPanel({
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const pollRef = useRef<number | null>(null);
   const [pipelinePreset, setPipelinePreset] = useState<PipelinePreset>('OUTGOING');
-  const [topics, setTopics] = useState<TopicConfig[]>(() => presetTopics('OUTGOING'));
+  const [topic, setTopic] = useState<TopicConfig>(() => presetTopic('OUTGOING'));
   const [run, setRun] = useState<RunStatusResponse | null>(null);
   const [results, setResults] = useState<ScenarioResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -349,9 +320,19 @@ export function ValidationRunPanel({
   const handlePresetChange = useCallback((nextPreset: PipelinePreset) => {
     setPipelinePreset(nextPreset);
     if (nextPreset !== 'CUSTOM') {
-      setTopics(presetTopics(nextPreset));
+      setTopic(presetTopic(nextPreset));
     }
   }, []);
+
+  const handleTopicNameChange = useCallback(
+    (value: string) => {
+      setTopic((prev) => ({ ...prev, topicName: value }));
+      if (pipelinePreset !== 'CUSTOM') {
+        setPipelinePreset('CUSTOM');
+      }
+    },
+    [pipelinePreset]
+  );
 
   const handleRunValidation = useCallback(async () => {
     if (!scenarioPack || selection.total === 0) {
@@ -366,8 +347,8 @@ export function ValidationRunPanel({
       setError('Country code is required.');
       return;
     }
-    if (!topics.length || topics.some((topic) => !topic.topicName.trim())) {
-      setError('Provide at least one valid topic.');
+    if (!topic.topicName.trim()) {
+      setError('Provide a valid entry topic.');
       return;
     }
 
@@ -378,7 +359,7 @@ export function ValidationRunPanel({
       countryCode: countryCode.trim().toUpperCase(),
       flow,
       pipelinePreset,
-      topics,
+      topics: [topic],
       baseMessage: {
         format: 'PAIN001_XML',
         payload: basePayload,
@@ -413,7 +394,9 @@ export function ValidationRunPanel({
         error: null
       });
       setResults([]);
-      setPipelinePreset('CUSTOM');
+      if (pipelinePreset !== 'CUSTOM') {
+        setPipelinePreset('CUSTOM');
+      }
       unsubscribeRef.current?.();
       try {
         unsubscribeRef.current = subscribeEvents(runId, handleSseEvent);
@@ -440,7 +423,7 @@ export function ValidationRunPanel({
     selection.selectedIds.length,
     selection.total,
     startPolling,
-    topics
+    topic
   ]);
 
   const handleCancelRun = useCallback(() => {
@@ -482,7 +465,7 @@ export function ValidationRunPanel({
   return (
     <Stack spacing={2}>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ md: 'center' }} useFlexGap flexWrap="wrap">
-        <Typography variant="subtitle1">Topic Selector</Typography>
+        <Typography variant="subtitle1">Entry Topic</Typography>
         <Chip label={`Flow: ${flow}`} size="small" variant="outlined" />
       </Stack>
 
@@ -491,7 +474,7 @@ export function ValidationRunPanel({
         label="Pipeline Preset"
         value={pipelinePreset}
         onChange={(event) => handlePresetChange(event.target.value as PipelinePreset)}
-        helperText="Choose a preset to pre-fill topics or select custom to keep manual edits."
+        helperText="Choose a preset to pre-fill the entry topic or select custom to keep manual edits."
         sx={{ maxWidth: 260 }}
       >
         <MenuItem value="OUTGOING">Outgoing</MenuItem>
@@ -499,7 +482,30 @@ export function ValidationRunPanel({
         <MenuItem value="CUSTOM">Custom</MenuItem>
       </TextField>
 
-      <TopicSelector topics={topics} onChange={setTopics} />
+      <Stack spacing={1}>
+        <Typography variant="subtitle2">Entry Topic</Typography>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
+          <TextField
+            label="Service Name"
+            value={topic.serviceName}
+            disabled
+            sx={{ flex: 1, minWidth: 200 }}
+          />
+          <TextField
+            label="Entry Point"
+            value={topic.entryPoint}
+            disabled
+            sx={{ width: 140 }}
+          />
+          <TextField
+            label="Topic Name"
+            value={topic.topicName}
+            onChange={(event) => handleTopicNameChange(event.target.value)}
+            helperText="Single entry topic for the full system pipeline."
+            sx={{ flex: 1.5, minWidth: 220 }}
+          />
+        </Stack>
+      </Stack>
 
       <Stack spacing={1}>
         <Typography variant="subtitle1">Scenario Selection</Typography>
