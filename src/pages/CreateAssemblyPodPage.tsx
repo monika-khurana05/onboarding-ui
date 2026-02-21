@@ -34,6 +34,8 @@ import {
   saveAssemblyConfigDraft,
   type AssemblyConfigDraftCapability
 } from '../lib/storage/assemblyConfigDraftStorage';
+import { setStage } from '../status/onboardingStatusStorage';
+import type { Flow } from '../status/types';
 import {
   type AssemblyCapabilityConfig,
   type ConfigStatus,
@@ -234,6 +236,16 @@ function normalizeEnvironment(value: unknown): EnvironmentOption | undefined {
     return normalized as EnvironmentOption;
   }
   return undefined;
+}
+
+function mapDirectionToFlow(direction: DirectionOption | ''): Flow | null {
+  if (direction === 'Incoming') {
+    return 'INCOMING';
+  }
+  if (direction === 'Outgoing') {
+    return 'OUTGOING';
+  }
+  return null;
 }
 
 function normalizeStringList(value: unknown): string[] {
@@ -755,6 +767,10 @@ export function CreateAssemblyPodPage() {
       return;
     }
     await persistMutation.mutateAsync(payload);
+    const flow = mapDirectionToFlow(direction);
+    if (flow && countryCode) {
+      setStage(countryCode, flow, 'ASSEMBLY_CREATION', 'IN_PROGRESS');
+    }
     handleConfigUpdate(activeRowIndex, { status: 'Submitted' });
     setOriginalRowSnapshot(null);
     setDrawerOpen(false);
@@ -781,9 +797,21 @@ export function CreateAssemblyPodPage() {
       return;
     }
     await persistMutation.mutateAsync(payload);
+    const flow = mapDirectionToFlow(direction);
+    if (flow && countryCode) {
+      setStage(countryCode, flow, 'ASSEMBLY_CREATION', 'IN_PROGRESS');
+    }
   };
 
   const canPersist = Boolean(countryCode) && configRows.length > 0;
+
+  const handleGeneratePr = () => {
+    const flow = mapDirectionToFlow(direction);
+    if (!flow || !countryCode) {
+      return;
+    }
+    setStage(countryCode, flow, 'ASSEMBLY_CREATION', 'DONE');
+  };
 
   const metadataPreview = useMemo(
     () => ({
@@ -1119,7 +1147,7 @@ export function CreateAssemblyPodPage() {
                   finalize configuration and PR readiness.
                 </Alert>
               )}
-              <Button variant="contained" disabled={!allReady}>
+              <Button variant="contained" disabled={!allReady} onClick={handleGeneratePr}>
                 Generate PR
               </Button>
             </Stack>

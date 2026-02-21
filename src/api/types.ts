@@ -200,6 +200,55 @@ export type PreviewGenerateResponseDto = {
   errors?: Array<PreviewErrorDto | string> | PreviewErrorDto | string;
 };
 
+export type KafkaPublishScenarioDto = {
+  scenarioId: string;
+  payload: string;
+  expectedOutcome?: {
+    state?: string;
+    errorCode?: string;
+    notes?: string;
+  };
+};
+
+export type KafkaPublishRequestDto = {
+  clusterAlias: string;
+  topicName: string;
+  messageKey?: string;
+  countryCode?: string;
+  scenarios: KafkaPublishScenarioDto[];
+};
+
+export type KafkaPublishErrorDto = {
+  scenarioId?: string;
+  message?: string;
+};
+
+export type KafkaPublishResponseDto = {
+  executionId?: string;
+  submittedAt?: string;
+  publishedCount?: number;
+  failedCount?: number;
+  errors?: KafkaPublishErrorDto[];
+};
+
+export type KafkaValidationResultDto = {
+  scenarioId?: string;
+  status?: string;
+  expectedState?: string;
+  expectedErrorCode?: string;
+  actualState?: string;
+  actualErrorCode?: string;
+  message?: string;
+  details?: string;
+};
+
+export type KafkaValidationResponseDto = {
+  executionId?: string;
+  status?: string;
+  completedAt?: string;
+  results?: KafkaValidationResultDto[];
+};
+
 export type RepoPackDto = {
   packName?: string;
   name?: string;

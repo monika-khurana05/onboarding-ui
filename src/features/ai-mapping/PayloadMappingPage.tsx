@@ -10,11 +10,14 @@ import {
   Typography
 } from '@mui/material';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { CountryCodeField } from '../../components/CountryCodeField';
 import { SectionCard } from '../../components/SectionCard';
 import { PojoMappingGrid } from '../../ai/components/PojoMappingGrid';
 import { mockAiService } from '../../ai/services/mockAiService';
 import { loadPojoMapping, savePojoMapping } from '../../ai/storage/aiSessionStorage';
 import type { PojoMappingSheet } from '../../ai/types';
+import { setStage } from '../../status/onboardingStatusStorage';
 
 type RowStatus = 'pending' | 'applied' | 'question' | 'ignored';
 
@@ -32,6 +35,10 @@ function sanitizeFileToken(value: string) {
 }
 
 export function PayloadMappingPage() {
+  const [searchParams] = useSearchParams();
+  const flow = searchParams.get('flow') === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
+  const queryCountry = searchParams.get('country');
+  const [countryCode, setCountryCode] = useState(() => queryCountry?.toUpperCase() ?? '');
   const [sheetId, setSheetId] = useState('xpay-canonical-v1');
   const [inputFormat, setInputFormat] = useState<(typeof inputFormats)[number]>(inputFormats[0]);
   const [mapping, setMapping] = useState<PojoMappingSheet | null>(null);
@@ -40,6 +47,12 @@ export function PayloadMappingPage() {
   const [loadSource, setLoadSource] = useState<'storage' | 'mock' | null>(null);
   const [rowStatuses, setRowStatuses] = useState<Record<string, RowStatus>>({});
   const [icdDraft, setIcdDraft] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (queryCountry) {
+      setCountryCode(queryCountry.toUpperCase());
+    }
+  }, [queryCountry]);
 
   useEffect(() => {
     const normalizedId = sheetId.trim();
@@ -78,6 +91,12 @@ export function PayloadMappingPage() {
       const data = await mockAiService.getPojoMappingSheet(normalizedId);
       setMapping(data);
       savePojoMapping(normalizedId, data);
+      const normalizedCountry = countryCode.trim().toUpperCase();
+      if (normalizedCountry) {
+        setStage(normalizedCountry, flow, 'PAYLOAD_MAPPING', 'DONE', undefined, {
+          mappingSessionKey: `ai.mapping.${normalizedId}`
+        });
+      }
       setLoadSource('mock');
     } catch (fetchError) {
       console.warn('Failed to load mapping sheet.', fetchError);
@@ -85,7 +104,7 @@ export function PayloadMappingPage() {
     } finally {
       setLoading(false);
     }
-  }, [sheetId]);
+  }, [countryCode, flow, sheetId]);
 
   const getRowKey = useCallback((index: number) => `${mapping?.meta.sheetId ?? 'sheet'}-${index}`, [mapping]);
 
@@ -205,6 +224,11 @@ export function PayloadMappingPage() {
 
       <SectionCard title="Inputs" subtitle="Generate a draft mapping from mock AI output.">
         <Stack spacing={2}>
+          <CountryCodeField
+            value={countryCode}
+            onChange={setCountryCode}
+            helperText="Country context for status tracking."
+          />
           <TextField
             label="Mapping Sheet ID"
             value={sheetId}

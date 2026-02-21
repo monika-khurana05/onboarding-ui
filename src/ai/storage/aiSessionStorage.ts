@@ -6,6 +6,14 @@ import type {
   TestScenarioPack
 } from '../types';
 
+export type KafkaPublishConfig = {
+  clusterAlias: string;
+  topicName: string;
+  messageKey?: string;
+  executionId?: string;
+  lastPublishedAt?: string;
+};
+
 function safeSet(key: string, value: unknown) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
@@ -94,4 +102,14 @@ export function saveScenarioPack(countryCode: string, pack: TestScenarioPack): v
 export function loadScenarioPack(countryCode: string): TestScenarioPack | null {
   const key = `ai.tests.${normalizeCountryCode(countryCode)}.scenarioPack`;
   return safeGet<TestScenarioPack>(key);
+}
+
+export function saveKafkaPublishConfig(countryCode: string, config: KafkaPublishConfig): void {
+  const key = `ai.tests.${normalizeCountryCode(countryCode)}.kafkaConfig`;
+  safeSet(key, config);
+}
+
+export function loadKafkaPublishConfig(countryCode: string): KafkaPublishConfig | null {
+  const key = `ai.tests.${normalizeCountryCode(countryCode)}.kafkaConfig`;
+  return safeGet<KafkaPublishConfig>(key);
 }

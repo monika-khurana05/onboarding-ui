@@ -32,7 +32,7 @@ import {
 import { alpha } from '@mui/material/styles';
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { JsonMonacoPanel } from '../../components/JsonMonacoPanel';
 import { CatalogSelector, type CatalogColumn } from '../../components/CatalogSelector';
 import { ParamsEditorDrawer } from '../../components/ParamsEditorDrawer';
@@ -62,6 +62,7 @@ import {
 } from '../../models/snapshot';
 import { loadOnboardingDraft, saveOnboardingDraft } from '../../lib/storage/onboardingDraftStorage';
 import { capabilityCatalog } from './capabilityCatalog';
+import { setStage } from '../../status/onboardingStatusStorage';
 
 type CatalogTab = 'validations' | 'enrichments';
 
@@ -425,6 +426,8 @@ export function CreateSnapshotWizard({
   onSaved
 }: CreateSnapshotWizardProps) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const flow = searchParams.get('flow') === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
   const { showError } = useGlobalError();
   const [activeStep, setActiveStep] = useState(0);
   const [stepAnimationDirection, setStepAnimationDirection] = useState<'forward' | 'backward'>('forward');
@@ -786,6 +789,12 @@ export function CreateSnapshotWizard({
         const resolvedSnapshotId = snapshotId ?? getSnapshotIdFromResponse(response);
         const version = response.version ?? response.currentVersion;
         if (resolvedSnapshotId) {
+          if (snapshot.countryCode.trim()) {
+            setStage(snapshot.countryCode, flow, 'SNAPSHOT_CREATION', 'DONE', undefined, {
+              snapshotId: resolvedSnapshotId
+            });
+            setStage(snapshot.countryCode, flow, 'ASSEMBLY_CREATION', 'IN_PROGRESS');
+          }
           onSaved?.(resolvedSnapshotId, version);
           if (!onSaved) {
             const params = new URLSearchParams();
@@ -827,6 +836,12 @@ export function CreateSnapshotWizard({
         ...existing.filter((item) => item.snapshotId !== resolvedSnapshotId)
       ].slice(0, 10);
       localStorage.setItem('cpx.snapshot.refs', JSON.stringify(next));
+      if (snapshot.countryCode.trim()) {
+        setStage(snapshot.countryCode, flow, 'SNAPSHOT_CREATION', 'DONE', undefined, {
+          snapshotId: resolvedSnapshotId
+        });
+        setStage(snapshot.countryCode, flow, 'ASSEMBLY_CREATION', 'IN_PROGRESS');
+      }
       onSaved?.(resolvedSnapshotId, resolvedVersion);
       if (!onSaved) {
         navigate(`/snapshots/${encodeURIComponent(resolvedSnapshotId)}`);

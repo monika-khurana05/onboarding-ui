@@ -20,7 +20,7 @@ import {
   Typography
 } from '@mui/material';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CountryCodeField } from '../../components/CountryCodeField';
 import { SectionCard } from '../../components/SectionCard';
 import { enrichmentCatalog } from '../../catalog/enrichmentCatalog';
@@ -37,6 +37,7 @@ import { capabilityCatalog } from '../onboarding-flow/capabilityCatalog';
 import { loadRequirementsAnalysis as loadRequirementsAnalysisFromStorage, saveRequirementsAnalysis } from '../../ai/storage/aiSessionStorage';
 import { mockAiService } from '../../ai/services/mockAiService';
 import type { RequirementsAnalysis } from '../../ai/types';
+import { setStage } from '../../status/onboardingStatusStorage';
 
 const documentSources = [
   'Argentina Instant Payments Spec (Mock)',
@@ -83,6 +84,9 @@ function normalizeParams(value: unknown): Record<string, unknown> {
 
 export function RequirementAnalysisPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const flow = searchParams.get('flow') === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
+  const queryCountry = searchParams.get('country');
   const [countryCode, setCountryCode] = useState('AR');
   const [documentSource, setDocumentSource] = useState<(typeof documentSources)[number]>(documentSources[0]);
   const [analysis, setAnalysis] = useState<RequirementsAnalysis | null>(null);
@@ -95,6 +99,12 @@ export function RequirementAnalysisPage() {
   const [appliedCapabilities, setAppliedCapabilities] = useState<Set<CapabilityKey>>(new Set());
   const [appliedValidations, setAppliedValidations] = useState<Set<string>>(new Set());
   const [appliedEnrichments, setAppliedEnrichments] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (queryCountry) {
+      setCountryCode(queryCountry.toUpperCase());
+    }
+  }, [queryCountry]);
 
   useEffect(() => {
     const normalized = normalizeCountryCode(countryCode);
@@ -175,6 +185,10 @@ export function RequirementAnalysisPage() {
       const data = await mockAiService.getRequirementsAnalysis(normalized);
       setAnalysis(data);
       saveRequirementsAnalysis(normalized, data);
+      setStage(normalized, flow, 'REQUIREMENTS', 'DONE', undefined, {
+        requirementsSessionKey: `ai.requirements.${normalized}`
+      });
+      setStage(normalized, flow, 'PAYLOAD_MAPPING', 'IN_PROGRESS');
       setLoadSource('mock');
     } catch (fetchError) {
       console.warn('Failed to load requirement analysis.', fetchError);
@@ -182,7 +196,7 @@ export function RequirementAnalysisPage() {
     } finally {
       setLoading(false);
     }
-  }, [countryCode]);
+  }, [countryCode, flow]);
 
   const handleCreateOpenQuestion = useCallback(() => {
     if (!analysis || !activeRequirementId) {

@@ -47,6 +47,8 @@
 - `POST /snapshots/{snapshotId}/versions`
 - `POST /generate/preview`
 - `GET /repos/{repoSlug}/packs?ref=main` (optional)
+- `POST /ai/testing/kafka/publish`
+- `GET /ai/testing/kafka/executions/{executionId}`
 
 ## Setup
 

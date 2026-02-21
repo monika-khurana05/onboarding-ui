@@ -17,14 +17,21 @@ import {
   TextField,
   Typography
 } from '@mui/material';
+import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { getKafkaValidationResults, publishKafkaTestCases } from '../../api/client';
+import { getErrorMessage } from '../../api/http';
+import type { KafkaPublishResponseDto, KafkaValidationResponseDto, KafkaValidationResultDto } from '../../api/types';
 import { CountryCodeField } from '../../components/CountryCodeField';
 import { SectionCard } from '../../components/SectionCard';
 import { mockAiService } from '../../ai/services/mockAiService';
 import {
+  loadKafkaPublishConfig,
   loadParsedPain001,
   loadScenarioPack,
   loadTestBaseXml,
+  saveKafkaPublishConfig,
   saveParsedPain001,
   saveScenarioPack,
   saveTestBaseXml
@@ -32,6 +39,7 @@ import {
 import type { ParsedPain001, TestScenario, TestScenarioPack } from '../../ai/types';
 import { parsePain001 } from '../../ai/testing/xmlPain001Parser';
 import { generateTestScenarioPack, type ScenarioOptions } from '../../ai/testing/testScenarioGenerator';
+import { setStage } from '../../status/onboardingStatusStorage';
 
 type ParseStatus = 'idle' | 'success' | 'error';
 
@@ -109,7 +117,38 @@ function buildFieldRows(parsed: ParsedPain001 | null) {
   ];
 }
 
+function resolveStatusTone(value?: string) {
+  const normalized = value?.toLowerCase() ?? '';
+  if (!normalized) {
+    return 'default' as const;
+  }
+  if (normalized.includes('pass') || normalized.includes('success') || normalized.includes('accepted') || normalized.includes('ok')) {
+    return 'success' as const;
+  }
+  if (normalized.includes('fail') || normalized.includes('error') || normalized.includes('reject')) {
+    return 'error' as const;
+  }
+  if (normalized.includes('pending') || normalized.includes('running') || normalized.includes('processing')) {
+    return 'warning' as const;
+  }
+  return 'default' as const;
+}
+
+function formatTimestamp(value?: string) {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
+}
+
 export function TestCaseGenerationPage() {
+  const [searchParams] = useSearchParams();
+  const flow = searchParams.get('flow') === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
+  const queryCountry = searchParams.get('country');
   const [countryCode, setCountryCode] = useState('AR');
   const [baseXml, setBaseXml] = useState('');
   const [parseStatus, setParseStatus] = useState<ParseStatus>('idle');
@@ -130,8 +169,32 @@ export function TestCaseGenerationPage() {
   const [cucumberFeature, setCucumberFeature] = useState<string | null>(null);
   const [cucumberSteps, setCucumberSteps] = useState<string | null>(null);
   const [loadStatus, setLoadStatus] = useState<'idle' | 'sample' | 'generated' | 'restored'>('idle');
+  const [kafkaClusterAlias, setKafkaClusterAlias] = useState('');
+  const [kafkaTopicName, setKafkaTopicName] = useState('');
+  const [kafkaMessageKey, setKafkaMessageKey] = useState('');
+  const [executionId, setExecutionId] = useState('');
+  const [publishResponse, setPublishResponse] = useState<KafkaPublishResponseDto | null>(null);
+  const [validationResponse, setValidationResponse] = useState<KafkaValidationResponseDto | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const normalizedCountry = normalizeCountryCode(countryCode);
+
+  const publishMutation = useMutation({
+    mutationFn: publishKafkaTestCases,
+    meta: { suppressGlobalError: true }
+  });
+
+  const validationMutation = useMutation({
+    mutationFn: getKafkaValidationResults,
+    meta: { suppressGlobalError: true }
+  });
+
+  useEffect(() => {
+    if (queryCountry) {
+      setCountryCode(queryCountry.toUpperCase());
+    }
+  }, [queryCountry]);
 
   useEffect(() => {
     if (!normalizedCountry) {
@@ -163,6 +226,22 @@ export function TestCaseGenerationPage() {
       setSelectedScenarioIds(new Set());
       setLoadStatus('idle');
     }
+    const savedKafkaConfig = loadKafkaPublishConfig(normalizedCountry);
+    if (savedKafkaConfig) {
+      setKafkaClusterAlias(savedKafkaConfig.clusterAlias ?? '');
+      setKafkaTopicName(savedKafkaConfig.topicName ?? '');
+      setKafkaMessageKey(savedKafkaConfig.messageKey ?? '');
+      setExecutionId(savedKafkaConfig.executionId ?? '');
+    } else {
+      setKafkaClusterAlias('');
+      setKafkaTopicName('');
+      setKafkaMessageKey('');
+      setExecutionId('');
+    }
+    setPublishResponse(null);
+    setValidationResponse(null);
+    setPublishError(null);
+    setValidationError(null);
   }, [normalizedCountry]);
 
   useEffect(() => {
@@ -171,6 +250,26 @@ export function TestCaseGenerationPage() {
     }
     saveTestBaseXml(normalizedCountry, baseXml);
   }, [baseXml, normalizedCountry]);
+
+  useEffect(() => {
+    if (!normalizedCountry) {
+      return;
+    }
+    saveKafkaPublishConfig(normalizedCountry, {
+      clusterAlias: kafkaClusterAlias.trim(),
+      topicName: kafkaTopicName.trim(),
+      messageKey: kafkaMessageKey.trim() || undefined,
+      executionId: executionId.trim() || undefined,
+      lastPublishedAt: publishResponse?.submittedAt
+    });
+  }, [
+    executionId,
+    kafkaClusterAlias,
+    kafkaMessageKey,
+    kafkaTopicName,
+    normalizedCountry,
+    publishResponse?.submittedAt
+  ]);
 
   const handleLoadSample = useCallback(async () => {
     const sample = await mockAiService.getKafkaPain001Sample();
@@ -236,7 +335,10 @@ export function TestCaseGenerationPage() {
     saveScenarioPack(normalizedCountry, pack);
     setSelectedScenarioIds(new Set(pack.scenarios.map((scenario) => scenario.scenarioId)));
     setLoadStatus('generated');
-  }, [baseXml, normalizedCountry, parsed, scenarioOptions]);
+    setStage(normalizedCountry, flow, 'TESTING', 'IN_PROGRESS', undefined, {
+      testPackKey: `ai.tests.${normalizedCountry}`
+    });
+  }, [baseXml, flow, normalizedCountry, parsed, scenarioOptions]);
 
   const handleViewScenario = useCallback((scenario: TestScenario) => {
     setActiveScenario(scenario);
@@ -363,6 +465,125 @@ export function TestCaseGenerationPage() {
       'application/json;charset=utf-8'
     );
   }, [normalizedCountry, scenarioPack, selectedScenarioIds]);
+
+  const scenarioSelection = useMemo(() => {
+    if (!scenarioPack) {
+      return { publishList: [] as TestScenario[], selectedCount: 0, total: 0, usingAll: false };
+    }
+    const selected = scenarioPack.scenarios.filter((scenario) => selectedScenarioIds.has(scenario.scenarioId));
+    const usingAll = selected.length === 0;
+    return {
+      publishList: usingAll ? scenarioPack.scenarios : selected,
+      selectedCount: selected.length,
+      total: scenarioPack.scenarios.length,
+      usingAll
+    };
+  }, [scenarioPack, selectedScenarioIds]);
+
+  const expectedOutcomeById = useMemo(() => {
+    const map = new Map<string, TestScenario['expectedOutcome']>();
+    scenarioPack?.scenarios.forEach((scenario) => {
+      map.set(scenario.scenarioId, scenario.expectedOutcome);
+    });
+    return map;
+  }, [scenarioPack]);
+
+  const validationResults = useMemo<KafkaValidationResultDto[]>(() => {
+    const results = validationResponse?.results;
+    return Array.isArray(results) ? results : [];
+  }, [validationResponse]);
+
+  const handlePublishScenarios = useCallback(async () => {
+    if (!scenarioPack) {
+      setPublishError('Generate scenarios before publishing to Kafka.');
+      return;
+    }
+    const clusterAlias = kafkaClusterAlias.trim();
+    const topicName = kafkaTopicName.trim();
+    if (!clusterAlias || !topicName) {
+      setPublishError('Kafka cluster alias and topic name are required.');
+      return;
+    }
+    if (scenarioSelection.publishList.length === 0) {
+      setPublishError('No scenarios available to publish.');
+      return;
+    }
+    setPublishError(null);
+    setValidationError(null);
+    try {
+      const response = await publishMutation.mutateAsync({
+        clusterAlias,
+        topicName,
+        messageKey: kafkaMessageKey.trim() || undefined,
+        countryCode: normalizedCountry || undefined,
+        scenarios: scenarioSelection.publishList.map((scenario) => ({
+          scenarioId: scenario.scenarioId,
+          payload: scenario.xmlVariant,
+          expectedOutcome: {
+            state: scenario.expectedOutcome.state,
+            errorCode: scenario.expectedOutcome.errorCode,
+            notes: scenario.expectedOutcome.notes
+          }
+        }))
+      });
+      const enriched: KafkaPublishResponseDto = {
+        ...response,
+        publishedCount: response.publishedCount ?? scenarioSelection.publishList.length,
+        failedCount: response.failedCount ?? response.errors?.length ?? 0
+      };
+      setPublishResponse(enriched);
+      if (enriched.executionId) {
+        setExecutionId(enriched.executionId);
+      }
+      setValidationResponse(null);
+    } catch (error) {
+      setPublishError(getErrorMessage(error));
+    }
+  }, [
+    kafkaClusterAlias,
+    kafkaMessageKey,
+    kafkaTopicName,
+    normalizedCountry,
+    publishMutation,
+    scenarioPack,
+    scenarioSelection.publishList
+  ]);
+
+  const handleValidateExecution = useCallback(async () => {
+    const trimmedExecutionId = executionId.trim();
+    if (!trimmedExecutionId) {
+      setValidationError('Execution ID is required to validate results.');
+      return;
+    }
+    setValidationError(null);
+    try {
+      const response = await validationMutation.mutateAsync(trimmedExecutionId);
+      setValidationResponse(response);
+    } catch (error) {
+      setValidationError(getErrorMessage(error));
+    }
+  }, [executionId, validationMutation]);
+
+  const handleMarkTestsPassed = useCallback(() => {
+    if (!normalizedCountry) {
+      return;
+    }
+    setStage(normalizedCountry, flow, 'TESTING', 'DONE');
+  }, [flow, normalizedCountry]);
+
+  const publishCount = scenarioSelection.publishList.length;
+  const publishSelectionNote =
+    scenarioSelection.total === 0
+      ? 'No scenarios ready to publish.'
+      : scenarioSelection.usingAll
+      ? `No scenarios selected. Publishing all ${scenarioSelection.total}.`
+      : `${scenarioSelection.selectedCount} selected of ${scenarioSelection.total}.`;
+  const publishFailureCount = publishResponse
+    ? Math.max(publishResponse.failedCount ?? 0, publishResponse.errors?.length ?? 0)
+    : 0;
+  const publishSuccessCount = publishResponse?.publishedCount ?? publishCount;
+  const publishedAtLabel = formatTimestamp(publishResponse?.submittedAt);
+  const validationCompletedAt = formatTimestamp(validationResponse?.completedAt);
 
   const summaryItems = useMemo(
     () =>
@@ -595,6 +816,176 @@ export function TestCaseGenerationPage() {
         </Stack>
       </SectionCard>
 
+      <SectionCard
+        title="Kafka Execution"
+        subtitle="Publish selected scenarios to Kafka and validate downstream outcomes."
+      >
+        <Stack spacing={2}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Stack spacing={2}>
+              <Typography variant="subtitle1">Publish Settings</Typography>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
+                <TextField
+                  label="Cluster Alias"
+                  value={kafkaClusterAlias}
+                  onChange={(event) => setKafkaClusterAlias(event.target.value)}
+                  placeholder="payments-ingress"
+                  required
+                  sx={{ flex: 1, minWidth: 220 }}
+                />
+                <TextField
+                  label="Topic Name"
+                  value={kafkaTopicName}
+                  onChange={(event) => setKafkaTopicName(event.target.value)}
+                  placeholder="pain001.incoming"
+                  required
+                  sx={{ flex: 1, minWidth: 220 }}
+                />
+                <TextField
+                  label="Message Key (optional)"
+                  value={kafkaMessageKey}
+                  onChange={(event) => setKafkaMessageKey(event.target.value)}
+                  placeholder="msgId-123"
+                  sx={{ flex: 1, minWidth: 220 }}
+                />
+              </Stack>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} useFlexGap flexWrap="wrap">
+                <Button
+                  variant="contained"
+                  onClick={handlePublishScenarios}
+                  disabled={
+                    publishMutation.isPending ||
+                    !scenarioPack ||
+                    !kafkaClusterAlias.trim() ||
+                    !kafkaTopicName.trim() ||
+                    publishCount === 0
+                  }
+                >
+                  {publishMutation.isPending ? 'Publishing...' : 'Publish Selected to Kafka'}
+                </Button>
+                <Typography variant="caption" color="text.secondary">
+                  {publishSelectionNote}
+                </Typography>
+              </Stack>
+              {publishError ? <Alert severity="error">{publishError}</Alert> : null}
+              {publishResponse ? (
+                <Alert severity={publishFailureCount > 0 ? 'warning' : 'success'}>
+                  <Stack spacing={0.25}>
+                    <Typography variant="body2">
+                      Execution ID: {publishResponse.executionId ?? '—'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Published {publishSuccessCount} scenario{publishSuccessCount === 1 ? '' : 's'}
+                      {publishFailureCount > 0 ? ` · ${publishFailureCount} failed` : ''}
+                      {publishedAtLabel ? ` · Submitted ${publishedAtLabel}` : ''}
+                    </Typography>
+                  </Stack>
+                </Alert>
+              ) : null}
+              {publishResponse?.errors?.length ? (
+                <Alert severity="warning">
+                  <Stack spacing={0.5}>
+                    <Typography variant="body2">Failed publishes</Typography>
+                    {publishResponse.errors.map((error, index) => (
+                      <Typography key={`${error.scenarioId ?? 'publish'}-${index}`} variant="caption">
+                        {error.scenarioId ?? 'Unknown'}: {error.message ?? 'Publish failed.'}
+                      </Typography>
+                    ))}
+                  </Stack>
+                </Alert>
+              ) : null}
+            </Stack>
+          </Paper>
+
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Stack spacing={2}>
+              <Typography variant="subtitle1">Validation</Typography>
+              <TextField
+                label="Execution ID"
+                value={executionId}
+                onChange={(event) => setExecutionId(event.target.value)}
+                placeholder="exec-2026-02-21-001"
+                helperText="Paste an execution ID to validate later."
+                fullWidth
+              />
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} useFlexGap flexWrap="wrap">
+                <Button
+                  variant="outlined"
+                  onClick={handleValidateExecution}
+                  disabled={validationMutation.isPending || !executionId.trim()}
+                >
+                  {validationMutation.isPending ? 'Validating...' : 'Fetch Validation Results'}
+                </Button>
+                {validationResponse?.status ? (
+                  <Chip
+                    label={`Status: ${validationResponse.status}`}
+                    color={resolveStatusTone(validationResponse.status)}
+                    size="small"
+                    variant={resolveStatusTone(validationResponse.status) === 'default' ? 'outlined' : 'filled'}
+                  />
+                ) : null}
+                {validationCompletedAt ? (
+                  <Typography variant="caption" color="text.secondary">
+                    Completed: {validationCompletedAt}
+                  </Typography>
+                ) : null}
+              </Stack>
+              {validationError ? <Alert severity="error">{validationError}</Alert> : null}
+              {validationResults.length ? (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Scenario ID</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Expected Outcome</TableCell>
+                        <TableCell>Actual Outcome</TableCell>
+                        <TableCell>Details</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {validationResults.map((result, index) => {
+                        const expected = result.scenarioId ? expectedOutcomeById.get(result.scenarioId) : undefined;
+                        const expectedState = expected?.state ?? result.expectedState;
+                        const expectedErrorCode = expected?.errorCode ?? result.expectedErrorCode;
+                        const actualState = result.actualState;
+                        const actualErrorCode = result.actualErrorCode;
+                        const expectedLabel = expectedState
+                          ? `${expectedState}${expectedErrorCode ? ` (${expectedErrorCode})` : ''}`
+                          : '—';
+                        const actualLabel = actualState
+                          ? `${actualState}${actualErrorCode ? ` (${actualErrorCode})` : ''}`
+                          : '—';
+                        const statusLabel = result.status ?? 'Unknown';
+                        const tone = resolveStatusTone(statusLabel);
+                        return (
+                          <TableRow key={`${result.scenarioId ?? 'result'}-${index}`} hover>
+                            <TableCell>{result.scenarioId ?? '—'}</TableCell>
+                            <TableCell>
+                              <Chip
+                                label={statusLabel}
+                                color={tone}
+                                size="small"
+                                variant={tone === 'default' ? 'outlined' : 'filled'}
+                              />
+                            </TableCell>
+                            <TableCell>{expectedLabel}</TableCell>
+                            <TableCell>{actualLabel}</TableCell>
+                            <TableCell>{result.message ?? result.details ?? '—'}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Alert severity="info">No validation results yet.</Alert>
+              )}
+            </Stack>
+          </Paper>
+        </Stack>
+      </SectionCard>
+
       <SectionCard title="Outputs" subtitle="Export scenario packs, cucumber skeletons, or payload variants.">
         <Stack spacing={2}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
@@ -609,6 +1000,9 @@ export function TestCaseGenerationPage() {
             </Button>
             <Button variant="contained" onClick={handleExportSelectedPayloads} disabled={!scenarioPack}>
               Export Selected Payloads
+            </Button>
+            <Button variant="outlined" onClick={handleMarkTestsPassed} disabled={!scenarioPack}>
+              Mark Tests Passed
             </Button>
           </Stack>
 

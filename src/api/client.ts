@@ -13,7 +13,10 @@ import type {
   RepoPackDto,
   SnapshotDetailDto,
   SnapshotVersionRequestDto,
-  SnapshotVersionResponseDto
+  SnapshotVersionResponseDto,
+  KafkaPublishRequestDto,
+  KafkaPublishResponseDto,
+  KafkaValidationResponseDto
 } from './types';
 
 export async function getRepoDefaults(): Promise<RepoDefaultsResponseDto> {
@@ -62,6 +65,25 @@ export async function previewGenerate(req: PreviewGenerateRequestDto): Promise<P
   return httpRequest<PreviewGenerateResponseDto>('/generate/preview', {
     method: 'POST',
     body: JSON.stringify(req)
+  });
+}
+
+export async function publishKafkaTestCases(
+  req: KafkaPublishRequestDto
+): Promise<KafkaPublishResponseDto> {
+  return httpRequest<KafkaPublishResponseDto>('/ai/testing/kafka/publish', {
+    method: 'POST',
+    body: JSON.stringify(req),
+    timeoutMs: 30000
+  });
+}
+
+export async function getKafkaValidationResults(
+  executionId: string
+): Promise<KafkaValidationResponseDto> {
+  const encodedId = encodeURIComponent(executionId);
+  return httpRequest<KafkaValidationResponseDto>(`/ai/testing/kafka/executions/${encodedId}`, {
+    timeoutMs: 30000
   });
 }
 
