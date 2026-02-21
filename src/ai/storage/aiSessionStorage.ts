@@ -14,6 +14,11 @@ export type KafkaPublishConfig = {
   lastPublishedAt?: string;
 };
 
+export type TestSampleXml = {
+  id: string;
+  xml: string;
+};
+
 function safeSet(key: string, value: unknown) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
@@ -82,6 +87,16 @@ export function saveTestBaseXml(countryCode: string, xml: string): void {
 export function loadTestBaseXml(countryCode: string): string | null {
   const key = `ai.tests.${normalizeCountryCode(countryCode)}.baseXml`;
   return safeGet<string>(key);
+}
+
+export function saveTestSampleXmls(countryCode: string, samples: TestSampleXml[]): void {
+  const key = `ai.tests.${normalizeCountryCode(countryCode)}.samples`;
+  safeSet(key, samples);
+}
+
+export function loadTestSampleXmls(countryCode: string): TestSampleXml[] | null {
+  const key = `ai.tests.${normalizeCountryCode(countryCode)}.samples`;
+  return safeGet<TestSampleXml[]>(key);
 }
 
 export function saveParsedPain001(countryCode: string, parsed: ParsedPain001): void {

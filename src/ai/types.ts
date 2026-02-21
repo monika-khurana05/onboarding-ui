@@ -133,6 +133,12 @@ export type ParsedPain001 = {
   currency: string | null;
 };
 
+export type SampleMessage = {
+  sampleId: string;
+  xml: string;
+  parsed: ParsedPain001;
+};
+
 export type TestScenario = {
   scenarioId: string;
   title: string;
@@ -145,6 +151,7 @@ export type TestScenario = {
   };
   xmlVariant: string;
   extractedFieldsSnapshot: ParsedPain001;
+  sourceSampleId?: string;
 };
 
 export type TestScenarioPack = {
@@ -152,9 +159,11 @@ export type TestScenarioPack = {
     countryCode?: string;
     generatedAt: string;
     baseMessageType?: string;
+    flow?: 'INCOMING' | 'OUTGOING';
   };
   baseXml: string;
   parsed: ParsedPain001;
+  samples?: SampleMessage[];
   scenarios: TestScenario[];
   options: {
     happyPath: boolean;

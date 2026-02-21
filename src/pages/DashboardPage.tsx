@@ -212,168 +212,6 @@ export function DashboardPage() {
 
   return (
     <PageContainer title="Dashboard" subtitle="Monitor recent snapshots and launch onboarding workflows.">
-      <CardSection title="Summary" subtitle="Snapshot activity at a glance.">
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 2,
-                borderRadius: 1,
-                borderColor: 'divider',
-                background: (theme) =>
-                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
-              }}
-            >
-              <Stack spacing={0.5}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Total snapshots
-                </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                  {totalSnapshots}
-                </Typography>
-                <InlineHelpText>Stored locally</InlineHelpText>
-              </Stack>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 2,
-                borderRadius: 1,
-                borderColor: 'divider',
-                background: (theme) =>
-                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
-              }}
-            >
-              <Stack spacing={0.5}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Recent onboarding activity
-                </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                  {recentActivityCount}
-                </Typography>
-                <InlineHelpText>Last {recentWindowDays} days</InlineHelpText>
-              </Stack>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 2,
-                borderRadius: 1,
-                borderColor: 'divider',
-                background: (theme) =>
-                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
-              }}
-            >
-              <Stack spacing={0.5}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Repos impacted
-                </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                  {DEFAULT_REPOS.length}
-                </Typography>
-                <InlineHelpText>{DEFAULT_REPOS.join(', ')}</InlineHelpText>
-              </Stack>
-            </Paper>
-          </Grid>
-        </Grid>
-      </CardSection>
-
-      <CardSection title="Quick Start" subtitle="Analyze requirements, map payloads, then build, preview, and test.">
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-              <Stack spacing={1}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Step 1
-                </Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Requirement Analysis
-                </Typography>
-                <InlineHelpText>
-                  Extract requirements, map capabilities, and capture open questions.
-                </InlineHelpText>
-              </Stack>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-              <Stack spacing={1}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Step 2
-                </Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Payload Mapping
-                </Typography>
-                <InlineHelpText>
-                  Review draft mapping grids and export ICD-ready drafts.
-                </InlineHelpText>
-              </Stack>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-              <Stack spacing={1}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Step 3
-                </Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Create Snapshot
-                </Typography>
-                <InlineHelpText>
-                  Capture country, capabilities, and workflow into a versioned snapshot.
-                </InlineHelpText>
-              </Stack>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-              <Stack spacing={1}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Step 4
-                </Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Generate Preview
-                </Typography>
-                <InlineHelpText>
-                  Validate generated files repo-by-repo before automation.
-                </InlineHelpText>
-              </Stack>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-              <Stack spacing={1}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Step 5
-                </Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Jobs
-                </Typography>
-                <InlineHelpText>Track async runs, approvals, and automation status.</InlineHelpText>
-              </Stack>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-              <Stack spacing={1}>
-                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
-                  Step 6
-                </Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Test Case Generation
-                </Typography>
-                <InlineHelpText>Generate scenario packs and test skeletons from payloads.</InlineHelpText>
-              </Stack>
-            </Paper>
-          </Grid>
-        </Grid>
-      </CardSection>
-
       <CardSection
         title="Onboarding Status Tracker"
         subtitle="Track onboarding stages per country and flow."
@@ -610,6 +448,168 @@ export function DashboardPage() {
             />
           )}
         </Stack>
+      </CardSection>
+
+      <CardSection title="Summary" subtitle="Snapshot activity at a glance.">
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 1,
+                borderColor: 'divider',
+                background: (theme) =>
+                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
+              }}
+            >
+              <Stack spacing={0.5}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Total snapshots
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  {totalSnapshots}
+                </Typography>
+                <InlineHelpText>Stored locally</InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 1,
+                borderColor: 'divider',
+                background: (theme) =>
+                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
+              }}
+            >
+              <Stack spacing={0.5}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Recent onboarding activity
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  {recentActivityCount}
+                </Typography>
+                <InlineHelpText>Last {recentWindowDays} days</InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 1,
+                borderColor: 'divider',
+                background: (theme) =>
+                  `linear-gradient(135deg, ${theme.palette.background.paper}, ${theme.palette.action.hover})`
+              }}
+            >
+              <Stack spacing={0.5}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Repos impacted
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  {DEFAULT_REPOS.length}
+                </Typography>
+                <InlineHelpText>{DEFAULT_REPOS.join(', ')}</InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+        </Grid>
+      </CardSection>
+
+      <CardSection title="Quick Start" subtitle="Analyze requirements, map payloads, then build, preview, and test.">
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 1
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Requirement Analysis
+                </Typography>
+                <InlineHelpText>
+                  Extract requirements, map capabilities, and capture open questions.
+                </InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 2
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Payload Mapping
+                </Typography>
+                <InlineHelpText>
+                  Review draft mapping grids and export ICD-ready drafts.
+                </InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 3
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Create Snapshot
+                </Typography>
+                <InlineHelpText>
+                  Capture country, capabilities, and workflow into a versioned snapshot.
+                </InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 4
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Generate Preview
+                </Typography>
+                <InlineHelpText>
+                  Validate generated files repo-by-repo before automation.
+                </InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 5
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Jobs
+                </Typography>
+                <InlineHelpText>Track async runs, approvals, and automation status.</InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+              <Stack spacing={1}>
+                <Typography variant="overline" sx={{ letterSpacing: '0.08em', color: 'text.secondary' }}>
+                  Step 6
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Test Case Generation
+                </Typography>
+                <InlineHelpText>Generate scenario packs and test skeletons from payloads.</InlineHelpText>
+              </Stack>
+            </Paper>
+          </Grid>
+        </Grid>
       </CardSection>
 
       <CardSection

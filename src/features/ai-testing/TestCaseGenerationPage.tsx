@@ -6,6 +6,7 @@ import {
   Divider,
   Drawer,
   FormControlLabel,
+  MenuItem,
   Paper,
   Stack,
   Table,
@@ -29,17 +30,24 @@ import { mockAiService } from '../../ai/services/mockAiService';
 import {
   loadKafkaPublishConfig,
   loadParsedPain001,
+  loadRequirementsAnalysis as loadRequirementsAnalysisFromStorage,
   loadScenarioPack,
   loadTestBaseXml,
+  loadTestSampleXmls,
   saveKafkaPublishConfig,
   saveParsedPain001,
+  saveRequirementsAnalysis,
   saveScenarioPack,
-  saveTestBaseXml
+  saveTestBaseXml,
+  saveTestSampleXmls,
+  type TestSampleXml
 } from '../../ai/storage/aiSessionStorage';
-import type { ParsedPain001, TestScenario, TestScenarioPack } from '../../ai/types';
+import type { ParsedPain001, RequirementsAnalysis, SampleMessage, TestScenario, TestScenarioPack } from '../../ai/types';
 import { parsePain001 } from '../../ai/testing/xmlPain001Parser';
 import { generateTestScenarioPack, type ScenarioOptions } from '../../ai/testing/testScenarioGenerator';
 import { setStage } from '../../status/onboardingStatusStorage';
+import type { Flow } from '../../status/types';
+import { ValidationRunPanel } from '../../ai/testing/components/ValidationRunPanel';
 
 type ParseStatus = 'idle' | 'success' | 'error';
 
@@ -52,8 +60,38 @@ const scenarioToggleLabels: Array<{ key: keyof ScenarioOptions; label: string }>
   { key: 'creditorAgentVariations', label: 'Creditor agent/account variations' }
 ];
 
+type SampleEntry = {
+  id: string;
+  xml: string;
+  parsed: ParsedPain001 | null;
+  parseStatus: ParseStatus;
+  parseErrors: string[];
+};
+
 function normalizeCountryCode(value: string) {
   return value.trim().toUpperCase();
+}
+
+function createSampleEntry(xml = '', id?: string): SampleEntry {
+  const entryId = id ?? `sample-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    id: entryId,
+    xml,
+    parsed: null,
+    parseStatus: 'idle',
+    parseErrors: []
+  };
+}
+
+function parseSampleEntry(entry: SampleEntry): SampleEntry {
+  if (!entry.xml.trim()) {
+    return { ...entry, parsed: null, parseStatus: 'idle', parseErrors: [] };
+  }
+  const result = parsePain001(entry.xml);
+  if (result.ok) {
+    return { ...entry, parsed: result.data, parseStatus: 'success', parseErrors: [] };
+  }
+  return { ...entry, parsed: null, parseStatus: 'error', parseErrors: result.errors };
 }
 
 function downloadText(content: string, fileName: string, mimeType: string) {
@@ -147,13 +185,18 @@ function formatTimestamp(value?: string) {
 
 export function TestCaseGenerationPage() {
   const [searchParams] = useSearchParams();
-  const flow = searchParams.get('flow') === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
+  const queryFlow = searchParams.get('flow');
+  const flowFromQuery = queryFlow === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
   const queryCountry = searchParams.get('country');
   const [countryCode, setCountryCode] = useState('AR');
-  const [baseXml, setBaseXml] = useState('');
-  const [parseStatus, setParseStatus] = useState<ParseStatus>('idle');
-  const [parseErrors, setParseErrors] = useState<string[]>([]);
-  const [parsed, setParsed] = useState<ParsedPain001 | null>(null);
+  const [flow, setFlow] = useState<Flow>(flowFromQuery);
+  const [sampleEntries, setSampleEntries] = useState<SampleEntry[]>(() => [createSampleEntry()]);
+  const [activeSampleId, setActiveSampleId] = useState<string | null>(null);
+  const [generationErrors, setGenerationErrors] = useState<string[]>([]);
+  const [requirements, setRequirements] = useState<RequirementsAnalysis | null>(null);
+  const [requirementsSource, setRequirementsSource] = useState<'storage' | 'mock' | null>(null);
+  const [requirementsStatus, setRequirementsStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [requirementsError, setRequirementsError] = useState<string | null>(null);
   const [scenarioOptions, setScenarioOptions] = useState<ScenarioOptions>({
     happyPath: true,
     missingMandatory: true,
@@ -179,6 +222,61 @@ export function TestCaseGenerationPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const normalizedCountry = normalizeCountryCode(countryCode);
+  const activeSample = useMemo(() => {
+    if (sampleEntries.length === 0) {
+      return null;
+    }
+    const matched = activeSampleId ? sampleEntries.find((entry) => entry.id === activeSampleId) : undefined;
+    return matched ?? sampleEntries[0];
+  }, [activeSampleId, sampleEntries]);
+  const activeSampleIndex = useMemo(
+    () => (activeSample ? sampleEntries.findIndex((entry) => entry.id === activeSample.id) : -1),
+    [activeSample, sampleEntries]
+  );
+  const activeXml = activeSample?.xml ?? '';
+  const activeParsed = activeSample?.parsed ?? null;
+
+  const filledSamples = useMemo(
+    () => sampleEntries.filter((entry) => entry.xml.trim()),
+    [sampleEntries]
+  );
+  const parsedSamples = useMemo(
+    () =>
+      filledSamples.filter(
+        (entry) => entry.parseStatus === 'success' && entry.parsed
+      ) as SampleEntry[],
+    [filledSamples]
+  );
+  const parsedSampleMessages = useMemo<SampleMessage[]>(
+    () =>
+      parsedSamples.map((entry) => ({
+        sampleId: entry.id,
+        xml: entry.xml,
+        parsed: entry.parsed as ParsedPain001
+      })),
+    [parsedSamples]
+  );
+
+  const parseSummary = useMemo(() => {
+    const total = filledSamples.length;
+    const parsedCount = parsedSamples.length;
+    const errorCount = filledSamples.filter((entry) => entry.parseStatus === 'error').length;
+    const status: ParseStatus =
+      total === 0 ? 'idle' : errorCount > 0 ? 'error' : parsedCount > 0 ? 'success' : 'idle';
+    return { total, parsedCount, errorCount, status };
+  }, [filledSamples, parsedSamples]);
+
+  const parseErrorSummaries = useMemo(
+    () =>
+      sampleEntries
+        .map((entry, index) => ({
+          label: `Sample ${index + 1}`,
+          hasContent: Boolean(entry.xml.trim()),
+          errors: entry.parseErrors
+        }))
+        .filter((entry) => entry.hasContent && entry.errors.length > 0),
+    [sampleEntries]
+  );
 
   const publishMutation = useMutation({
     mutationFn: publishKafkaTestCases,
@@ -197,26 +295,55 @@ export function TestCaseGenerationPage() {
   }, [queryCountry]);
 
   useEffect(() => {
+    if (queryFlow) {
+      setFlow(queryFlow === 'OUTGOING' ? 'OUTGOING' : 'INCOMING');
+    }
+  }, [queryFlow]);
+
+  useEffect(() => {
     if (!normalizedCountry) {
       return;
     }
-    const savedXml = loadTestBaseXml(normalizedCountry);
-    setBaseXml(savedXml ?? '');
-    const savedParsed = loadParsedPain001(normalizedCountry);
     const savedPack = loadScenarioPack(normalizedCountry);
-    if (savedParsed) {
-      setParsed(savedParsed);
-      setParseStatus('success');
-      setParseErrors([]);
-    } else if (savedPack?.parsed) {
-      setParsed(savedPack.parsed);
-      setParseStatus('success');
-      setParseErrors([]);
+    const savedSamples = loadTestSampleXmls(normalizedCountry);
+    const savedXml = loadTestBaseXml(normalizedCountry);
+    const savedParsed = loadParsedPain001(normalizedCountry);
+
+    let nextEntries: SampleEntry[] = [];
+    if (savedPack?.samples?.length) {
+      nextEntries = savedPack.samples.map((sample) => ({
+        id: sample.sampleId ?? createSampleEntry(sample.xml).id,
+        xml: sample.xml,
+        parsed: sample.parsed,
+        parseStatus: 'success',
+        parseErrors: []
+      }));
+    } else if (savedSamples?.length) {
+      nextEntries = savedSamples.map((sample) =>
+        parseSampleEntry(createSampleEntry(sample.xml, sample.id))
+      );
+    } else if (savedPack?.baseXml) {
+      const entry = createSampleEntry(savedPack.baseXml);
+      if (savedPack.parsed) {
+        entry.parsed = savedPack.parsed;
+        entry.parseStatus = 'success';
+      }
+      nextEntries = [entry];
+    } else if (savedXml) {
+      const entry = createSampleEntry(savedXml);
+      if (savedParsed) {
+        entry.parsed = savedParsed;
+        entry.parseStatus = 'success';
+      }
+      nextEntries = [entry];
     } else {
-      setParsed(null);
-      setParseStatus('idle');
-      setParseErrors([]);
+      nextEntries = [createSampleEntry()];
     }
+
+    setSampleEntries(nextEntries);
+    setActiveSampleId(nextEntries[0]?.id ?? null);
+    setGenerationErrors([]);
+
     if (savedPack) {
       setScenarioPack(savedPack);
       setSelectedScenarioIds(new Set(savedPack.scenarios.map((scenario) => scenario.scenarioId)));
@@ -246,10 +373,34 @@ export function TestCaseGenerationPage() {
 
   useEffect(() => {
     if (!normalizedCountry) {
+      setRequirements(null);
+      setRequirementsSource(null);
+      setRequirementsStatus('idle');
+      setRequirementsError(null);
       return;
     }
-    saveTestBaseXml(normalizedCountry, baseXml);
-  }, [baseXml, normalizedCountry]);
+    const cached = loadRequirementsAnalysisFromStorage(normalizedCountry);
+    if (cached) {
+      setRequirements(cached);
+      setRequirementsSource('storage');
+    } else {
+      setRequirements(null);
+      setRequirementsSource(null);
+    }
+    setRequirementsStatus('idle');
+    setRequirementsError(null);
+  }, [normalizedCountry]);
+
+  useEffect(() => {
+    if (!normalizedCountry) {
+      return;
+    }
+    const samplesToSave: TestSampleXml[] = sampleEntries.map((entry) => ({ id: entry.id, xml: entry.xml }));
+    saveTestSampleXmls(normalizedCountry, samplesToSave);
+    if (sampleEntries.length > 0) {
+      saveTestBaseXml(normalizedCountry, sampleEntries[0].xml);
+    }
+  }, [normalizedCountry, sampleEntries]);
 
   useEffect(() => {
     if (!normalizedCountry) {
@@ -273,72 +424,204 @@ export function TestCaseGenerationPage() {
 
   const handleLoadSample = useCallback(async () => {
     const sample = await mockAiService.getKafkaPain001Sample();
-    setBaseXml(sample);
-    setParseStatus('idle');
-    setParseErrors([]);
-    setParsed(null);
+    let nextActiveId: string | null = null;
+    setSampleEntries((prev) => {
+      const next = [...prev];
+      const activeIndex = activeSampleId ? next.findIndex((entry) => entry.id === activeSampleId) : -1;
+      const emptyIndex = next.findIndex((entry) => !entry.xml.trim());
+      const targetIndex = activeIndex >= 0 ? activeIndex : emptyIndex >= 0 ? emptyIndex : next.length;
+      const baseEntry = targetIndex < next.length ? next[targetIndex] : createSampleEntry();
+      const updated: SampleEntry = {
+        ...baseEntry,
+        xml: sample,
+        parsed: null,
+        parseStatus: 'idle',
+        parseErrors: []
+      };
+      if (targetIndex < next.length) {
+        next[targetIndex] = updated;
+      } else {
+        next.push(updated);
+      }
+      nextActiveId = updated.id;
+      return next;
+    });
+    if (nextActiveId) {
+      setActiveSampleId(nextActiveId);
+    }
     setScenarioPack(null);
     setSelectedScenarioIds(new Set());
+    setGenerationErrors([]);
     setLoadStatus('sample');
-  }, []);
+  }, [activeSampleId]);
 
   const handleParseXml = useCallback(() => {
-    const result = parsePain001(baseXml);
-    if (result.ok) {
-      setParsed(result.data);
-      setParseStatus('success');
-      setParseErrors([]);
+    const nextEntries = sampleEntries.map((entry) => parseSampleEntry(entry));
+    setSampleEntries(nextEntries);
+    const firstSuccess = nextEntries.find(
+      (entry) => entry.parseStatus === 'success' && entry.parsed
+    );
+    if (firstSuccess) {
+      setActiveSampleId(firstSuccess.id);
       if (normalizedCountry) {
-        saveParsedPain001(normalizedCountry, result.data);
+        saveParsedPain001(normalizedCountry, firstSuccess.parsed as ParsedPain001);
       }
-    } else {
-      setParsed(null);
-      setParseStatus('error');
-      setParseErrors(result.errors);
     }
-  }, [baseXml, normalizedCountry]);
+    setGenerationErrors([]);
+  }, [normalizedCountry, sampleEntries]);
 
   const handleClear = useCallback(() => {
-    setBaseXml('');
-    setParsed(null);
-    setParseStatus('idle');
-    setParseErrors([]);
+    const resetEntry = createSampleEntry();
+    setSampleEntries([resetEntry]);
+    setActiveSampleId(resetEntry.id);
     setScenarioPack(null);
     setSelectedScenarioIds(new Set());
     setCucumberFeature(null);
     setCucumberSteps(null);
+    setGenerationErrors([]);
     setLoadStatus('idle');
+  }, []);
+
+  const handleAddSample = useCallback(() => {
+    const entry = createSampleEntry();
+    setSampleEntries((prev) => [...prev, entry]);
+    setActiveSampleId(entry.id);
+    setGenerationErrors([]);
+  }, []);
+
+  const handleRemoveSample = useCallback(
+    (entryId: string) => {
+      let nextActiveId: string | null = null;
+      setSampleEntries((prev) => {
+        const next = prev.filter((entry) => entry.id !== entryId);
+        if (next.length === 0) {
+          const fresh = createSampleEntry();
+          nextActiveId = fresh.id;
+          return [fresh];
+        }
+        if (activeSampleId === entryId) {
+          nextActiveId = next[0].id;
+        }
+        return next;
+      });
+      if (nextActiveId) {
+        setActiveSampleId(nextActiveId);
+      }
+      setGenerationErrors([]);
+    },
+    [activeSampleId]
+  );
+
+  const handleUpdateSample = useCallback((entryId: string, nextXml: string) => {
+    setSampleEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === entryId
+          ? { ...entry, xml: nextXml, parsed: null, parseStatus: 'idle', parseErrors: [] }
+          : entry
+      )
+    );
+    setGenerationErrors([]);
   }, []);
 
   const handleToggleScenarioOption = useCallback((key: keyof ScenarioOptions) => {
     setScenarioOptions((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  const handleGenerateScenarios = useCallback(() => {
+  const handleLoadRequirements = useCallback(async () => {
     if (!normalizedCountry) {
-      setParseStatus('error');
-      setParseErrors(['Country code is required to generate scenarios.']);
+      setRequirementsError('Country code is required to load requirements.');
+      setRequirementsStatus('error');
       return;
     }
-    if (!parsed) {
-      setParseStatus('error');
-      setParseErrors(['Parse the XML before generating scenarios.']);
+    setRequirementsStatus('loading');
+    setRequirementsError(null);
+    try {
+      const cached = loadRequirementsAnalysisFromStorage(normalizedCountry);
+      if (cached) {
+        setRequirements(cached);
+        setRequirementsSource('storage');
+        setRequirementsStatus('idle');
+        return;
+      }
+      const data = await mockAiService.getRequirementsAnalysis(normalizedCountry);
+      setRequirements(data);
+      saveRequirementsAnalysis(normalizedCountry, data);
+      setRequirementsSource('mock');
+      setRequirementsStatus('idle');
+    } catch (error) {
+      console.warn('Failed to load requirements analysis.', error);
+      setRequirementsError('Failed to load requirements analysis.');
+      setRequirementsStatus('error');
+    }
+  }, [normalizedCountry]);
+  const handleGenerateScenarios = useCallback(async () => {
+    if (!normalizedCountry) {
+      setGenerationErrors(['Country code is required to generate scenarios.']);
       return;
     }
-    if (!baseXml.trim()) {
-      setParseStatus('error');
-      setParseErrors(['Kafka payload is empty.']);
+    if (filledSamples.length === 0) {
+      setGenerationErrors(['Add at least one XML sample before generating scenarios.']);
       return;
     }
-    const pack = generateTestScenarioPack(baseXml, parsed, scenarioOptions, normalizedCountry);
+    const unparsed = filledSamples.filter((entry) => entry.parseStatus !== 'success');
+    if (unparsed.length > 0) {
+      setGenerationErrors(['Parse all XML samples before generating scenarios.']);
+      return;
+    }
+    if (parsedSampleMessages.length === 0) {
+      setGenerationErrors(['No valid XML samples were parsed.']);
+      return;
+    }
+
+    let requirementContext: RequirementsAnalysis | null = requirements;
+    if (!requirementContext) {
+      try {
+        const cached = loadRequirementsAnalysisFromStorage(normalizedCountry);
+        if (cached) {
+          requirementContext = cached;
+          setRequirements(cached);
+          setRequirementsSource('storage');
+          setRequirementsError(null);
+          setRequirementsStatus('idle');
+        } else {
+          const data = await mockAiService.getRequirementsAnalysis(normalizedCountry);
+          requirementContext = data;
+          setRequirements(data);
+          setRequirementsSource('mock');
+          saveRequirementsAnalysis(normalizedCountry, data);
+          setRequirementsError(null);
+          setRequirementsStatus('idle');
+        }
+      } catch (error) {
+        console.warn('Requirements analysis unavailable for test generation.', error);
+        setRequirementsError('Requirements analysis unavailable. Generated tests will use samples only.');
+        setRequirementsStatus('error');
+      }
+    }
+
+    const pack = generateTestScenarioPack(
+      parsedSampleMessages,
+      scenarioOptions,
+      normalizedCountry,
+      flow,
+      requirementContext
+    );
     setScenarioPack(pack);
     saveScenarioPack(normalizedCountry, pack);
     setSelectedScenarioIds(new Set(pack.scenarios.map((scenario) => scenario.scenarioId)));
     setLoadStatus('generated');
+    setGenerationErrors([]);
     setStage(normalizedCountry, flow, 'TESTING', 'IN_PROGRESS', undefined, {
       testPackKey: `ai.tests.${normalizedCountry}`
     });
-  }, [baseXml, flow, normalizedCountry, parsed, scenarioOptions]);
+  }, [
+    filledSamples,
+    flow,
+    normalizedCountry,
+    parsedSampleMessages,
+    requirements,
+    scenarioOptions
+  ]);
 
   const handleViewScenario = useCallback((scenario: TestScenario) => {
     setActiveScenario(scenario);
@@ -376,7 +659,10 @@ export function TestCaseGenerationPage() {
     if (!scenarioPack) {
       return;
     }
-    const headers = ['Scenario ID', 'Title', 'Type', 'Expected State', 'Expected Error Code'];
+    const headers = ['Scenario ID', 'Sample', 'Title', 'Type', 'Expected State', 'Expected Error Code'];
+    const sampleLabelLookup = new Map(
+      (scenarioPack.samples ?? []).map((sample, index) => [sample.sampleId, `Sample ${index + 1}`])
+    );
     const escapeCsv = (value: string) => {
       if (/[",\n]/.test(value)) {
         return `"${value.replace(/"/g, '""')}"`;
@@ -385,6 +671,9 @@ export function TestCaseGenerationPage() {
     };
     const rows = scenarioPack.scenarios.map((scenario) => [
       scenario.scenarioId,
+      scenario.sourceSampleId
+        ? sampleLabelLookup.get(scenario.sourceSampleId) ?? scenario.sourceSampleId
+        : '',
       scenario.title,
       scenario.type,
       scenario.expectedOutcome.state,
@@ -456,6 +745,7 @@ export function TestCaseGenerationPage() {
     const payloads = selected.length ? selected : scenarioPack.scenarios;
     const exportPayload = payloads.map((scenario) => ({
       scenarioId: scenario.scenarioId,
+      sourceSampleId: scenario.sourceSampleId,
       expectedOutcome: scenario.expectedOutcome,
       xmlVariant: scenario.xmlVariant
     }));
@@ -484,6 +774,15 @@ export function TestCaseGenerationPage() {
     const map = new Map<string, TestScenario['expectedOutcome']>();
     scenarioPack?.scenarios.forEach((scenario) => {
       map.set(scenario.scenarioId, scenario.expectedOutcome);
+    });
+    return map;
+  }, [scenarioPack]);
+
+  const sampleLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    const samples = scenarioPack?.samples ?? [];
+    samples.forEach((sample, index) => {
+      map.set(sample.sampleId, `Sample ${index + 1}`);
     });
     return map;
   }, [scenarioPack]);
@@ -587,21 +886,21 @@ export function TestCaseGenerationPage() {
 
   const summaryItems = useMemo(
     () =>
-      parsed
+      activeParsed
         ? [
-            ['Message Type', parsed.messageType],
-            ['MsgId', parsed.groupHeader.msgId],
-            ['CreDtTm', parsed.groupHeader.creDtTm],
-            ['NbOfTxs', parsed.groupHeader.nbOfTxs],
-            ['CtrlSum', parsed.groupHeader.ctrlSum],
-            ['Currency', parsed.currency],
-            ['Requested Execution Date', parsed.paymentInfo.reqdExctnDt]
+            ['Message Type', activeParsed.messageType],
+            ['MsgId', activeParsed.groupHeader.msgId],
+            ['CreDtTm', activeParsed.groupHeader.creDtTm],
+            ['NbOfTxs', activeParsed.groupHeader.nbOfTxs],
+            ['CtrlSum', activeParsed.groupHeader.ctrlSum],
+            ['Currency', activeParsed.currency],
+            ['Requested Execution Date', activeParsed.paymentInfo.reqdExctnDt]
           ]
         : [],
-    [parsed]
+    [activeParsed]
   );
 
-  const extractedGroups = useMemo(() => buildFieldRows(parsed), [parsed]);
+  const extractedGroups = useMemo(() => buildFieldRows(activeParsed), [activeParsed]);
 
   return (
     <Stack spacing={3}>
@@ -609,24 +908,65 @@ export function TestCaseGenerationPage() {
 
       <Typography variant="h4">Test Case Generation</Typography>
 
-      <SectionCard title="Kafka Input" subtitle="Paste Kafka PAIN.001 XML, parse, and review extracted fields.">
+      <SectionCard
+        title="Kafka Input"
+        subtitle="Paste one or more Kafka PAIN.001 XML samples, parse, and review extracted fields."
+      >
         <Stack spacing={2}>
-          <TextField
-            label="Kafka Message Payload (XML)"
-            value={baseXml}
-            onChange={(event) => setBaseXml(event.target.value)}
-            placeholder="Paste pain.001 XML payload..."
-            fullWidth
-            multiline
-            minRows={8}
-            InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }}
-          />
+          {sampleEntries.map((entry, index) => {
+            const hasContent = Boolean(entry.xml.trim());
+            const statusLabel = !hasContent
+              ? 'Empty'
+              : entry.parseStatus === 'success'
+              ? 'Parsed'
+              : entry.parseStatus === 'error'
+              ? 'Error'
+              : 'Idle';
+            const statusTone =
+              entry.parseStatus === 'success'
+                ? 'success'
+                : entry.parseStatus === 'error'
+                ? 'error'
+                : 'default';
+            return (
+              <Paper key={entry.id} variant="outlined" sx={{ p: 2 }}>
+                <Stack spacing={1}>
+                  <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                    <Typography variant="subtitle2">Sample {index + 1}</Typography>
+                    <Chip label={statusLabel} size="small" color={statusTone} variant="outlined" />
+                    {activeSample?.id === entry.id ? (
+                      <Chip label="Preview" size="small" color="info" variant="outlined" />
+                    ) : null}
+                    {sampleEntries.length > 1 ? (
+                      <Button size="small" color="error" onClick={() => handleRemoveSample(entry.id)}>
+                        Remove
+                      </Button>
+                    ) : null}
+                  </Stack>
+                  <TextField
+                    label={`Sample ${index + 1} XML`}
+                    value={entry.xml}
+                    onChange={(event) => handleUpdateSample(entry.id, event.target.value)}
+                    onFocus={() => setActiveSampleId(entry.id)}
+                    placeholder="Paste pain.001 XML payload..."
+                    fullWidth
+                    multiline
+                    minRows={6}
+                    InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }}
+                  />
+                </Stack>
+              </Paper>
+            );
+          })}
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
+            <Button variant="outlined" onClick={handleAddSample}>
+              Add Sample
+            </Button>
             <Button variant="outlined" onClick={handleLoadSample}>
               Load Sample PAIN.001
             </Button>
             <Button variant="contained" onClick={handleParseXml}>
-              Parse XML
+              Parse Samples
             </Button>
             <Button variant="text" onClick={handleClear}>
               Clear
@@ -642,27 +982,40 @@ export function TestCaseGenerationPage() {
             <Stack direction="row" spacing={1} alignItems="center">
               <Typography variant="subtitle1">Parse Status</Typography>
               <Chip
-                label={parseStatus === 'success' ? 'Parsed' : parseStatus === 'error' ? 'Error' : 'Idle'}
-                color={parseStatus === 'success' ? 'success' : parseStatus === 'error' ? 'error' : 'default'}
+                label={
+                  parseSummary.total === 0
+                    ? 'No samples'
+                    : parseSummary.errorCount > 0
+                    ? `${parseSummary.errorCount} error${parseSummary.errorCount === 1 ? '' : 's'}`
+                    : `${parseSummary.parsedCount}/${parseSummary.total} parsed`
+                }
+                color={parseSummary.status === 'success' ? 'success' : parseSummary.status === 'error' ? 'error' : 'default'}
                 size="small"
                 variant="outlined"
               />
             </Stack>
-            {parseStatus === 'error' && parseErrors.length ? (
+            {parseErrorSummaries.length ? (
               <Alert severity="error">
-                {parseErrors.map((message) => (
-                  <Typography key={message} variant="body2">
-                    {message}
-                  </Typography>
-                ))}
+                {parseErrorSummaries.map((entry) =>
+                  entry.errors.map((message) => (
+                    <Typography key={`${entry.label}-${message}`} variant="body2">
+                      {entry.label}: {message}
+                    </Typography>
+                  ))
+                )}
               </Alert>
             ) : null}
           </Stack>
 
-          {parsed ? (
+          {activeParsed ? (
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Stack spacing={1}>
                 <Typography variant="subtitle1">Parsed Summary</Typography>
+                {activeSampleIndex >= 0 ? (
+                  <Typography variant="caption" color="text.secondary">
+                    Previewing Sample {activeSampleIndex + 1} of {sampleEntries.length}.
+                  </Typography>
+                ) : null}
                 <Stack spacing={0.5}>
                   {summaryItems.map(([label, value]) => (
                     <Typography key={label} variant="caption" color="text.secondary">
@@ -677,6 +1030,11 @@ export function TestCaseGenerationPage() {
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Stack spacing={1}>
               <Typography variant="subtitle1">Extracted Canonical Fields</Typography>
+              {activeSampleIndex >= 0 ? (
+                <Typography variant="caption" color="text.secondary">
+                  Using Sample {activeSampleIndex + 1} for field extraction.
+                </Typography>
+              ) : null}
               <TableContainer>
                 <Table size="small">
                   <TableBody>
@@ -708,25 +1066,93 @@ export function TestCaseGenerationPage() {
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Stack spacing={1}>
               <Typography variant="subtitle1">XML Viewer</Typography>
+              {activeSampleIndex >= 0 ? (
+                <Typography variant="caption" color="text.secondary">
+                  Showing Sample {activeSampleIndex + 1} of {sampleEntries.length}.
+                </Typography>
+              ) : null}
               <Typography
                 variant="body2"
                 component="pre"
                 sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 12, maxHeight: 240, overflow: 'auto' }}
               >
-                {baseXml || 'No XML loaded.'}
+                {activeXml || 'No XML loaded.'}
               </Typography>
             </Stack>
           </Paper>
         </Stack>
       </SectionCard>
 
-      <SectionCard title="Scenario Generator" subtitle="Generate deterministic variants from the base message.">
+      <SectionCard title="Scenario Generator" subtitle="Generate deterministic variants from the sample messages.">
         <Stack spacing={2}>
-          <CountryCodeField
-            value={countryCode}
-            onChange={setCountryCode}
-            helperText="Country context for generated test scenarios."
-          />
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
+            <CountryCodeField
+              value={countryCode}
+              onChange={setCountryCode}
+              required
+              helperText="Country context for generated test scenarios."
+            />
+            <TextField
+              select
+              label="Flow"
+              value={flow}
+              onChange={(event) => setFlow(event.target.value as Flow)}
+              helperText="Flow context for requirements and scenario expectations."
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="INCOMING">INCOMING</MenuItem>
+              <MenuItem value="OUTGOING">OUTGOING</MenuItem>
+            </TextField>
+          </Stack>
+
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Stack spacing={1}>
+              <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                <Typography variant="subtitle1">Requirements Context</Typography>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color={requirements ? 'success' : 'default'}
+                  label={requirements ? `${requirements.requirements.length} requirements` : 'Not loaded'}
+                />
+                {requirementsSource ? (
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={requirementsSource === 'storage' ? 'from storage' : 'from mock'}
+                  />
+                ) : null}
+              </Stack>
+              {requirements ? (
+                <Typography variant="body2" color="text.secondary">
+                  {requirements.summary.headline}
+                </Typography>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Load requirements to align scenario expectations with country-specific rules.
+                </Typography>
+              )}
+              {requirements?.meta.generatedAt ? (
+                <Typography variant="caption" color="text.secondary">
+                  Generated: {formatTimestamp(requirements.meta.generatedAt)}
+                </Typography>
+              ) : null}
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} useFlexGap flexWrap="wrap">
+                <Button
+                  variant="outlined"
+                  onClick={handleLoadRequirements}
+                  disabled={requirementsStatus === 'loading'}
+                >
+                  {requirementsStatus === 'loading' ? 'Loading...' : 'Load Requirements'}
+                </Button>
+                {requirementsError ? (
+                  <Typography variant="caption" color="error">
+                    {requirementsError}
+                  </Typography>
+                ) : null}
+              </Stack>
+            </Stack>
+          </Paper>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
             {scenarioToggleLabels.map((toggle) => (
               <FormControlLabel
@@ -744,6 +1170,15 @@ export function TestCaseGenerationPage() {
           <Button variant="contained" onClick={handleGenerateScenarios}>
             Generate Test Scenarios
           </Button>
+          {generationErrors.length ? (
+            <Alert severity="error">
+              {generationErrors.map((message) => (
+                <Typography key={message} variant="body2">
+                  {message}
+                </Typography>
+              ))}
+            </Alert>
+          ) : null}
 
           {scenarioPack ? (
             <Paper variant="outlined" sx={{ p: 2 }}>
@@ -754,6 +1189,7 @@ export function TestCaseGenerationPage() {
                     <TableHead>
                       <TableRow>
                         <TableCell>Scenario ID</TableCell>
+                        <TableCell>Sample</TableCell>
                         <TableCell>Type</TableCell>
                         <TableCell>Title</TableCell>
                         <TableCell>Mutations</TableCell>
@@ -766,6 +1202,11 @@ export function TestCaseGenerationPage() {
                       {scenarioPack.scenarios.map((scenario) => (
                         <TableRow key={scenario.scenarioId} hover>
                           <TableCell>{scenario.scenarioId}</TableCell>
+                          <TableCell>
+                            {scenario.sourceSampleId
+                              ? sampleLabelById.get(scenario.sourceSampleId) ?? scenario.sourceSampleId
+                              : '—'}
+                          </TableCell>
                           <TableCell>{scenario.type}</TableCell>
                           <TableCell>{scenario.title}</TableCell>
                           <TableCell>{scenario.mutations.join('; ')}</TableCell>
@@ -798,7 +1239,7 @@ export function TestCaseGenerationPage() {
                       ))}
                       {scenarioPack.scenarios.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7}>
+                          <TableCell colSpan={8}>
                             <Typography variant="body2" color="text.secondary">
                               No scenarios generated yet.
                             </Typography>
@@ -814,6 +1255,15 @@ export function TestCaseGenerationPage() {
             <Alert severity="info">Generate scenarios to review variants and expected outcomes.</Alert>
           )}
         </Stack>
+      </SectionCard>
+
+      <SectionCard title="Validation Run (Preview)" subtitle="Simulate publishing to Kafka and validating results.">
+        <ValidationRunPanel
+          countryCode={normalizedCountry}
+          flow={flow}
+          scenarioPack={scenarioPack}
+          selectedScenarioIds={selectedScenarioIds}
+        />
       </SectionCard>
 
       <SectionCard
@@ -1057,7 +1507,11 @@ export function TestCaseGenerationPage() {
               <Stack spacing={0.5}>
                 <Typography variant="subtitle2">{activeScenario.title}</Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {activeScenario.scenarioId} · {activeScenario.expectedOutcome.state}
+                  {activeScenario.scenarioId}
+                  {activeScenario.sourceSampleId
+                    ? ` · ${sampleLabelById.get(activeScenario.sourceSampleId) ?? activeScenario.sourceSampleId}`
+                    : ''}
+                  {` · ${activeScenario.expectedOutcome.state}`}
                 </Typography>
               </Stack>
               <Divider />
