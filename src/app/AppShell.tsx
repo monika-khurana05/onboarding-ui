@@ -145,7 +145,7 @@ export function AppShell() {
             CPX
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Country Onboarding
+            Smart Country Onboarding Platform
           </Typography>
         </Stack>
       </Toolbar>
@@ -211,9 +211,9 @@ export function AppShell() {
             <MenuIcon />
           </IconButton>
           <Stack>
-            <Typography variant="h6">CPX Country Onboarding</Typography>
+            <Typography variant="h6">CPX Smart Country Onboarding Platform</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>
-              Enterprise Onboarding Pipeline
+              Accelerating CPX global onboarding through intelligent automation
             </Typography>
           </Stack>
           <Stack direction="row" spacing={1.5} alignItems="center" sx={{ ml: 'auto' }}>

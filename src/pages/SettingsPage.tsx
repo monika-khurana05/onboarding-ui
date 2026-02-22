@@ -34,7 +34,7 @@ export function SettingsPage() {
 
       <CardSection title="About" subtitle="Application identity and rollout posture.">
         <Stack spacing={1.5}>
-          <Typography variant="body1">Application: CPX Country Onboarding</Typography>
+          <Typography variant="body1">Application: CPX Smart Country Onboarding Platform</Typography>
           <Typography variant="body1">Build: Enterprise UI shell for snapshot and preview pipeline</Typography>
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography variant="body1">Environment:</Typography>
