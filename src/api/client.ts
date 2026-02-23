@@ -1,3 +1,4 @@
+import { normalizeGenerateResponse, normalizeRepoDefaults, normalizeSnapshotContext } from './compat';
 import { ApiError, httpRequest } from './http';
 import type {
   CapabilityMetadataDto,
@@ -20,12 +21,14 @@ import type {
 } from './types';
 
 export async function getRepoDefaults(): Promise<RepoDefaultsResponseDto> {
-  return httpRequest<RepoDefaultsResponseDto>('/repo-defaults');
+  const raw = await httpRequest<unknown>('/repo-defaults');
+  return normalizeRepoDefaults(raw);
 }
 
 export async function getSnapshotContext(countryCode: string): Promise<SnapshotContextDto> {
   const query = `?country=${encodeURIComponent(countryCode)}`;
-  return httpRequest<SnapshotContextDto>(`/onboarding/snapshot/context${query}`);
+  const raw = await httpRequest<unknown>(`/onboarding/snapshot/context${query}`);
+  return normalizeSnapshotContext(raw);
 }
 
 export async function persistAssemblyConfig(
@@ -62,10 +65,11 @@ export async function createSnapshotVersion(
 }
 
 export async function previewGenerate(req: PreviewGenerateRequestDto): Promise<PreviewGenerateResponseDto> {
-  return httpRequest<PreviewGenerateResponseDto>('/generate/preview', {
+  const raw = await httpRequest<unknown>('/generate/preview', {
     method: 'POST',
     body: JSON.stringify(req)
   });
+  return normalizeGenerateResponse(raw);
 }
 
 export async function publishKafkaTestCases(

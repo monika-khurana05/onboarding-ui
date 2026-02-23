@@ -1,4 +1,4 @@
-import { env } from '../lib/env';
+import { apiTimeoutMs, env } from '../lib/env';
 import type { ApiErrorResponseDto } from './types';
 
 export class ApiError extends Error {
@@ -28,6 +28,9 @@ function createCorrelationId() {
 }
 
 function parseErrorBody(body: unknown): ApiErrorResponseDto | null {
+  if (typeof body === 'string' && body.trim()) {
+    return { message: body };
+  }
   if (!body || typeof body !== 'object') {
     return null;
   }
@@ -36,6 +39,89 @@ function parseErrorBody(body: unknown): ApiErrorResponseDto | null {
     return record;
   }
   return null;
+}
+
+function isNetworkError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === 'NetworkError';
+  }
+  return error instanceof TypeError;
+}
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = 1): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw error;
+      }
+      if (attempt < retries && isNetworkError(error)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError;
+}
+
+async function parseErrorResponse(response: Response): Promise<{ message: string; errorCode?: string }> {
+  const fallbackMessage = response.statusText || 'Request failed';
+  const contentType = response.headers.get('content-type') ?? '';
+  let message = fallbackMessage;
+  let errorCode: string | undefined;
+
+  let rawText = '';
+  try {
+    rawText = await response.text();
+  } catch {
+    rawText = '';
+  }
+
+  const trimmed = rawText.trim();
+  let parsed: ApiErrorResponseDto | null = null;
+
+  if (trimmed) {
+    if (contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        parsed = parseErrorBody(JSON.parse(trimmed));
+      } catch {
+        parsed = null;
+      }
+    } else {
+      parsed = parseErrorBody(trimmed);
+    }
+  }
+
+  if (parsed) {
+    const parsedMessage = typeof parsed.message === 'string' ? parsed.message.trim() : '';
+    const parsedError = typeof parsed.error === 'string' ? parsed.error.trim() : '';
+    message = parsedMessage || parsedError || message;
+    errorCode = parsedError || undefined;
+  } else if (trimmed) {
+    message = trimmed;
+  }
+
+  return { message, errorCode };
+}
+
+function buildHeaders(options: HttpRequestOptions, correlationId: string): Headers {
+  const headers = new Headers(options.headers ?? {});
+
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (env.authToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${env.authToken}`);
+  }
+
+  headers.set('X-Correlation-Id', correlationId);
+  return headers;
 }
 
 function buildApiUrl(path: string, baseUrl: string): string {
@@ -72,36 +158,21 @@ export function getErrorMessage(error: unknown): string {
 
 export async function httpRequest<T>(path: string, options: HttpRequestOptions = {}): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), options.timeoutMs ?? 15000);
-  const baseUrl = env.apiBaseUrl || '/api';
+  const timeoutId = window.setTimeout(() => controller.abort(), options.timeoutMs ?? apiTimeoutMs);
+  const baseUrl = env.apiBaseUrl;
   const url = buildApiUrl(path, baseUrl);
   const correlationId = createCorrelationId();
+  const headers = buildHeaders(options, correlationId);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithRetry(url, {
       ...options,
       signal: options.signal ?? controller.signal,
-      headers: {
-        ...(options.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
-        ...(env.authToken ? { Authorization: `Bearer ${env.authToken}` } : {}),
-        'X-Correlation-Id': correlationId,
-        ...(options.headers ?? {})
-      }
+      headers
     });
 
     if (!response.ok) {
-      let message = response.statusText || 'Request failed';
-      let errorCode: string | undefined;
-      const contentType = response.headers.get('content-type') ?? '';
-
-      if (contentType.includes('application/json')) {
-        const errorBody = (await response.json().catch(() => null)) as unknown;
-        const parsed = parseErrorBody(errorBody);
-        if (parsed) {
-          message = parsed.message ?? parsed.error ?? message;
-          errorCode = parsed.error;
-        }
-      }
+      const { message, errorCode } = await parseErrorResponse(response);
 
       throw new ApiError(message, {
         status: response.status,
