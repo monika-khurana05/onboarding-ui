@@ -248,6 +248,7 @@ export function RequirementAnalysisPage() {
   const isFlowReady = isValidFlow(flowSelection);
   const countrySelectValue = effectiveCountryCode && effectiveCountryCode !== 'UNKNOWN' ? effectiveCountryCode : '';
   const isUploadReady = Boolean(countrySelectValue && region && isFlowReady);
+  const hasAnalysis = Boolean(analysis);
   const countryOptions = useMemo(() => {
     const next = [...COUNTRY_OPTIONS];
     const extraCodes = [analysis?.countryCode, countryCode]
@@ -368,7 +369,7 @@ export function RequirementAnalysisPage() {
           });
           const archiveFileName = buildWorkspaceOutputFileName(resolvedCountry, region, flowSelection, uploadedAt);
           downloadJson(archiveFileName, archive);
-          setToast({ message: `Workspace output saved as ${archiveFileName}.`, severity: 'success' });
+          setToast({ message: `Ask AI output saved as ${archiveFileName}.`, severity: 'success' });
         }
         saveRequirementsResult(nextAnalysis);
         if (resolvedCountry && resolvedCountry !== 'UNKNOWN' && isValidFlow(flowSelection)) {
@@ -378,8 +379,8 @@ export function RequirementAnalysisPage() {
           setStage(resolvedCountry, flowSelection, 'PAYLOAD_MAPPING', 'IN_PROGRESS');
         }
       } catch (parseError) {
-        console.warn('Failed to parse workspace output.', parseError);
-        setError(parseError instanceof Error ? parseError.message : 'Failed to parse workspace output.');
+        console.warn('Failed to parse Ask AI output.', parseError);
+        setError(parseError instanceof Error ? parseError.message : 'Failed to parse Ask AI output.');
       } finally {
         setLoading(false);
         event.target.value = '';
@@ -411,7 +412,7 @@ export function RequirementAnalysisPage() {
     setCapabilityFilter('ALL');
     setCategoryFilter('ALL');
     setSearchQuery('');
-    setToast({ message: 'Workspace output cleared.', severity: 'success' });
+    setToast({ message: 'Ask AI output cleared.', severity: 'success' });
   }, []);
 
   const handleCreateOpenQuestion = useCallback(() => {
@@ -560,7 +561,7 @@ export function RequirementAnalysisPage() {
 
   const handleSendToWizard = useCallback(() => {
     if (!analysis) {
-      setError('Upload workspace output before sending to the wizard.');
+      setError('Upload Ask AI output before sending to the wizard.');
       return;
     }
     const normalized = effectiveCountryCode;
@@ -636,11 +637,11 @@ export function RequirementAnalysisPage() {
       <Typography variant="h4">Requirement Analysis</Typography>
       <SectionCard
         title="Overview"
-        subtitle="Use Ask Workspaces to analyze PDFs/Word/Jira exports and generate structured capability output."
+        subtitle="Use Ask AI to analyze PDFs/Word/Jira exports and generate structured capability output."
       >
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
-            Upload the Workspaces output file and we’ll generate capability-wise Jira epics. Required metadata is captured for
+            Upload the Ask AI output file and we’ll generate capability-wise Jira epics. Required metadata is captured for
             future persistence.
           </Typography>
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
@@ -651,7 +652,7 @@ export function RequirementAnalysisPage() {
               size="small"
             />
             <Chip
-              label={analysis ? 'Workspace output loaded' : 'No output yet'}
+              label={analysis ? 'Ask AI output loaded' : 'No output yet'}
               color={analysis ? 'success' : 'default'}
               variant="outlined"
               size="small"
@@ -663,11 +664,61 @@ export function RequirementAnalysisPage() {
                 size="small"
               />
             ) : null}
+            <Chip
+              label={`Country: ${countrySelectValue || '—'}`}
+              variant="outlined"
+              size="small"
+              color={countrySelectValue ? 'default' : 'warning'}
+            />
+            <Chip
+              label={`Region: ${region || '—'}`}
+              variant="outlined"
+              size="small"
+              color={region ? 'default' : 'warning'}
+            />
+            <Chip
+              label={`Flow: ${isFlowReady ? flowSelection : '—'}`}
+              variant="outlined"
+              size="small"
+              color={isFlowReady ? 'default' : 'warning'}
+            />
           </Stack>
+          {hasAnalysis ? (
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Requirements Found
+                  </Typography>
+                  <Typography variant="h5">{analysis?.kpis.requirementsFound ?? 0}</Typography>
+                </Paper>
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Mapped Capabilities
+                  </Typography>
+                  <Typography variant="h5">{analysis?.mappedCapabilities.length ?? 0}</Typography>
+                </Paper>
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Jira Drafts
+                  </Typography>
+                  <Typography variant="h5">{analysis?.jiraEpics.length ?? 0}</Typography>
+                </Paper>
+              </Grid>
+            </Grid>
+          ) : (
+            <Alert severity="info" variant="outlined">
+              Upload Ask AI output to see the summary and Jira drafts.
+            </Alert>
+          )}
         </Stack>
       </SectionCard>
 
-      <SectionCard title="Required Setup" subtitle="These fields will be stored with the workspace output.">
+      <SectionCard title="Required Setup" subtitle="These fields will be stored with the Ask AI output.">
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField
@@ -679,7 +730,7 @@ export function RequirementAnalysisPage() {
               onChange={(event) => setCountryCode(event.target.value.toUpperCase())}
               helperText={
                 analysis?.countryCode && analysis.countryCode !== 'UNKNOWN'
-                  ? 'Loaded from workspace output; you can override if needed.'
+                  ? 'Loaded from Ask AI output; you can override if needed.'
                   : 'Required: select a country code before upload.'
               }
               SelectProps={{ displayEmpty: true }}
@@ -746,12 +797,6 @@ export function RequirementAnalysisPage() {
           >
             <Stack spacing={0.5}>
               <Typography variant="subtitle1">Ask AI</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Preset to use: CPX Capability Split v1.
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Download the output as JSON, then upload it here.
-              </Typography>
             </Stack>
             <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
               Open Ask AI
@@ -808,27 +853,9 @@ export function RequirementAnalysisPage() {
         </Stack>
       </SectionCard>
 
-      <SectionCard title="Analysis Output" subtitle="Parsed summary and Jira draft epics.">
+      <SectionCard title="Analysis Output" subtitle="Jira draft epics generated from the parsed output.">
         {analysis ? (
           <Stack spacing={2}>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Requirements Found
-                  </Typography>
-                  <Typography variant="h5">{analysis.kpis.requirementsFound}</Typography>
-                </Paper>
-              </Grid>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Mapped Capabilities
-                  </Typography>
-                  <Typography variant="h5">{analysis.mappedCapabilities.length}</Typography>
-                </Paper>
-              </Grid>
-            </Grid>
             <Stack spacing={2}>
               <Stack
                 direction={{ xs: 'column', sm: 'row' }}
@@ -915,7 +942,9 @@ export function RequirementAnalysisPage() {
             </Stack>
           </Stack>
         ) : (
-          <Alert severity="info">Upload workspace output to view summary and Jira drafts.</Alert>
+          <Typography variant="body2" color="text.secondary">
+            Upload Ask AI output to generate Jira drafts.
+          </Typography>
         )}
       </SectionCard>
 
