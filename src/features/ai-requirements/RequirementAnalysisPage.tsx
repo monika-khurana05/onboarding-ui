@@ -156,6 +156,39 @@ function toggleSetValue<T>(prev: Set<T>, value: T) {
   return next;
 }
 
+function buildWorkspaceOutputFileName(
+  countryCode: string,
+  region: string,
+  flow: Exclude<FlowSelection, ''>,
+  uploadedAt: string
+) {
+  const safeTimestamp = uploadedAt.replace(/[:.]/g, '-');
+  const parts = ['workspace-output', countryCode || 'UNKNOWN', region || 'REGION', flow, safeTimestamp];
+  return `${parts.filter(Boolean).join('-')}.json`;
+}
+
+function buildWorkspaceOutputArchive(args: {
+  fileName: string;
+  uploadedAt: string;
+  countryCode: string;
+  region: string;
+  flow: Exclude<FlowSelection, ''>;
+  content: string;
+  analysis: RequirementAnalysisResult;
+}) {
+  return {
+    meta: {
+      fileName: args.fileName,
+      uploadedAt: args.uploadedAt,
+      countryCode: args.countryCode,
+      region: args.region,
+      flow: args.flow
+    },
+    rawContent: args.content,
+    analysis: args.analysis
+  };
+}
+
 export function RequirementAnalysisPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -311,13 +344,28 @@ export function RequirementAnalysisPage() {
         const parsed = parseWorkspaceOutputToAnalysisResult({ fileName: file.name, content: text });
         const resolvedCountry = normalizeCountryCode(effectiveCountryCode || parsed.countryCode || 'UNKNOWN');
         const nextAnalysis = { ...parsed, countryCode: resolvedCountry };
+        const uploadedAt = new Date().toISOString();
         setAnalysis(nextAnalysis);
         setCountryCode(resolvedCountry);
         setUploadMeta({
           fileName: file.name,
-          uploadedAt: new Date().toISOString(),
+          uploadedAt,
           warnings: []
         });
+        if (isValidFlow(flowSelection)) {
+          const archive = buildWorkspaceOutputArchive({
+            fileName: file.name,
+            uploadedAt,
+            countryCode: resolvedCountry,
+            region,
+            flow: flowSelection,
+            content: text,
+            analysis: nextAnalysis
+          });
+          const archiveFileName = buildWorkspaceOutputFileName(resolvedCountry, region, flowSelection, uploadedAt);
+          downloadJson(archiveFileName, archive);
+          setToast({ message: `Workspace output saved as ${archiveFileName}.`, severity: 'success' });
+        }
         saveRequirementsResult(nextAnalysis);
         if (resolvedCountry && resolvedCountry !== 'UNKNOWN' && isValidFlow(flowSelection)) {
           setStage(resolvedCountry, flowSelection, 'REQUIREMENTS', 'DONE', undefined, {
