@@ -535,22 +535,6 @@ export function RequirementAnalysisPage() {
 
       <Typography variant="h4">Requirement Analysis</Typography>
 
-      <SectionCard title="Ask Workspaces Integration" subtitle="Use Ask Workspaces to analyze PDFs/Word/Jira exports and generate a structured capability-wise output using our preset.">
-        <Stack spacing={1}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
-            <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
-              Open Ask Workspaces
-            </Button>
-            <Typography variant="caption" color="text.secondary">
-              Preset to use: CPX Capability Split v1
-            </Typography>
-          </Stack>
-          <Typography variant="caption" color="text.secondary">
-            Download the output as JSON, then upload it here.
-          </Typography>
-        </Stack>
-      </SectionCard>
-
       <SectionCard title="Workspace Output" subtitle="Generate requirement analysis in Ask Workspaces and upload the output here.">
         <Stack spacing={2}>
           <Grid container spacing={2}>
