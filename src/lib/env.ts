@@ -21,6 +21,8 @@ const trimmedApiBaseUrl = resolved.VITE_API_BASE_URL.trim();
 const trimmedAuthToken = resolved.VITE_AUTH_TOKEN.trim();
 const trimmedUserRoles = resolved.VITE_USER_ROLES.trim();
 
+export const apiTimeoutMs = 15000;
+
 export const env = {
   apiBaseUrl: trimmedApiBaseUrl || '/api',
   authToken: trimmedAuthToken || undefined,
