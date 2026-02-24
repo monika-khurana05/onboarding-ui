@@ -25,7 +25,6 @@ import {
 import type { SelectChangeEvent } from '@mui/material/Select';
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CountryCodeField } from '../../components/CountryCodeField';
 import { SectionCard } from '../../components/SectionCard';
 import { enrichmentCatalog } from '../../catalog/enrichmentCatalog';
 import { validationCatalog } from '../../catalog/validationCatalog';
@@ -52,6 +51,35 @@ const requirementsResultKey = 'ai.requirements.v1.lastResult';
 const requirementsSelectedCapabilitiesKey = 'ai.requirements.v1.selectedCapabilities';
 const workspaceOutputAccept = '.json,.md,.markdown,.txt,.pdf,.csv';
 const ASK_WORKSPACES_URL = '<<PUT_YOUR_INTERNAL_URL_HERE>>';
+type FlowSelection = 'INCOMING' | 'OUTGOING' | '';
+const COUNTRY_OPTIONS = [
+  { code: 'AE', label: 'United Arab Emirates' },
+  { code: 'AR', label: 'Argentina' },
+  { code: 'AU', label: 'Australia' },
+  { code: 'BR', label: 'Brazil' },
+  { code: 'CA', label: 'Canada' },
+  { code: 'CH', label: 'Switzerland' },
+  { code: 'CN', label: 'China' },
+  { code: 'DE', label: 'Germany' },
+  { code: 'ES', label: 'Spain' },
+  { code: 'FR', label: 'France' },
+  { code: 'GB', label: 'United Kingdom' },
+  { code: 'HK', label: 'Hong Kong' },
+  { code: 'ID', label: 'Indonesia' },
+  { code: 'IN', label: 'India' },
+  { code: 'JP', label: 'Japan' },
+  { code: 'KR', label: 'South Korea' },
+  { code: 'MX', label: 'Mexico' },
+  { code: 'MY', label: 'Malaysia' },
+  { code: 'NL', label: 'Netherlands' },
+  { code: 'NZ', label: 'New Zealand' },
+  { code: 'PH', label: 'Philippines' },
+  { code: 'SG', label: 'Singapore' },
+  { code: 'TH', label: 'Thailand' },
+  { code: 'US', label: 'United States' },
+  { code: 'ZA', label: 'South Africa' }
+];
+const REGION_OPTIONS = ['NAM', 'APAC', 'EMEA'] as const;
 const requirementCategories: ExtractedRequirement['category'][] = [
   'Validation',
   'Enrichment',
@@ -69,6 +97,10 @@ const jiraScopeColorLookup: Record<JiraEpicDraft['scope'], 'success' | 'warning'
 
 function normalizeCountryCode(value: string) {
   return value.trim().toUpperCase();
+}
+
+function isValidFlow(value: FlowSelection): value is Exclude<FlowSelection, ''> {
+  return value === 'INCOMING' || value === 'OUTGOING';
 }
 
 type WorkspaceUploadMeta = {
@@ -127,10 +159,14 @@ function toggleSetValue<T>(prev: Set<T>, value: T) {
 export function RequirementAnalysisPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const flow = searchParams.get('flow') === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
+  const flowParam = searchParams.get('flow');
+  const initialFlow: FlowSelection =
+    flowParam === 'OUTGOING' ? 'OUTGOING' : flowParam === 'INCOMING' ? 'INCOMING' : '';
   const initialResult = useMemo(() => loadRequirementsResult(), []);
   const [analysis, setAnalysis] = useState<RequirementAnalysisResult | null>(initialResult ?? null);
   const [countryCode, setCountryCode] = useState(() => initialResult?.countryCode ?? '');
+  const [region, setRegion] = useState<(typeof REGION_OPTIONS)[number] | ''>('');
+  const [flowSelection, setFlowSelection] = useState<FlowSelection>(initialFlow);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadMeta, setUploadMeta] = useState<WorkspaceUploadMeta | null>(null);
@@ -154,7 +190,7 @@ export function RequirementAnalysisPage() {
   }, [analysis?.countryCode, analysis?.requirements.length]);
 
   useEffect(() => {
-    if (analysis?.countryCode) {
+    if (analysis?.countryCode && analysis.countryCode !== 'UNKNOWN') {
       setCountryCode(analysis.countryCode);
     }
   }, [analysis?.countryCode]);
@@ -171,6 +207,21 @@ export function RequirementAnalysisPage() {
       return analysisCode;
     }
     return normalizeCountryCode(countryCode);
+  }, [analysis?.countryCode, countryCode]);
+  const isFlowReady = isValidFlow(flowSelection);
+  const countrySelectValue = effectiveCountryCode && effectiveCountryCode !== 'UNKNOWN' ? effectiveCountryCode : '';
+  const isUploadReady = Boolean(countrySelectValue && region && isFlowReady);
+  const countryOptions = useMemo(() => {
+    const next = [...COUNTRY_OPTIONS];
+    const extraCodes = [analysis?.countryCode, countryCode]
+      .map((value) => normalizeCountryCode(value ?? ''))
+      .filter((value) => value && value !== 'UNKNOWN');
+    extraCodes.forEach((code) => {
+      if (!next.some((option) => option.code === code)) {
+        next.unshift({ code, label: code });
+      }
+    });
+    return next;
   }, [analysis?.countryCode, countryCode]);
   const capabilitySuggestions = useMemo(() => analysis?.mappedCapabilities ?? [], [analysis]);
   const validationSuggestions = useMemo(() => analysis?.validationSuggestions ?? [], [analysis]);
@@ -215,7 +266,7 @@ export function RequirementAnalysisPage() {
     setSelectedRequirementId(id);
     setOpenQuestionText('');
     setIsDrawerOpen(true);
-  }, []);
+  }, [initialFlow]);
 
   const handleOverrideChange = useCallback(
     (event: SelectChangeEvent) => {
@@ -248,27 +299,31 @@ export function RequirementAnalysisPage() {
       if (!file) {
         return;
       }
+      if (!isUploadReady) {
+        setError('Select country, region, and flow before uploading.');
+        event.target.value = '';
+        return;
+      }
       setError(null);
       setLoading(true);
       try {
         const text = await file.text();
         const parsed = parseWorkspaceOutputToAnalysisResult({ fileName: file.name, content: text });
-        setAnalysis(parsed);
-        if (parsed.countryCode && parsed.countryCode !== 'UNKNOWN') {
-          setCountryCode(parsed.countryCode);
-        }
+        const resolvedCountry = normalizeCountryCode(effectiveCountryCode || parsed.countryCode || 'UNKNOWN');
+        const nextAnalysis = { ...parsed, countryCode: resolvedCountry };
+        setAnalysis(nextAnalysis);
+        setCountryCode(resolvedCountry);
         setUploadMeta({
           fileName: file.name,
           uploadedAt: new Date().toISOString(),
           warnings: []
         });
-        saveRequirementsResult(parsed);
-        const nextCountry = normalizeCountryCode(parsed.countryCode || countryCode);
-        if (nextCountry && nextCountry !== 'UNKNOWN') {
-          setStage(nextCountry, flow, 'REQUIREMENTS', 'DONE', undefined, {
+        saveRequirementsResult(nextAnalysis);
+        if (resolvedCountry && resolvedCountry !== 'UNKNOWN' && isValidFlow(flowSelection)) {
+          setStage(resolvedCountry, flowSelection, 'REQUIREMENTS', 'DONE', undefined, {
             requirementsSessionKey: requirementsResultKey
           });
-          setStage(nextCountry, flow, 'PAYLOAD_MAPPING', 'IN_PROGRESS');
+          setStage(resolvedCountry, flowSelection, 'PAYLOAD_MAPPING', 'IN_PROGRESS');
         }
       } catch (parseError) {
         console.warn('Failed to parse workspace output.', parseError);
@@ -278,7 +333,7 @@ export function RequirementAnalysisPage() {
         event.target.value = '';
       }
     },
-    [countryCode, flow]
+    [effectiveCountryCode, flowSelection, isUploadReady]
   );
 
   const handleClearWorkspaceOutput = useCallback(() => {
@@ -290,6 +345,8 @@ export function RequirementAnalysisPage() {
     }
     setAnalysis(null);
     setCountryCode('');
+    setRegion('');
+    setFlowSelection(initialFlow);
     setUploadMeta(null);
     setError(null);
     setIsDrawerOpen(false);
@@ -567,27 +624,92 @@ export function RequirementAnalysisPage() {
               <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
                 <Stack spacing={1}>
                   <Typography variant="subtitle2">Step 3: Upload structured output here</Typography>
-                  <Button variant="outlined" component="label" disabled={loading}>
+                  <Button variant="outlined" component="label" disabled={loading || !isUploadReady}>
                     {loading ? 'Parsing...' : 'Upload Workspace Output'}
-                    <input hidden type="file" accept={workspaceOutputAccept} onChange={handleUploadWorkspaceOutput} />
+                    <input
+                      hidden
+                      type="file"
+                      accept={workspaceOutputAccept}
+                      onChange={handleUploadWorkspaceOutput}
+                      disabled={loading || !isUploadReady}
+                    />
                   </Button>
                   <Typography variant="caption" color="text.secondary">
-                    Accepted: JSON, Markdown, TXT, PDF, CSV.
+                    {isUploadReady
+                      ? 'Accepted: JSON, Markdown, TXT, PDF, CSV.'
+                      : 'Select country, region, and flow to enable upload.'}
                   </Typography>
                 </Stack>
               </Paper>
             </Grid>
           </Grid>
-          <CountryCodeField
-            value={effectiveCountryCode}
-            onChange={setCountryCode}
-            disabled={Boolean(analysis?.countryCode && analysis.countryCode !== 'UNKNOWN')}
-            helperText={
-              analysis?.countryCode && analysis.countryCode !== 'UNKNOWN'
-                ? 'Country code loaded from workspace output.'
-                : 'Optional: add a country code if the workspace output is missing one.'
-            }
-          />
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <TextField
+                select
+                fullWidth
+                label="Country"
+                required
+                value={countrySelectValue}
+                onChange={(event) => setCountryCode(event.target.value.toUpperCase())}
+                disabled={Boolean(analysis?.countryCode && analysis.countryCode !== 'UNKNOWN')}
+                helperText={
+                  analysis?.countryCode && analysis.countryCode !== 'UNKNOWN'
+                    ? 'Country code loaded from workspace output.'
+                    : 'Required: select a country code before upload.'
+                }
+                SelectProps={{ displayEmpty: true }}
+              >
+                <MenuItem value="">
+                  <em>Select country</em>
+                </MenuItem>
+                {countryOptions.map((option) => (
+                  <MenuItem key={option.code} value={option.code}>
+                    {option.label} ({option.code})
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <TextField
+                select
+                fullWidth
+                label="Region"
+                required
+                value={region}
+                onChange={(event) => setRegion(event.target.value as (typeof REGION_OPTIONS)[number] | '')}
+                helperText="Required: tag the analysis to a region."
+                SelectProps={{ displayEmpty: true }}
+              >
+                <MenuItem value="">
+                  <em>Select region</em>
+                </MenuItem>
+                {REGION_OPTIONS.map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {option}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <TextField
+                select
+                fullWidth
+                label="Flow"
+                required
+                value={flowSelection}
+                onChange={(event) => setFlowSelection(event.target.value as FlowSelection)}
+                helperText="Required: pick the processing flow."
+                SelectProps={{ displayEmpty: true }}
+              >
+                <MenuItem value="">
+                  <em>Select flow</em>
+                </MenuItem>
+                <MenuItem value="INCOMING">Incoming</MenuItem>
+                <MenuItem value="OUTGOING">Outgoing</MenuItem>
+              </TextField>
+            </Grid>
+          </Grid>
           {uploadMeta ? (
             <Stack spacing={0.5}>
               <Typography variant="caption" color="text.secondary">
