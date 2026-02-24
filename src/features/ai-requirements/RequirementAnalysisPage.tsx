@@ -235,11 +235,15 @@ export function RequirementAnalysisPage() {
   }, [analysis]);
 
   const effectiveCountryCode = useMemo(() => {
+    const manualCode = normalizeCountryCode(countryCode);
+    if (manualCode) {
+      return manualCode;
+    }
     const analysisCode = analysis?.countryCode?.toUpperCase() ?? '';
     if (analysisCode && analysisCode !== 'UNKNOWN') {
       return analysisCode;
     }
-    return normalizeCountryCode(countryCode);
+    return '';
   }, [analysis?.countryCode, countryCode]);
   const isFlowReady = isValidFlow(flowSelection);
   const countrySelectValue = effectiveCountryCode && effectiveCountryCode !== 'UNKNOWN' ? effectiveCountryCode : '';
@@ -673,10 +677,9 @@ export function RequirementAnalysisPage() {
               required
               value={countrySelectValue}
               onChange={(event) => setCountryCode(event.target.value.toUpperCase())}
-              disabled={Boolean(analysis?.countryCode && analysis.countryCode !== 'UNKNOWN')}
               helperText={
                 analysis?.countryCode && analysis.countryCode !== 'UNKNOWN'
-                  ? 'Country code loaded from workspace output.'
+                  ? 'Loaded from workspace output; you can override if needed.'
                   : 'Required: select a country code before upload.'
               }
               SelectProps={{ displayEmpty: true }}
