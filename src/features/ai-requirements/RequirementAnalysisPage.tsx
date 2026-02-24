@@ -205,6 +205,8 @@ export function RequirementAnalysisPage() {
   const [uploadMeta, setUploadMeta] = useState<WorkspaceUploadMeta | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedRequirementId, setSelectedRequirementId] = useState<string | null>(null);
+  const [isEpicDrawerOpen, setIsEpicDrawerOpen] = useState(false);
+  const [selectedEpicIndex, setSelectedEpicIndex] = useState<number | null>(null);
   const [openQuestionText, setOpenQuestionText] = useState('');
   const [appliedCapabilities, setAppliedCapabilities] = useState<Set<CapabilityId>>(new Set());
   const [appliedValidations, setAppliedValidations] = useState<Set<string>>(new Set());
@@ -273,6 +275,12 @@ export function RequirementAnalysisPage() {
     () => analysis?.requirements.find((req) => req.id === selectedRequirementId) ?? null,
     [analysis, selectedRequirementId]
   );
+  const activeEpic = useMemo(() => {
+    if (!analysis || selectedEpicIndex === null) {
+      return null;
+    }
+    return analysis.jiraEpics[selectedEpicIndex] ?? null;
+  }, [analysis, selectedEpicIndex]);
   const activeOverrideSelection = useMemo(() => {
     if (!activeRequirement) {
       return [] as CapabilityId[];
@@ -304,7 +312,11 @@ export function RequirementAnalysisPage() {
     setSelectedRequirementId(id);
     setOpenQuestionText('');
     setIsDrawerOpen(true);
-  }, [initialFlow]);
+  }, []);
+  const handleOpenEpicDetails = useCallback((index: number) => {
+    setSelectedEpicIndex(index);
+    setIsEpicDrawerOpen(true);
+  }, []);
 
   const handleOverrideChange = useCallback(
     (event: SelectChangeEvent) => {
@@ -403,7 +415,9 @@ export function RequirementAnalysisPage() {
     setUploadMeta(null);
     setError(null);
     setIsDrawerOpen(false);
+    setIsEpicDrawerOpen(false);
     setSelectedRequirementId(null);
+    setSelectedEpicIndex(null);
     setOpenQuestionText('');
     setAppliedCapabilities(new Set());
     setAppliedValidations(new Set());
@@ -904,14 +918,15 @@ export function RequirementAnalysisPage() {
                         <TableCell>Capability</TableCell>
                         <TableCell>Title</TableCell>
                         <TableCell>Scope</TableCell>
-                        <TableCell>Dependencies</TableCell>
-                        <TableCell align="right">Copy</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {analysis.jiraEpics.map((epic, index) => {
-                        const capabilityLabel = capabilityLabelLookup.get(epic.capabilityId) ?? epic.capabilityId;
-                        const dependencyLabels = epic.dependencies.map((dep) => capabilityLabelLookup.get(dep) ?? dep);
+                      <TableCell>Dependencies</TableCell>
+                      <TableCell align="right">Details</TableCell>
+                      <TableCell align="right">Copy</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {analysis.jiraEpics.map((epic, index) => {
+                      const capabilityLabel = capabilityLabelLookup.get(epic.capabilityId) ?? epic.capabilityId;
+                      const dependencyLabels = epic.dependencies.map((dep) => capabilityLabelLookup.get(dep) ?? dep);
                         return (
                           <TableRow key={`${epic.capabilityId}-${index}`} hover>
                             <TableCell>{capabilityLabel}</TableCell>
@@ -924,12 +939,17 @@ export function RequirementAnalysisPage() {
                                 variant="outlined"
                               />
                             </TableCell>
-                            <TableCell>{dependencyLabels.length ? dependencyLabels.join(', ') : 'None'}</TableCell>
-                            <TableCell align="right">
-                              <Button size="small" variant="outlined" onClick={() => handleCopySingleEpic(epic)}>
-                                Copy
-                              </Button>
-                            </TableCell>
+                          <TableCell>{dependencyLabels.length ? dependencyLabels.join(', ') : 'None'}</TableCell>
+                          <TableCell align="right">
+                            <Button size="small" variant="text" onClick={() => handleOpenEpicDetails(index)}>
+                              View
+                            </Button>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button size="small" variant="outlined" onClick={() => handleCopySingleEpic(epic)}>
+                              Copy
+                            </Button>
+                          </TableCell>
                           </TableRow>
                         );
                       })}
@@ -1100,6 +1120,71 @@ export function RequirementAnalysisPage() {
           ) : (
             <Typography variant="body2" color="text.secondary">
               Select a requirement to view details.
+            </Typography>
+          )}
+        </Stack>
+      </Drawer>
+
+      <Drawer
+        anchor="right"
+        open={isEpicDrawerOpen}
+        onClose={() => setIsEpicDrawerOpen(false)}
+        PaperProps={{ sx: { width: { xs: '100%', sm: 420 } } }}
+      >
+        <Stack spacing={2} sx={{ p: 2 }}>
+          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+            <Typography variant="subtitle1">Jira Epic Details</Typography>
+            <Button size="small" variant="text" onClick={() => setIsEpicDrawerOpen(false)}>
+              Close
+            </Button>
+          </Stack>
+          {activeEpic ? (
+            <Stack spacing={1.5}>
+              <Stack spacing={0.5}>
+                <Typography variant="subtitle2">{activeEpic.title}</Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip label={activeEpic.scope} size="small" color={jiraScopeColorLookup[activeEpic.scope]} variant="outlined" />
+                  <Typography variant="caption" color="text.secondary">
+                    Capability: {capabilityLabelLookup.get(activeEpic.capabilityId) ?? activeEpic.capabilityId}
+                  </Typography>
+                </Stack>
+              </Stack>
+
+              <Divider />
+
+              <Stack spacing={0.5}>
+                <Typography variant="subtitle2">Description</Typography>
+                <Stack spacing={0.5}>
+                  {activeEpic.summary.split('\n').map((line, index) => (
+                    <Typography key={`epic-summary-${index}`} variant="body2" color="text.secondary">
+                      • {line.replace(/^-+\s*/, '')}
+                    </Typography>
+                  ))}
+                </Stack>
+              </Stack>
+
+              <Divider />
+
+              <Stack spacing={0.5}>
+                <Typography variant="subtitle2">Acceptance Criteria</Typography>
+                {activeEpic.acceptanceCriteria.length ? (
+                  <Stack spacing={0.5}>
+                    {activeEpic.acceptanceCriteria.map((criteria, index) => (
+                      <Typography key={`epic-criteria-${index}`} variant="body2" color="text.secondary">
+                        • {criteria}
+                      </Typography>
+                    ))}
+                  </Stack>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No acceptance criteria provided.
+                  </Typography>
+                )}
+              </Stack>
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Select an epic to view details.
             </Typography>
           )}
         </Stack>
