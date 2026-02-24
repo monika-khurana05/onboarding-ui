@@ -51,6 +51,7 @@ const requirementsResultKey = 'ai.requirements.v1.lastResult';
 const requirementsSelectedCapabilitiesKey = 'ai.requirements.v1.selectedCapabilities';
 const workspaceOutputAccept = '.json,.md,.markdown,.txt,.pdf,.csv';
 const ASK_WORKSPACES_URL = '<<PUT_YOUR_INTERNAL_URL_HERE>>';
+const ASK_WORKSPACES_STYLUS_URL = `${ASK_WORKSPACES_URL}/stylus`;
 type FlowSelection = 'INCOMING' | 'OUTGOING' | '';
 const COUNTRY_OPTIONS = [
   { code: 'AE', label: 'United Arab Emirates' },
@@ -753,9 +754,14 @@ export function RequirementAnalysisPage() {
                 Download the output as JSON, then upload it here.
               </Typography>
             </Stack>
-            <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
-              Open Ask Workspaces
-            </Button>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+              <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
+                Open Ask Workspaces
+              </Button>
+              <Button variant="outlined" href={ASK_WORKSPACES_STYLUS_URL} target="_blank" rel="noreferrer">
+                Open Stylus
+              </Button>
+            </Stack>
           </Stack>
           <Paper variant="outlined" sx={{ p: 2, borderStyle: 'dashed' }}>
             <Stack
