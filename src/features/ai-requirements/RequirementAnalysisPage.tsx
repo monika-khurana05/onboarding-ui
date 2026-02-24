@@ -629,135 +629,159 @@ export function RequirementAnalysisPage() {
 
   return (
     <Stack spacing={3}>
-      <Alert severity="info">
-        <Stack spacing={0.5}>
-          <Typography variant="subtitle2">
-            This page integrates with Ask Workspaces for document analysis. Upload the Workspaces output file and we’ll generate
-            capability-wise Jira epics.
-          </Typography>
-        </Stack>
-      </Alert>
-
       <Typography variant="h4">Requirement Analysis</Typography>
+      <SectionCard
+        title="Overview"
+        subtitle="Use Ask Workspaces to analyze PDFs/Word/Jira exports and generate structured capability output."
+      >
+        <Stack spacing={1.5}>
+          <Typography variant="body2" color="text.secondary">
+            Upload the Workspaces output file and we’ll generate capability-wise Jira epics. Required metadata is captured for
+            future persistence.
+          </Typography>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+            <Chip
+              label={isUploadReady ? 'Setup complete' : 'Setup required'}
+              color={isUploadReady ? 'success' : 'warning'}
+              variant="outlined"
+              size="small"
+            />
+            <Chip
+              label={analysis ? 'Workspace output loaded' : 'No output yet'}
+              color={analysis ? 'success' : 'default'}
+              variant="outlined"
+              size="small"
+            />
+            {uploadMeta ? (
+              <Chip
+                label={`Last upload: ${new Date(uploadMeta.uploadedAt).toLocaleString()}`}
+                variant="outlined"
+                size="small"
+              />
+            ) : null}
+          </Stack>
+        </Stack>
+      </SectionCard>
 
-      <SectionCard title="Workspace Output" subtitle="Generate requirement analysis in Ask Workspaces and upload the output here.">
+      <SectionCard title="Required Setup" subtitle="These fields will be stored with the workspace output.">
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <TextField
+              select
+              fullWidth
+              label="Country"
+              required
+              value={countrySelectValue}
+              onChange={(event) => setCountryCode(event.target.value.toUpperCase())}
+              disabled={Boolean(analysis?.countryCode && analysis.countryCode !== 'UNKNOWN')}
+              helperText={
+                analysis?.countryCode && analysis.countryCode !== 'UNKNOWN'
+                  ? 'Country code loaded from workspace output.'
+                  : 'Required: select a country code before upload.'
+              }
+              SelectProps={{ displayEmpty: true }}
+            >
+              <MenuItem value="">
+                <em>Select country</em>
+              </MenuItem>
+              {countryOptions.map((option) => (
+                <MenuItem key={option.code} value={option.code}>
+                  {option.label} ({option.code})
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <TextField
+              select
+              fullWidth
+              label="Region"
+              required
+              value={region}
+              onChange={(event) => setRegion(event.target.value as (typeof REGION_OPTIONS)[number] | '')}
+              helperText="Required: tag the analysis to a region."
+              SelectProps={{ displayEmpty: true }}
+            >
+              <MenuItem value="">
+                <em>Select region</em>
+              </MenuItem>
+              {REGION_OPTIONS.map((option) => (
+                <MenuItem key={option} value={option}>
+                  {option}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <TextField
+              select
+              fullWidth
+              label="Flow"
+              required
+              value={flowSelection}
+              onChange={(event) => setFlowSelection(event.target.value as FlowSelection)}
+              helperText="Required: pick the processing flow."
+              SelectProps={{ displayEmpty: true }}
+            >
+              <MenuItem value="">
+                <em>Select flow</em>
+              </MenuItem>
+              <MenuItem value="INCOMING">Incoming</MenuItem>
+              <MenuItem value="OUTGOING">Outgoing</MenuItem>
+            </TextField>
+          </Grid>
+        </Grid>
+      </SectionCard>
+
+      <SectionCard title="Workspace Output" subtitle="Run Ask Workspaces and upload the structured output file.">
         <Stack spacing={2}>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-                <Stack spacing={1} justifyContent="space-between" sx={{ height: '100%' }}>
-                  <Stack spacing={0.5}>
-                    <Typography variant="subtitle2">Step 1: Open Ask Workspaces</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Launch Ask Workspaces to run the requirement analysis on your documents.
-                    </Typography>
-                  </Stack>
-                  <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
-                    Open Ask Workspaces
-                  </Button>
-                </Stack>
-              </Paper>
-            </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-                <Stack spacing={0.5}>
-                  <Typography variant="subtitle2">Step 2: Generate structured output using preset</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Use the Workspace preset to export structured output (JSON, Markdown, or TXT).
-                  </Typography>
-                </Stack>
-              </Paper>
-            </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-                <Stack spacing={1}>
-                  <Typography variant="subtitle2">Step 3: Upload structured output here</Typography>
-                  <Button variant="outlined" component="label" disabled={loading || !isUploadReady}>
-                    {loading ? 'Parsing...' : 'Upload Workspace Output'}
-                    <input
-                      hidden
-                      type="file"
-                      accept={workspaceOutputAccept}
-                      onChange={handleUploadWorkspaceOutput}
-                      disabled={loading || !isUploadReady}
-                    />
-                  </Button>
-                  <Typography variant="caption" color="text.secondary">
-                    {isUploadReady
-                      ? 'Accepted: JSON, Markdown, TXT, PDF, CSV.'
-                      : 'Select country, region, and flow to enable upload.'}
-                  </Typography>
-                </Stack>
-              </Paper>
-            </Grid>
-          </Grid>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <TextField
-                select
-                fullWidth
-                label="Country"
-                required
-                value={countrySelectValue}
-                onChange={(event) => setCountryCode(event.target.value.toUpperCase())}
-                disabled={Boolean(analysis?.countryCode && analysis.countryCode !== 'UNKNOWN')}
-                helperText={
-                  analysis?.countryCode && analysis.countryCode !== 'UNKNOWN'
-                    ? 'Country code loaded from workspace output.'
-                    : 'Required: select a country code before upload.'
-                }
-                SelectProps={{ displayEmpty: true }}
-              >
-                <MenuItem value="">
-                  <em>Select country</em>
-                </MenuItem>
-                {countryOptions.map((option) => (
-                  <MenuItem key={option.code} value={option.code}>
-                    {option.label} ({option.code})
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <TextField
-                select
-                fullWidth
-                label="Region"
-                required
-                value={region}
-                onChange={(event) => setRegion(event.target.value as (typeof REGION_OPTIONS)[number] | '')}
-                helperText="Required: tag the analysis to a region."
-                SelectProps={{ displayEmpty: true }}
-              >
-                <MenuItem value="">
-                  <em>Select region</em>
-                </MenuItem>
-                {REGION_OPTIONS.map((option) => (
-                  <MenuItem key={option} value={option}>
-                    {option}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <TextField
-                select
-                fullWidth
-                label="Flow"
-                required
-                value={flowSelection}
-                onChange={(event) => setFlowSelection(event.target.value as FlowSelection)}
-                helperText="Required: pick the processing flow."
-                SelectProps={{ displayEmpty: true }}
-              >
-                <MenuItem value="">
-                  <em>Select flow</em>
-                </MenuItem>
-                <MenuItem value="INCOMING">Incoming</MenuItem>
-                <MenuItem value="OUTGOING">Outgoing</MenuItem>
-              </TextField>
-            </Grid>
-          </Grid>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={2}
+            alignItems={{ md: 'center' }}
+            justifyContent="space-between"
+          >
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle1">Ask Workspaces</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Preset to use: CPX Capability Split v1.
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Download the output as JSON, then upload it here.
+              </Typography>
+            </Stack>
+            <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
+              Open Ask Workspaces
+            </Button>
+          </Stack>
+          <Paper variant="outlined" sx={{ p: 2, borderStyle: 'dashed' }}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={2}
+              alignItems={{ sm: 'center' }}
+              justifyContent="space-between"
+            >
+              <Stack spacing={0.5}>
+                <Typography variant="subtitle2">Upload Output</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {isUploadReady ? 'Ready to upload structured output.' : 'Complete required setup to enable uploads.'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Accepted: JSON, Markdown, TXT, PDF, CSV.
+                </Typography>
+              </Stack>
+              <Button variant="outlined" component="label" disabled={loading || !isUploadReady}>
+                {loading ? 'Parsing...' : 'Upload Workspace Output'}
+                <input
+                  hidden
+                  type="file"
+                  accept={workspaceOutputAccept}
+                  onChange={handleUploadWorkspaceOutput}
+                  disabled={loading || !isUploadReady}
+                />
+              </Button>
+            </Stack>
+          </Paper>
           {uploadMeta ? (
             <Stack spacing={0.5}>
               <Typography variant="caption" color="text.secondary">
@@ -781,110 +805,115 @@ export function RequirementAnalysisPage() {
         </Stack>
       </SectionCard>
 
-      <SectionCard title="Parsed Output Summary" subtitle="Snapshot of the uploaded workspace output.">
+      <SectionCard title="Analysis Output" subtitle="Parsed summary and Jira draft epics.">
         {analysis ? (
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Requirements Found
-                </Typography>
-                <Typography variant="h5">{analysis.kpis.requirementsFound}</Typography>
-              </Paper>
+          <Stack spacing={2}>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Requirements Found
+                  </Typography>
+                  <Typography variant="h5">{analysis.kpis.requirementsFound}</Typography>
+                </Paper>
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Mapped Capabilities
+                  </Typography>
+                  <Typography variant="h5">{analysis.mappedCapabilities.length}</Typography>
+                </Paper>
+              </Grid>
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Mapped Capabilities
-                </Typography>
-                <Typography variant="h5">{analysis.mappedCapabilities.length}</Typography>
-              </Paper>
-            </Grid>
-          </Grid>
-        ) : (
-          <Alert severity="info">Upload workspace output to view summary.</Alert>
-        )}
-      </SectionCard>
-
-      <SectionCard title="Generated Jira Epics (Draft)" subtitle="Draft epics generated from the parsed workspace output.">
-        <Stack spacing={2}>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={1}
-            alignItems={{ sm: 'center' }}
-            justifyContent="space-between"
-          >
-            <Typography variant="subtitle1">Epic Drafts</Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={handleExportJiraPayload}
-                disabled={!analysis?.jiraEpics.length}
+            <Stack spacing={2}>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1}
+                alignItems={{ sm: 'center' }}
+                justifyContent="space-between"
               >
-                Download Jira Draft JSON
-              </Button>
-              <Button
-                variant="contained"
-                size="small"
-                onClick={handleCopyEpicDrafts}
-                disabled={!analysis?.jiraEpics.length}
-              >
-                Copy Jira Draft JSON
-              </Button>
-              <Button
-                variant="text"
-                size="small"
-                onClick={handleClearWorkspaceOutput}
-                disabled={!analysis && !uploadMeta}
-              >
-                Reset
-              </Button>
+                <Stack spacing={0.25}>
+                  <Typography variant="subtitle1">Jira Epic Drafts</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {analysis.jiraEpics.length} draft{analysis.jiraEpics.length === 1 ? '' : 's'} generated.
+                  </Typography>
+                </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleExportJiraPayload}
+                    disabled={!analysis?.jiraEpics.length}
+                  >
+                    Download Jira Draft JSON
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={handleCopyEpicDrafts}
+                    disabled={!analysis?.jiraEpics.length}
+                  >
+                    Copy Jira Draft JSON
+                  </Button>
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={handleClearWorkspaceOutput}
+                    disabled={!analysis && !uploadMeta}
+                  >
+                    Reset
+                  </Button>
+                </Stack>
+              </Stack>
+              {analysis.jiraEpics.length ? (
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small" aria-label="Jira epic drafts">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Capability</TableCell>
+                        <TableCell>Title</TableCell>
+                        <TableCell>Scope</TableCell>
+                        <TableCell>Dependencies</TableCell>
+                        <TableCell align="right">Copy</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {analysis.jiraEpics.map((epic, index) => {
+                        const capabilityLabel = capabilityLabelLookup.get(epic.capabilityId) ?? epic.capabilityId;
+                        const dependencyLabels = epic.dependencies.map((dep) => capabilityLabelLookup.get(dep) ?? dep);
+                        return (
+                          <TableRow key={`${epic.capabilityId}-${index}`} hover>
+                            <TableCell>{capabilityLabel}</TableCell>
+                            <TableCell>{epic.title}</TableCell>
+                            <TableCell>
+                              <Chip
+                                label={epic.scope}
+                                size="small"
+                                color={jiraScopeColorLookup[epic.scope]}
+                                variant="outlined"
+                              />
+                            </TableCell>
+                            <TableCell>{dependencyLabels.length ? dependencyLabels.join(', ') : 'None'}</TableCell>
+                            <TableCell align="right">
+                              <Button size="small" variant="outlined" onClick={() => handleCopySingleEpic(epic)}>
+                                Copy
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Alert severity="info">No Jira epic drafts found in the uploaded output.</Alert>
+              )}
             </Stack>
           </Stack>
-          {analysis ? (
-            analysis.jiraEpics.length ? (
-              <TableContainer component={Paper} variant="outlined">
-                <Table size="small" aria-label="Jira epic drafts">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Capability</TableCell>
-                      <TableCell>Title</TableCell>
-                      <TableCell>Scope</TableCell>
-                      <TableCell>Dependencies</TableCell>
-                      <TableCell align="right">Copy</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {analysis.jiraEpics.map((epic, index) => {
-                      const capabilityLabel = capabilityLabelLookup.get(epic.capabilityId) ?? epic.capabilityId;
-                      const dependencyLabels = epic.dependencies.map((dep) => capabilityLabelLookup.get(dep) ?? dep);
-                      return (
-                        <TableRow key={`${epic.capabilityId}-${index}`} hover>
-                          <TableCell>{capabilityLabel}</TableCell>
-                          <TableCell>{epic.title}</TableCell>
-                          <TableCell>
-                            <Chip label={epic.scope} size="small" color={jiraScopeColorLookup[epic.scope]} variant="outlined" />
-                          </TableCell>
-                          <TableCell>{dependencyLabels.length ? dependencyLabels.join(', ') : 'None'}</TableCell>
-                          <TableCell align="right">
-                            <Button size="small" variant="outlined" onClick={() => handleCopySingleEpic(epic)}>
-                              Copy
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            ) : (
-              <Alert severity="info">No Jira epic drafts found in the uploaded output.</Alert>
-            )
-          ) : (
-            <Alert severity="info">Upload workspace output to view Jira epic drafts.</Alert>
-          )}
-        </Stack>
+        ) : (
+          <Alert severity="info">Upload workspace output to view summary and Jira drafts.</Alert>
+        )}
       </SectionCard>
 
       <Drawer
