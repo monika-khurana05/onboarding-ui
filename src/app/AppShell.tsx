@@ -57,14 +57,14 @@ const navItems: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: <DashboardCustomizeIcon /> },
   { label: 'Requirement Analysis', to: '/ai/requirements', icon: <RuleIcon /> },
   { label: 'Payload Mapping', to: '/ai/mapping', icon: <TableChartIcon /> },
-  { label: 'Create Snapshot', to: '/snapshots/new', icon: <FactCheckIcon /> },
+  { label: 'Payment Builder', to: '/snapshots/new', icon: <FactCheckIcon /> },
+  { label: 'Jira2Code', to: '/jira2code', icon: <QueryStatsIcon /> },
   {
     label: 'Create Assembly Pod',
     to: '/onboarding/create-assembly-pod',
     icon: <Inventory2OutlinedIcon />
   },
-  { label: 'Generate Preview', to: '/generate/preview', icon: <QueryStatsIcon /> },
-  { label: 'Jobs', to: '/jobs', icon: <InfoOutlinedIcon /> },
+  { label: 'Generate Preview', to: '/generate/preview', icon: <InfoOutlinedIcon /> },
   { label: 'Test Case Generation', to: '/ai/testing', icon: <ScienceIcon /> },
   { label: 'Settings/About', to: '/settings', icon: <SettingsIcon /> }
 ];
@@ -211,7 +211,7 @@ export function AppShell() {
             <MenuIcon />
           </IconButton>
           <Stack>
-            <Typography variant="h6">CPX Smart Country Onboarding Platform</Typography>
+            <Typography variant="h6">CPX AI Product Builder</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>
               Accelerating CPX global onboarding through intelligent automation
             </Typography>
