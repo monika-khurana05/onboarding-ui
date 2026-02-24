@@ -300,7 +300,7 @@ export function AiPreviewDrawer({
                       ))}
                     </Stack>
                   ) : (
-                    <Alert severity="info">Load a mock analysis to see requirements.</Alert>
+                    <Alert severity="info">Upload workspace output to see requirements.</Alert>
                   )}
                 </Stack>
               </Box>
@@ -482,7 +482,7 @@ export function AiPreviewDrawer({
                   </Typography>
                 </>
               ) : (
-                <Alert severity="info">Use the AI button to load a mock mapping sheet.</Alert>
+                <Alert severity="info">Use the AI button to load a mapping sheet.</Alert>
               )}
             </Stack>
           ) : null}

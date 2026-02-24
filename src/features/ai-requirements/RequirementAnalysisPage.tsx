@@ -1,9 +1,4 @@
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   Badge,
   Button,
@@ -25,7 +20,6 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material/Select';
@@ -43,9 +37,9 @@ import {
 } from '../../models/snapshot';
 import { CAPABILITIES, type CapabilityId } from '../ai/requirements/capabilities';
 import type { JiraEpicDraft, RequirementAnalysisResult } from '../ai/requirements/analysisTypes';
-import { MOCK_DOCS } from '../ai/requirements/mockDocs';
-import { runMockAnalysis } from '../ai/requirements/mockAnalysis';
-import type { ExtractedRequirement, RequirementDocSource } from '../ai/requirements/types';
+import type { ExtractedRequirement } from '../ai/requirements/types';
+import { parseWorkspaceOutputToAnalysisResult } from '../ai/requirements/workspaceOutputParser';
+import { buildJiraDraftExport, copyToClipboard, downloadJson } from '../ai/requirements/jiraDraftExport';
 import { setStage } from '../../status/onboardingStatusStorage';
 
 const capabilityLabelLookup = new Map<CapabilityId, string>(CAPABILITIES.map((item) => [item.id, item.label]));
@@ -54,13 +48,10 @@ const enrichmentLabelLookup = new Map(enrichmentCatalog.map((item) => [item.id, 
 const validationCatalogIds = new Set(validationCatalog.map((item) => item.id));
 const enrichmentCatalogIds = new Set(enrichmentCatalog.map((item) => item.id));
 const capabilityIdSet = new Set(CAPABILITIES.map((item) => item.id));
-const mockDocById = new Map(MOCK_DOCS.map((doc) => [doc.id, doc]));
-const mockDocIdSet = new Set(MOCK_DOCS.map((doc) => doc.id));
-const requirementsCountryKey = 'ai.requirements.v1.countryCode';
-const requirementsDocIdsKey = 'ai.requirements.v1.selectedDocIds';
 const requirementsResultKey = 'ai.requirements.v1.lastResult';
 const requirementsSelectedCapabilitiesKey = 'ai.requirements.v1.selectedCapabilities';
-const localDocContentKey = 'local_file_stub';
+const workspaceOutputAccept = '.json,.md,.markdown,.txt';
+const ASK_WORKSPACES_URL = '<<PUT_YOUR_INTERNAL_URL_HERE>>';
 const requirementCategories: ExtractedRequirement['category'][] = [
   'Validation',
   'Enrichment',
@@ -80,67 +71,11 @@ function normalizeCountryCode(value: string) {
   return value.trim().toUpperCase();
 }
 
-type RequirementsInputState = {
-  countryCode: string;
-  selectedDocIds: string[];
+type WorkspaceUploadMeta = {
+  fileName: string;
+  uploadedAt: string;
+  warnings: string[];
 };
-
-function mergeDocSources(docs: RequirementDocSource[]) {
-  const seen = new Set<string>();
-  const result: RequirementDocSource[] = [];
-  docs.forEach((doc) => {
-    if (!doc?.id || seen.has(doc.id)) {
-      return;
-    }
-    seen.add(doc.id);
-    result.push(doc);
-  });
-  return result;
-}
-
-function resolveDocSource(doc: RequirementDocSource): RequirementDocSource {
-  return mockDocById.get(doc.id) ?? doc;
-}
-
-function hydrateSelectedDocs(selectedDocIds: string[]) {
-  const docs = selectedDocIds
-    .map((id) => mockDocById.get(id))
-    .filter((doc): doc is RequirementDocSource => Boolean(doc));
-  return mergeDocSources(docs);
-}
-
-function loadRequirementsInputs(): RequirementsInputState | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  try {
-    const countryCode = sessionStorage.getItem(requirementsCountryKey) ?? '';
-    const rawDocIds = sessionStorage.getItem(requirementsDocIdsKey);
-    if (!countryCode && !rawDocIds) {
-      return null;
-    }
-    const parsed = rawDocIds ? (JSON.parse(rawDocIds) as unknown) : [];
-    const selectedDocIds = Array.isArray(parsed)
-      ? parsed.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
-      : [];
-    return { countryCode, selectedDocIds };
-  } catch (error) {
-    console.warn('Failed to load requirements input state.', error);
-    return null;
-  }
-}
-
-function saveRequirementsInputs(state: RequirementsInputState) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  try {
-    sessionStorage.setItem(requirementsCountryKey, state.countryCode);
-    sessionStorage.setItem(requirementsDocIdsKey, JSON.stringify(state.selectedDocIds));
-  } catch (error) {
-    console.warn('Failed to save requirements input state.', error);
-  }
-}
 
 function loadRequirementsResult(): RequirementAnalysisResult | null {
   if (typeof window === 'undefined') {
@@ -169,34 +104,6 @@ function saveRequirementsResult(result: RequirementAnalysisResult) {
   }
 }
 
-function isLocalDoc(doc: RequirementDocSource) {
-  return doc.mockContentKey === localDocContentKey;
-}
-
-function deriveDocTypeFromFileName(fileName: string): RequirementDocSource['type'] {
-  const extension = fileName.trim().split('.').pop()?.toLowerCase() ?? '';
-  switch (extension) {
-    case 'pdf':
-      return 'PDF';
-    case 'doc':
-    case 'docx':
-      return 'DOCX';
-    case 'msg':
-    case 'eml':
-      return 'EMAIL';
-    case 'html':
-    case 'htm':
-      return 'HTML';
-    case 'txt':
-    default:
-      return 'TEXT';
-  }
-}
-
-function formatDocChipLabel(doc: RequirementDocSource) {
-  return `${doc.label} (${doc.type})`;
-}
-
 function mergeUnique(base: string[], extra: Iterable<string>) {
   const next = new Set(base);
   for (const value of extra) {
@@ -221,29 +128,12 @@ export function RequirementAnalysisPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const flow = searchParams.get('flow') === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
-  const queryCountry = searchParams.get('country');
-  const initialInputs = useMemo(() => loadRequirementsInputs(), []);
   const initialResult = useMemo(() => loadRequirementsResult(), []);
-  const [countryCode, setCountryCode] = useState(
-    () => queryCountry?.toUpperCase() ?? initialInputs?.countryCode ?? initialResult?.countryCode ?? 'AR'
-  );
-  const [selectedDocs, setSelectedDocs] = useState<RequirementDocSource[]>(() => {
-    if (initialInputs?.selectedDocIds?.length) {
-      return hydrateSelectedDocs(initialInputs.selectedDocIds);
-    }
-    if (initialResult?.inputDocs?.length) {
-      return mergeDocSources(
-        initialResult.inputDocs
-          .map(resolveDocSource)
-          .filter((doc) => mockDocIdSet.has(doc.id))
-      );
-    }
-    return MOCK_DOCS.slice(0, 1);
-  });
   const [analysis, setAnalysis] = useState<RequirementAnalysisResult | null>(initialResult ?? null);
+  const [countryCode, setCountryCode] = useState(() => initialResult?.countryCode ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loadSource, setLoadSource] = useState<'storage' | 'mock' | null>(initialResult ? 'storage' : null);
+  const [uploadMeta, setUploadMeta] = useState<WorkspaceUploadMeta | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedRequirementId, setSelectedRequirementId] = useState<string | null>(null);
   const [openQuestionText, setOpenQuestionText] = useState('');
@@ -255,49 +145,6 @@ export function RequirementAnalysisPage() {
   const [capabilityFilter, setCapabilityFilter] = useState<CapabilityId | 'ALL'>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<ExtractedRequirement['category'] | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const normalizedCountry = useMemo(() => normalizeCountryCode(countryCode), [countryCode]);
-  const availableDocs = useMemo(
-    () => MOCK_DOCS.filter((doc) => doc.countryCode === normalizedCountry),
-    [normalizedCountry]
-  );
-  const availableDocMap = useMemo(() => new Map(availableDocs.map((doc) => [doc.id, doc])), [availableDocs]);
-  const availableDocIdSet = useMemo(() => new Set(availableDocs.map((doc) => doc.id)), [availableDocs]);
-  const selectedMockDocIds = useMemo(
-    () => selectedDocs.filter((doc) => availableDocIdSet.has(doc.id)).map((doc) => doc.id),
-    [availableDocIdSet, selectedDocs]
-  );
-  const uploadedDocs = useMemo(() => selectedDocs.filter((doc) => isLocalDoc(doc)), [selectedDocs]);
-
-  useEffect(() => {
-    if (queryCountry) {
-      setCountryCode(queryCountry.toUpperCase());
-    }
-  }, [queryCountry]);
-
-  useEffect(() => {
-    setSelectedDocs((prev) => {
-      const locals = prev.filter(isLocalDoc);
-      const retained = prev.filter((doc) => !isLocalDoc(doc) && doc.countryCode === normalizedCountry);
-      return mergeDocSources([...retained, ...locals]);
-    });
-  }, [normalizedCountry]);
-
-  useEffect(() => {
-    const selectedDocIds = selectedDocs.map((doc) => doc.id);
-    saveRequirementsInputs({ countryCode: normalizedCountry, selectedDocIds });
-  }, [normalizedCountry, selectedDocs]);
-
-  useEffect(() => {
-    if (!normalizedCountry) {
-      setAnalysis(null);
-      setLoadSource(null);
-      return;
-    }
-    if (analysis && analysis.countryCode !== normalizedCountry) {
-      setAnalysis(null);
-      setLoadSource(null);
-    }
-  }, [analysis, normalizedCountry]);
 
   useEffect(() => {
     setAppliedCapabilities(new Set());
@@ -307,11 +154,24 @@ export function RequirementAnalysisPage() {
   }, [analysis?.countryCode, analysis?.requirements.length]);
 
   useEffect(() => {
+    if (analysis?.countryCode) {
+      setCountryCode(analysis.countryCode);
+    }
+  }, [analysis?.countryCode]);
+
+  useEffect(() => {
     if (analysis) {
       saveRequirementsResult(analysis);
     }
   }, [analysis]);
 
+  const effectiveCountryCode = useMemo(() => {
+    const analysisCode = analysis?.countryCode?.toUpperCase() ?? '';
+    if (analysisCode && analysisCode !== 'UNKNOWN') {
+      return analysisCode;
+    }
+    return normalizeCountryCode(countryCode);
+  }, [analysis?.countryCode, countryCode]);
   const capabilitySuggestions = useMemo(() => analysis?.mappedCapabilities ?? [], [analysis]);
   const validationSuggestions = useMemo(() => analysis?.validationSuggestions ?? [], [analysis]);
   const enrichmentSuggestions = useMemo(() => analysis?.enrichmentSuggestions ?? [], [analysis]);
@@ -330,15 +190,6 @@ export function RequirementAnalysisPage() {
     }
     return requirementsOverrideMap[activeRequirement.id] ?? activeRequirement.suggestedCapabilities;
   }, [activeRequirement, requirementsOverrideMap]);
-  const jiraEpicsByCapability = useMemo(() => {
-    const groups = new Map<CapabilityId, JiraEpicDraft[]>();
-    analysis?.jiraEpics.forEach((epic) => {
-      const list = groups.get(epic.capabilityId) ?? [];
-      list.push(epic);
-      groups.set(epic.capabilityId, list);
-    });
-    return Array.from(groups.entries());
-  }, [analysis]);
   const filteredRequirements = useMemo(() => {
     if (!analysis) {
       return [];
@@ -381,18 +232,6 @@ export function RequirementAnalysisPage() {
     [activeRequirement]
   );
 
-  const handleDocumentSelectionChange = useCallback(
-    (event: SelectChangeEvent) => {
-      const value = event.target.value as string | string[];
-      const nextIds = Array.isArray(value) ? value : value ? value.split(',') : [];
-      const nextDocs = nextIds
-        .map((id) => availableDocMap.get(id))
-        .filter((doc): doc is RequirementDocSource => Boolean(doc));
-      setSelectedDocs((prev) => mergeDocSources([...nextDocs, ...prev.filter(isLocalDoc)]));
-    },
-    [availableDocMap]
-  );
-
   const handleCapabilityFilterChange = useCallback((event: SelectChangeEvent) => {
     const value = event.target.value as CapabilityId | 'ALL';
     setCapabilityFilter(value);
@@ -403,86 +242,55 @@ export function RequirementAnalysisPage() {
     setCategoryFilter(value);
   }, []);
 
-  const handleSelectAll = useCallback(() => {
-    setSelectedDocs((prev) => mergeDocSources([...availableDocs, ...prev.filter(isLocalDoc)]));
-  }, [availableDocs]);
-
-  const handlePaymentsOnly = useCallback(() => {
-    const paymentDoc = mockDocById.get('AR-REG-001');
-    if (!paymentDoc) {
-      return;
-    }
-    setSelectedDocs((prev) => mergeDocSources([paymentDoc, ...prev.filter(isLocalDoc)]));
-  }, []);
-
-  const handleFullPack = useCallback(() => {
-    const arDocs = MOCK_DOCS.filter((doc) => doc.countryCode === 'AR');
-    setSelectedDocs((prev) => mergeDocSources([...arDocs, ...prev.filter(isLocalDoc)]));
-  }, []);
-
-  const handleUploadFiles = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(event.target.files ?? []);
-      if (!files.length) {
+  const handleUploadWorkspaceOutput = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const [file] = Array.from(event.target.files ?? []);
+      if (!file) {
         return;
       }
-      const timestamp = Date.now();
-      const nextDocs = files.map((file, index) => {
-        return {
-          id: `UP-${timestamp}-${index}`,
-          label: file.name,
-          countryCode: normalizedCountry || 'AR',
-          type: deriveDocTypeFromFileName(file.name),
-          tags: ['uploaded'],
-          mockContentKey: localDocContentKey,
-          origin: 'UPLOADED'
-        };
-      });
-      setSelectedDocs((prev) => mergeDocSources([...prev, ...nextDocs]));
-      event.target.value = '';
+      setError(null);
+      setLoading(true);
+      try {
+        const text = await file.text();
+        const parsed = parseWorkspaceOutputToAnalysisResult({ fileName: file.name, content: text });
+        setAnalysis(parsed);
+        if (parsed.countryCode && parsed.countryCode !== 'UNKNOWN') {
+          setCountryCode(parsed.countryCode);
+        }
+        setUploadMeta({
+          fileName: file.name,
+          uploadedAt: new Date().toISOString(),
+          warnings: []
+        });
+        saveRequirementsResult(parsed);
+        const nextCountry = normalizeCountryCode(parsed.countryCode || countryCode);
+        if (nextCountry && nextCountry !== 'UNKNOWN') {
+          setStage(nextCountry, flow, 'REQUIREMENTS', 'DONE', undefined, {
+            requirementsSessionKey: requirementsResultKey
+          });
+          setStage(nextCountry, flow, 'PAYLOAD_MAPPING', 'IN_PROGRESS');
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse workspace output.', parseError);
+        setError(parseError instanceof Error ? parseError.message : 'Failed to parse workspace output.');
+      } finally {
+        setLoading(false);
+        event.target.value = '';
+      }
     },
-    [normalizedCountry]
+    [countryCode, flow]
   );
 
-  const handleRunAnalysis = useCallback(() => {
-    const errors = validateCountryCodeUppercase(normalizedCountry);
-    if (errors.length > 0) {
-      setError(errors[0]?.message ?? 'Country code is required.');
-      return;
-    }
-    setError(null);
-    setLoading(true);
+  const handleClearWorkspaceOutput = useCallback(() => {
     try {
-      const data = runMockAnalysis(normalizedCountry, selectedDocs);
-      setAnalysis(data);
-      saveRequirementsResult(data);
-      setStage(normalizedCountry, flow, 'REQUIREMENTS', 'DONE', undefined, {
-        requirementsSessionKey: requirementsResultKey
-      });
-      setStage(normalizedCountry, flow, 'PAYLOAD_MAPPING', 'IN_PROGRESS');
-      setLoadSource('mock');
-    } catch (fetchError) {
-      console.warn('Failed to load requirement analysis.', fetchError);
-      setError('Failed to run mock requirement analysis.');
-    } finally {
-      setLoading(false);
-    }
-  }, [flow, normalizedCountry, selectedDocs]);
-
-  const handleResetDemo = useCallback(() => {
-    try {
-      sessionStorage.removeItem(requirementsCountryKey);
-      sessionStorage.removeItem(requirementsDocIdsKey);
       sessionStorage.removeItem(requirementsResultKey);
       sessionStorage.removeItem(requirementsSelectedCapabilitiesKey);
     } catch (error) {
-      console.warn('Failed to clear demo session storage.', error);
+      console.warn('Failed to clear workspace session storage.', error);
     }
-    setCountryCode('AR');
-    const defaultDoc = MOCK_DOCS.find((doc) => doc.id === 'AR-REG-001') ?? MOCK_DOCS[0];
-    setSelectedDocs(defaultDoc ? [defaultDoc] : []);
     setAnalysis(null);
-    setLoadSource(null);
+    setCountryCode('');
+    setUploadMeta(null);
     setError(null);
     setIsDrawerOpen(false);
     setSelectedRequirementId(null);
@@ -494,7 +302,7 @@ export function RequirementAnalysisPage() {
     setCapabilityFilter('ALL');
     setCategoryFilter('ALL');
     setSearchQuery('');
-    setToast({ message: 'Demo state reset.', severity: 'success' });
+    setToast({ message: 'Workspace output cleared.', severity: 'success' });
   }, []);
 
   const handleCreateOpenQuestion = useCallback(() => {
@@ -529,23 +337,13 @@ export function RequirementAnalysisPage() {
     setOpenQuestionText('');
   }, [selectedRequirementId, analysis, openQuestionText]);
 
-  const downloadBlob = useCallback((data: string, fileName: string, mimeType: string) => {
-    const blob = new Blob([data], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }, []);
-
   const handleExportJson = useCallback(() => {
     if (!analysis) {
       return;
     }
-    const token = normalizeCountryCode(analysis.countryCode ?? countryCode) || 'requirements';
-    downloadBlob(JSON.stringify(analysis, null, 2), `${token}-requirements-analysis.json`, 'application/json;charset=utf-8');
-  }, [analysis, countryCode, downloadBlob]);
+    const token = effectiveCountryCode || 'requirements';
+    downloadJson(`${token}-requirements-analysis.json`, analysis);
+  }, [analysis, effectiveCountryCode]);
 
   const handleExportCsv = useCallback(() => {
     if (!analysis) {
@@ -585,9 +383,15 @@ export function RequirementAnalysisPage() {
       ];
     });
     const csv = [headers, ...rows].map((row) => row.map((value) => escapeCsv(String(value))).join(',')).join('\n');
-    const token = normalizeCountryCode(analysis.countryCode ?? countryCode) || 'requirements';
-    downloadBlob(csv, `${token}-requirements-table.csv`, 'text/csv;charset=utf-8');
-  }, [analysis, countryCode, downloadBlob]);
+    const token = effectiveCountryCode || 'requirements';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${token}-requirements-table.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [analysis, effectiveCountryCode]);
 
   const handleApplyCapabilitiesToWizard = useCallback(() => {
     try {
@@ -604,60 +408,42 @@ export function RequirementAnalysisPage() {
     if (!analysis) {
       return;
     }
-    const token = normalizeCountryCode(analysis.countryCode ?? countryCode) || 'requirements';
-    const payload = {
-      countryCode: token,
-      generatedAt: new Date().toISOString(),
-      epics: analysis.jiraEpics
-    };
-    downloadBlob(
-      JSON.stringify(payload, null, 2),
-      `jira-epics-${token}.json`,
-      'application/json;charset=utf-8'
-    );
-  }, [analysis, countryCode, downloadBlob]);
+    const token = effectiveCountryCode || 'requirements';
+    const payload = buildJiraDraftExport({ ...analysis, countryCode: token });
+    downloadJson(`jira-epics-${token}.json`, payload);
+  }, [analysis, effectiveCountryCode]);
 
   const handleCopyEpicDrafts = useCallback(async () => {
     if (!analysis) {
       return;
     }
-    if (!navigator?.clipboard?.writeText) {
-      setToast({ message: 'Clipboard access is unavailable.', severity: 'error' });
-      return;
-    }
-    const groups = new Map<CapabilityId, JiraEpicDraft[]>();
-    analysis.jiraEpics.forEach((epic) => {
-      const list = groups.get(epic.capabilityId) ?? [];
-      list.push(epic);
-      groups.set(epic.capabilityId, list);
-    });
-    const lines: string[] = [];
-    Array.from(groups.entries()).forEach(([capabilityId, epics]) => {
-      const label = capabilityLabelLookup.get(capabilityId) ?? capabilityId;
-      lines.push(`## ${label}`);
-      epics.forEach((epic) => {
-        lines.push(`### ${epic.title}`);
-        lines.push(`Summary: ${epic.summary}`);
-        lines.push(`Scope: ${epic.scope}`);
-        const dependencyLabels = epic.dependencies.map((dep) => capabilityLabelLookup.get(dep) ?? dep);
-        lines.push(`Dependencies: ${dependencyLabels.length ? dependencyLabels.join(', ') : 'None'}`);
-        lines.push(
-          `Linked Requirements: ${epic.linkedRequirements.length ? epic.linkedRequirements.join(', ') : 'None'}`
-        );
-        lines.push('Acceptance Criteria:');
-        epic.acceptanceCriteria.forEach((item) => lines.push(`- ${item}`));
-        lines.push('');
-      });
-      lines.push('');
-    });
     try {
-      await navigator.clipboard.writeText(lines.join('\n').trim());
-      setToast({ message: 'Copied epic drafts to clipboard.', severity: 'success' });
+      const token = effectiveCountryCode || 'requirements';
+      const payload = buildJiraDraftExport({ ...analysis, countryCode: token });
+      await copyToClipboard(payload);
+      setToast({ message: 'Copied Jira draft payload to clipboard.', severity: 'success' });
     } catch (error) {
       console.warn('Failed to copy epic drafts.', error);
-      setToast({ message: 'Failed to copy epic drafts.', severity: 'error' });
+      setToast({
+        message: error instanceof Error ? error.message : 'Failed to copy epic drafts.',
+        severity: 'error'
+      });
     }
-  }, [analysis]);
+  }, [analysis, effectiveCountryCode]);
+
+  const handleCopySingleEpic = useCallback(async (epic: JiraEpicDraft) => {
+    try {
+      await copyToClipboard(epic);
+      setToast({ message: 'Copied epic draft JSON.', severity: 'success' });
+    } catch (error) {
+      console.warn('Failed to copy epic draft.', error);
+      setToast({
+        message: error instanceof Error ? error.message : 'Failed to copy epic draft.',
+        severity: 'error'
+      });
+    }
+  }, []);
+
 
   const handleToastClose = useCallback(() => {
     setToast(null);
@@ -665,10 +451,10 @@ export function RequirementAnalysisPage() {
 
   const handleSendToWizard = useCallback(() => {
     if (!analysis) {
-      setError('Run requirement analysis before sending to the wizard.');
+      setError('Upload workspace output before sending to the wizard.');
       return;
     }
-    const normalized = normalizeCountryCode(countryCode);
+    const normalized = effectiveCountryCode;
     const errors = validateCountryCodeUppercase(normalized);
     if (errors.length > 0) {
       setError(errors[0]?.message ?? 'Country code is required.');
@@ -734,158 +520,114 @@ export function RequirementAnalysisPage() {
       rulesConfig: nextRulesConfig
     });
     navigate('/snapshots/new');
-  }, [
-    analysis,
-    appliedCapabilities,
-    appliedEnrichments,
-    appliedValidations,
-    countryCode,
-    navigate
-  ]);
+  }, [analysis, appliedCapabilities, appliedEnrichments, appliedValidations, effectiveCountryCode, navigate]);
 
   return (
     <Stack spacing={3}>
-      <Alert
-        severity="warning"
-        action={
-          <Tooltip title="This screen uses mock extraction to demonstrate the UX. Backend LLM integration will replace this.">
-            <span>
-              <InfoOutlinedIcon fontSize="small" />
-            </span>
-          </Tooltip>
-        }
-      >
+      <Alert severity="info">
         <Stack spacing={0.5}>
-          <Typography variant="subtitle2">Preview / Demo Mode (R2D2 Pending)</Typography>
-          <Typography variant="caption" color="text.secondary">
-            Mock extraction used for demo wiring; backend LLM integration will replace this.
+          <Typography variant="subtitle2">
+            This page integrates with Ask Workspaces for document analysis. Upload the Workspaces output file and we’ll generate
+            capability-wise Jira epics.
           </Typography>
         </Stack>
       </Alert>
 
       <Typography variant="h4">Requirement Analysis</Typography>
 
-      <SectionCard title="Inputs" subtitle="Upload or select requirement sources for AI extraction.">
-        <Stack spacing={2}>
-          <CountryCodeField
-            value={countryCode}
-            onChange={setCountryCode}
-            required
-            helperText="Two-letter ISO code used to load mock analysis."
-          />
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ md: 'flex-start' }}>
-            <TextField
-              select
-              label="Requirement Documents (Demo)"
-              value={selectedMockDocIds}
-              onChange={handleDocumentSelectionChange}
-              helperText="Mock inputs representing uploaded regulatory documents."
-              fullWidth
-              SelectProps={{
-                multiple: true,
-                renderValue: (selected) => {
-                  const ids = selected as string[];
-                  return ids.length ? `${ids.length} selected` : 'None selected';
-                }
-              }}
-              sx={{ flex: 1 }}
-            >
-              {availableDocs.map((doc) => (
-                <MenuItem key={doc.id} value={doc.id}>
-                  <Checkbox checked={selectedMockDocIds.includes(doc.id)} />
-                  <ListItemText primary={doc.label} secondary={`${doc.type} · ${doc.tags.join(', ')}`} />
-                </MenuItem>
-              ))}
-            </TextField>
-            <Stack spacing={0.5} sx={{ minWidth: { md: 240 } }}>
-              <Typography variant="caption" color="text.secondary">
-                Quick actions
-              </Typography>
-              <Stack spacing={0.5}>
-                <Button size="small" variant="text" onClick={handleSelectAll}>
-                  Select All
-                </Button>
-                <Button size="small" variant="text" onClick={handlePaymentsOnly}>
-                  Payments Only
-                </Button>
-                <Button size="small" variant="text" onClick={handleFullPack}>
-                  Full Pack
-                </Button>
-              </Stack>
-            </Stack>
-          </Stack>
-          <Stack spacing={1}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
-              <Typography variant="caption" color="text.secondary">
-                Selected documents
-              </Typography>
-            </Stack>
-            {selectedDocs.length ? (
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                {selectedDocs.map((doc) => (
-                  <Chip key={doc.id} label={formatDocChipLabel(doc)} size="small" variant="outlined" />
-                ))}
-              </Stack>
-            ) : (
-              <Typography variant="caption" color="text.secondary">
-                No documents selected yet.
-              </Typography>
-            )}
-          </Stack>
-          <Stack spacing={1}>
-            <Typography variant="subtitle2">Upload Unstructured Docs (Preview)</Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
-              <Button variant="outlined" component="label">
-                Upload Unstructured Docs (Preview)
-                <input
-                  hidden
-                  multiple
-                  type="file"
-                  accept=".pdf,.doc,.docx,.txt,.eml,.msg"
-                  onChange={handleUploadFiles}
-                />
-              </Button>
-              <Tooltip title="Preview mode: files are not parsed; used for demo wiring.">
-                <span>
-                  <InfoOutlinedIcon fontSize="small" color="action" />
-                </span>
-              </Tooltip>
-            </Stack>
-            {uploadedDocs.length ? (
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                {uploadedDocs.map((doc) => (
-                  <Chip key={doc.id} label={formatDocChipLabel(doc)} size="small" variant="outlined" />
-                ))}
-              </Stack>
-            ) : (
-              <Typography variant="caption" color="text.secondary">
-                No uploaded documents yet.
-              </Typography>
-            )}
-          </Stack>
+      <SectionCard title="Ask Workspaces Integration" subtitle="Use Ask Workspaces to analyze PDFs/Word/Jira exports and generate a structured capability-wise output using our preset.">
+        <Stack spacing={1}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
-            <Button variant="contained" onClick={handleRunAnalysis} disabled={loading || selectedDocs.length === 0}>
-              {loading ? 'Running...' : '✨ Run Requirement Analysis (Preview)'}
+            <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
+              Open Ask Workspaces
             </Button>
-            <Button variant="text" onClick={handleResetDemo}>
-              Reset Demo
-            </Button>
-            {loadSource ? (
-              <Typography variant="caption" color="text.secondary">
-                {loadSource === 'storage' ? 'Loaded from session storage.' : 'Generated from mock analysis rules.'}
-              </Typography>
-            ) : null}
-            {selectedDocs.length === 0 ? (
-              <Typography variant="caption" color="text.secondary">
-                Select one or more documents
-              </Typography>
-            ) : null}
+            <Typography variant="caption" color="text.secondary">
+              Preset to use: CPX Capability Split v1
+            </Typography>
           </Stack>
+          <Typography variant="caption" color="text.secondary">
+            Download the output as JSON, then upload it here.
+          </Typography>
+        </Stack>
+      </SectionCard>
+
+      <SectionCard title="Workspace Output" subtitle="Generate requirement analysis in Ask Workspaces and upload the output here.">
+        <Stack spacing={2}>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                <Stack spacing={1} justifyContent="space-between" sx={{ height: '100%' }}>
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle2">Step 1: Open Ask Workspaces</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Launch Ask Workspaces to run the requirement analysis on your documents.
+                    </Typography>
+                  </Stack>
+                  <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
+                    Open Ask Workspaces
+                  </Button>
+                </Stack>
+              </Paper>
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle2">Step 2: Generate structured output using preset</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Use the Workspace preset to export structured output (JSON, Markdown, or TXT).
+                  </Typography>
+                </Stack>
+              </Paper>
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                <Stack spacing={1}>
+                  <Typography variant="subtitle2">Step 3: Upload structured output here</Typography>
+                  <Button variant="outlined" component="label" disabled={loading}>
+                    {loading ? 'Parsing...' : 'Upload Workspace Output'}
+                    <input hidden type="file" accept={workspaceOutputAccept} onChange={handleUploadWorkspaceOutput} />
+                  </Button>
+                  <Typography variant="caption" color="text.secondary">
+                    Accepted: JSON, Markdown, TXT.
+                  </Typography>
+                </Stack>
+              </Paper>
+            </Grid>
+          </Grid>
+          <CountryCodeField
+            value={effectiveCountryCode}
+            onChange={setCountryCode}
+            disabled={Boolean(analysis?.countryCode && analysis.countryCode !== 'UNKNOWN')}
+            helperText={
+              analysis?.countryCode && analysis.countryCode !== 'UNKNOWN'
+                ? 'Country code loaded from workspace output.'
+                : 'Optional: add a country code if the workspace output is missing one.'
+            }
+          />
+          {uploadMeta ? (
+            <Stack spacing={0.5}>
+              <Typography variant="caption" color="text.secondary">
+                Uploaded {uploadMeta.fileName} · {new Date(uploadMeta.uploadedAt).toLocaleString()}
+              </Typography>
+              {uploadMeta.warnings.length ? (
+                <Alert severity="warning">
+                  <Stack spacing={0.25}>
+                    <Typography variant="subtitle2">Parsing notes</Typography>
+                    {uploadMeta.warnings.map((warning, index) => (
+                      <Typography key={`upload-warning-${index}`} variant="caption" color="text.secondary">
+                        {warning}
+                      </Typography>
+                    ))}
+                  </Stack>
+                </Alert>
+              ) : null}
+            </Stack>
+          ) : null}
           {error ? <Alert severity="error">{error}</Alert> : null}
         </Stack>
       </SectionCard>
 
-      <SectionCard title="Results" subtitle="AI extraction, capability mapping, and open questions.">
+      <SectionCard title="Results" subtitle="Workspace extraction, capability mapping, and open questions.">
         {analysis ? (
           <Stack spacing={3}>
             <Grid container spacing={2}>
@@ -1188,137 +930,7 @@ export function RequirementAnalysisPage() {
             </Paper>
           </Stack>
         ) : (
-          <Alert severity="info">Run analysis to see results.</Alert>
-        )}
-      </SectionCard>
-
-      <SectionCard title="Jira Epics (Preview)" subtitle="Draft epic outputs derived from the selected documents.">
-        {analysis ? (
-          <Stack spacing={2}>
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              alignItems={{ sm: 'center' }}
-              justifyContent="space-between"
-            >
-              <Typography variant="subtitle1">Epic Drafts</Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={handleExportJiraPayload}
-                  disabled={!analysis.jiraEpics.length}
-                >
-                  Export JSON
-                </Button>
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={handleCopyEpicDrafts}
-                  disabled={!analysis.jiraEpics.length}
-                >
-                  Copy
-                </Button>
-              </Stack>
-            </Stack>
-            {jiraEpicsByCapability.length ? (
-              <Stack spacing={1}>
-                {jiraEpicsByCapability.map(([capabilityId, epics]) => {
-                  const label = capabilityLabelLookup.get(capabilityId) ?? capabilityId;
-                  return (
-                    <Accordion key={capabilityId} defaultExpanded>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Typography variant="subtitle2">{label}</Typography>
-                          <Chip label={`${epics.length} epics`} size="small" variant="outlined" />
-                        </Stack>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <Stack spacing={1.5}>
-                          {epics.map((epic, index) => (
-                            <Paper key={`${capabilityId}-${index}`} variant="outlined" sx={{ p: 1.5 }}>
-                              <Stack spacing={1}>
-                                <Stack
-                                  direction={{ xs: 'column', sm: 'row' }}
-                                  spacing={1}
-                                  alignItems={{ sm: 'center' }}
-                                  justifyContent="space-between"
-                                >
-                                  <Typography variant="subtitle2">{epic.title}</Typography>
-                                  <Chip
-                                    label={epic.scope}
-                                    size="small"
-                                    color={jiraScopeColorLookup[epic.scope]}
-                                    variant="outlined"
-                                  />
-                                </Stack>
-                                <Typography variant="body2" color="text.secondary">
-                                  {epic.summary}
-                                </Typography>
-                                <Stack spacing={0.5}>
-                                  <Typography variant="caption" color="text.secondary">
-                                    Dependencies
-                                  </Typography>
-                                  {epic.dependencies.length ? (
-                                    <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
-                                      {epic.dependencies.map((dependency) => (
-                                        <Chip
-                                          key={`${epic.title}-${dependency}`}
-                                          label={capabilityLabelLookup.get(dependency) ?? dependency}
-                                          size="small"
-                                          variant="outlined"
-                                        />
-                                      ))}
-                                    </Stack>
-                                  ) : (
-                                    <Typography variant="body2" color="text.secondary">
-                                      None
-                                    </Typography>
-                                  )}
-                                </Stack>
-                                <Stack spacing={0.5}>
-                                  <Typography variant="caption" color="text.secondary">
-                                    Linked Requirements
-                                  </Typography>
-                                  {epic.linkedRequirements.length ? (
-                                    <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
-                                      {epic.linkedRequirements.map((reqId) => (
-                                        <Chip key={`${epic.title}-${reqId}`} label={reqId} size="small" variant="outlined" />
-                                      ))}
-                                    </Stack>
-                                  ) : (
-                                    <Typography variant="body2" color="text.secondary">
-                                      None
-                                    </Typography>
-                                  )}
-                                </Stack>
-                                <Stack spacing={0.5}>
-                                  <Typography variant="caption" color="text.secondary">
-                                    Acceptance Criteria
-                                  </Typography>
-                                  <Stack spacing={0.25}>
-                                    {epic.acceptanceCriteria.map((item, itemIndex) => (
-                                      <Typography key={`${epic.title}-ac-${itemIndex}`} variant="body2" color="text.secondary">
-                                        - {item}
-                                      </Typography>
-                                    ))}
-                                  </Stack>
-                                </Stack>
-                              </Stack>
-                            </Paper>
-                          ))}
-                        </Stack>
-                      </AccordionDetails>
-                    </Accordion>
-                  );
-                })}
-              </Stack>
-            ) : (
-              <Alert severity="info">No epic drafts generated yet.</Alert>
-            )}
-          </Stack>
-        ) : (
-          <Alert severity="info">Run requirement analysis to view Jira epic drafts.</Alert>
+          <Alert severity="info">Upload workspace output to see results.</Alert>
         )}
       </SectionCard>
 
@@ -1336,8 +948,114 @@ export function RequirementAnalysisPage() {
             </Button>
           </Stack>
           <Typography variant="caption" color="text.secondary">
-            Prefill applies only the selections you checked above. AI analysis data is not embedded into snapshots.
+            Prefill applies only the selections you checked above. Workspace analysis data is not embedded into snapshots.
           </Typography>
+        </Stack>
+      </SectionCard>
+
+      <SectionCard title="Parsed Output Summary" subtitle="Snapshot of the uploaded workspace output.">
+        {analysis ? (
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Requirements Found
+                </Typography>
+                <Typography variant="h5">{analysis.kpis.requirementsFound}</Typography>
+              </Paper>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Mapped Capabilities
+                </Typography>
+                <Typography variant="h5">{analysis.mappedCapabilities.length}</Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+        ) : (
+          <Alert severity="info">Upload workspace output to view summary.</Alert>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Generated Jira Epics (Draft)" subtitle="Draft epics generated from the parsed workspace output.">
+        <Stack spacing={2}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
+            alignItems={{ sm: 'center' }}
+            justifyContent="space-between"
+          >
+            <Typography variant="subtitle1">Epic Drafts</Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap flexWrap="wrap">
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleExportJiraPayload}
+                disabled={!analysis?.jiraEpics.length}
+              >
+                Download Jira Draft JSON
+              </Button>
+              <Button
+                variant="contained"
+                size="small"
+                onClick={handleCopyEpicDrafts}
+                disabled={!analysis?.jiraEpics.length}
+              >
+                Copy Jira Draft JSON
+              </Button>
+              <Button
+                variant="text"
+                size="small"
+                onClick={handleClearWorkspaceOutput}
+                disabled={!analysis && !uploadMeta}
+              >
+                Reset
+              </Button>
+            </Stack>
+          </Stack>
+          {analysis ? (
+            analysis.jiraEpics.length ? (
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small" aria-label="Jira epic drafts">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Capability</TableCell>
+                      <TableCell>Title</TableCell>
+                      <TableCell>Scope</TableCell>
+                      <TableCell>Dependencies</TableCell>
+                      <TableCell align="right">Copy</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {analysis.jiraEpics.map((epic, index) => {
+                      const capabilityLabel = capabilityLabelLookup.get(epic.capabilityId) ?? epic.capabilityId;
+                      const dependencyLabels = epic.dependencies.map((dep) => capabilityLabelLookup.get(dep) ?? dep);
+                      return (
+                        <TableRow key={`${epic.capabilityId}-${index}`} hover>
+                          <TableCell>{capabilityLabel}</TableCell>
+                          <TableCell>{epic.title}</TableCell>
+                          <TableCell>
+                            <Chip label={epic.scope} size="small" color={jiraScopeColorLookup[epic.scope]} variant="outlined" />
+                          </TableCell>
+                          <TableCell>{dependencyLabels.length ? dependencyLabels.join(', ') : 'None'}</TableCell>
+                          <TableCell align="right">
+                            <Button size="small" variant="outlined" onClick={() => handleCopySingleEpic(epic)}>
+                              Copy
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Alert severity="info">No Jira epic drafts found in the uploaded output.</Alert>
+            )
+          ) : (
+            <Alert severity="info">Upload workspace output to view Jira epic drafts.</Alert>
+          )}
         </Stack>
       </SectionCard>
 

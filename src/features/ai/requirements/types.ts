@@ -6,7 +6,7 @@ export type RequirementDocSource = {
   countryCode: string; // "AR"
   type: 'PDF' | 'DOCX' | 'EMAIL' | 'JIRA' | 'TEXT' | 'HTML';
   tags: string[]; // ["regulatory", "instant-payments"]
-  mockContentKey: string; // used to fetch mock content (no real file parsing)
+  mockContentKey?: string; // optional content reference key
   origin?: 'PRESET' | 'UPLOADED';
 };
 
