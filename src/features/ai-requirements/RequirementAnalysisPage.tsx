@@ -51,7 +51,6 @@ const requirementsResultKey = 'ai.requirements.v1.lastResult';
 const requirementsSelectedCapabilitiesKey = 'ai.requirements.v1.selectedCapabilities';
 const workspaceOutputAccept = '.json,.md,.markdown,.txt,.pdf,.csv';
 const ASK_WORKSPACES_URL = '<<PUT_YOUR_INTERNAL_URL_HERE>>';
-const ASK_WORKSPACES_STYLUS_URL = `${ASK_WORKSPACES_URL}/stylus`;
 type FlowSelection = 'INCOMING' | 'OUTGOING' | '';
 const COUNTRY_OPTIONS = [
   { code: 'AE', label: 'United Arab Emirates' },
@@ -737,7 +736,7 @@ export function RequirementAnalysisPage() {
         </Grid>
       </SectionCard>
 
-      <SectionCard title="Workspace Output" subtitle="Run Ask Workspaces and upload the structured output file.">
+      <SectionCard title="Ask AI" subtitle="Run Ask AI and upload the structured output file.">
         <Stack spacing={2}>
           <Stack
             direction={{ xs: 'column', md: 'row' }}
@@ -746,7 +745,7 @@ export function RequirementAnalysisPage() {
             justifyContent="space-between"
           >
             <Stack spacing={0.5}>
-              <Typography variant="subtitle1">Ask Workspaces</Typography>
+              <Typography variant="subtitle1">Ask AI</Typography>
               <Typography variant="body2" color="text.secondary">
                 Preset to use: CPX Capability Split v1.
               </Typography>
@@ -754,14 +753,9 @@ export function RequirementAnalysisPage() {
                 Download the output as JSON, then upload it here.
               </Typography>
             </Stack>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
-                Open Ask Workspaces
-              </Button>
-              <Button variant="outlined" href={ASK_WORKSPACES_STYLUS_URL} target="_blank" rel="noreferrer">
-                Open Stylus
-              </Button>
-            </Stack>
+            <Button variant="contained" href={ASK_WORKSPACES_URL} target="_blank" rel="noreferrer">
+              Open Ask AI
+            </Button>
           </Stack>
           <Paper variant="outlined" sx={{ p: 2, borderStyle: 'dashed' }}>
             <Stack
