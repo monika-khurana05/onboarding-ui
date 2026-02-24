@@ -1,5 +1,20 @@
 import { CapabilityId } from './capabilities';
+import type { TextDiff } from './simpleDiff';
 import { ExtractedRequirement, RequirementDocSource } from './types';
+
+export type JiraIssueType = 'EPIC' | 'STORY' | 'TASK' | 'SUBTASK';
+
+export type JiraChildDraft = {
+  id: string;
+  type: JiraIssueType; // STORY/TASK
+  summary: string;
+  description: string;
+  acceptanceCriteria?: string;
+  labels: string[];
+  components: string[];
+  parentEpicCapabilityId: string;
+  sourceFileName?: string;
+};
 
 export type JiraEpicDraft = {
   capabilityId: CapabilityId;
@@ -9,6 +24,22 @@ export type JiraEpicDraft = {
   scope: 'CONFIG_ONLY' | 'CODE_CHANGE' | 'MIXED';
   dependencies: CapabilityId[];
   linkedRequirements: string[]; // requirement ids
+  // NEW (for Stylus template docs)
+  descriptionText?: string; // Section 1 + Section 2 combined (Jira description body)
+  acceptanceCriteriaText?: string; // Section 4 full text (scenarios + G/W/T)
+  sourceFileName?: string; // uploaded doc name
+  detectedCapabilityConfidence?: number; // for UI
+  labels?: string[];
+  components?: string[];
+  owner?: { team?: string; name?: string };
+  children?: JiraChildDraft[];
+  fingerprint?: string; // for duplicate detection
+  updatedFromFingerprint?: string; // if update-mode
+  diff?: {
+    description?: TextDiff;
+    acceptance?: TextDiff;
+    inScope?: TextDiff;
+  };
 };
 
 export type RequirementAnalysisResult = {

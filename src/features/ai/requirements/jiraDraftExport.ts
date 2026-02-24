@@ -1,4 +1,5 @@
-import type { JiraEpicDraft, RequirementAnalysisResult } from './analysisTypes';
+import type { JiraChildDraft, JiraEpicDraft, RequirementAnalysisResult } from './analysisTypes';
+import type { TextDiff } from './simpleDiff';
 
 type JiraDraftExport = {
   meta: { generatedAt: string; countryCode: string };
@@ -8,8 +9,23 @@ type JiraDraftExport = {
     summary: string;
     scope: string;
     dependencies: string[];
+    descriptionText?: string;
+    acceptanceCriteriaText?: string;
     acceptanceCriteria: string[];
     linkedRequirements: string[];
+    sourceFileName?: string;
+    detectedCapabilityConfidence?: number;
+    labels?: string[];
+    components?: string[];
+    owner?: { team?: string; name?: string };
+    children?: JiraChildDraft[];
+    fingerprint?: string;
+    updatedFromFingerprint?: string;
+    diff?: {
+      description?: TextDiff;
+      acceptance?: TextDiff;
+      inScope?: TextDiff;
+    };
   }>;
 };
 
@@ -21,14 +37,56 @@ export function buildJiraDraftExport(result: RequirementAnalysisResult): JiraDra
     summary: epic.summary,
     scope: epic.scope,
     dependencies: epic.dependencies,
+    descriptionText: epic.descriptionText,
+    acceptanceCriteriaText: epic.acceptanceCriteriaText,
     acceptanceCriteria: epic.acceptanceCriteria,
-    linkedRequirements: epic.linkedRequirements
+    linkedRequirements: epic.linkedRequirements,
+    sourceFileName: epic.sourceFileName,
+    detectedCapabilityConfidence: epic.detectedCapabilityConfidence,
+    labels: epic.labels,
+    components: epic.components,
+    owner: epic.owner,
+    children: epic.children,
+    fingerprint: epic.fingerprint,
+    updatedFromFingerprint: epic.updatedFromFingerprint,
+    diff: epic.diff
   }));
   return {
     meta: {
       generatedAt: new Date().toISOString(),
       countryCode
     },
+    epics
+  };
+}
+
+export function buildJiraDraftExportFromMany(results: RequirementAnalysisResult[]): JiraDraftExport {
+  const generatedAt = new Date().toISOString();
+  const countryCode = results.find((result) => result.countryCode)?.countryCode || 'UNKNOWN';
+  const epics = results
+    .flatMap((result) => result.jiraEpics)
+    .map((epic: JiraEpicDraft) => ({
+      capabilityId: epic.capabilityId,
+      title: epic.title,
+      summary: epic.summary,
+      scope: epic.scope,
+      dependencies: epic.dependencies,
+      descriptionText: epic.descriptionText,
+      acceptanceCriteriaText: epic.acceptanceCriteriaText,
+      acceptanceCriteria: epic.acceptanceCriteria,
+      linkedRequirements: epic.linkedRequirements,
+      sourceFileName: epic.sourceFileName,
+      detectedCapabilityConfidence: epic.detectedCapabilityConfidence,
+      labels: epic.labels,
+      components: epic.components,
+      owner: epic.owner,
+      children: epic.children,
+      fingerprint: epic.fingerprint,
+      updatedFromFingerprint: epic.updatedFromFingerprint,
+      diff: epic.diff
+    }));
+  return {
+    meta: { generatedAt, countryCode },
     epics
   };
 }
