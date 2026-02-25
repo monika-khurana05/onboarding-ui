@@ -46,14 +46,21 @@ import { findByFingerprint, upsertDraft } from '../ai/requirements/jiraDraftRegi
 import { diffLines, type TextDiff } from '../ai/requirements/simpleDiff';
 import { buildJiraEpicFromStylusDoc } from '../ai/requirements/stylusDocToJiraEpic';
 import { parseStylusTemplateText, type StylusTemplateSections } from '../ai/requirements/stylusTemplateParser';
-import { parseWorkspaceOutputToAnalysisResult } from '../ai/requirements/workspaceOutputParser';
+import { extractTextFromFile } from '../ai/requirements/fileTextExtractors';
+import {
+  createEmptyBundle,
+  detectArtifactKind,
+  parseMappingSummaryJson,
+  parseOpenQuestionsMarkdown
+} from '../ai/requirements/workspaceArtifactsParser';
+import type { MappingSummaryItem, WorkspaceArtifactsBundle } from '../ai/requirements/workspaceArtifactsTypes';
+import { generateJiraEpicsFromArtifacts } from '../ai/requirements/jiraFromWorkspaceArtifacts';
 import {
   buildJiraDraftExport,
   buildJiraDraftExportFromMany,
   copyToClipboard,
   downloadJson
 } from '../ai/requirements/jiraDraftExport';
-import { setStage } from '../../status/onboardingStatusStorage';
 
 const capabilityLabelLookup = new Map<CapabilityId, string>(CAPABILITIES.map((item) => [item.id, item.label]));
 const validationLabelLookup = new Map(validationCatalog.map((item) => [item.id, item.className]));
@@ -63,7 +70,8 @@ const enrichmentCatalogIds = new Set(enrichmentCatalog.map((item) => item.id));
 const capabilityIdSet = new Set(CAPABILITIES.map((item) => item.id));
 const requirementsResultKey = 'ai.requirements.v1.lastResult';
 const requirementsSelectedCapabilitiesKey = 'ai.requirements.v1.selectedCapabilities';
-const workspaceOutputAccept = '.json,.md,.markdown,.txt,.pdf,.csv';
+const openQuestionAnswersKey = 'ai.requirements.v1.openQuestionAnswers';
+const workspaceOutputAccept = '.json,.md,.markdown,.txt,.docx';
 const stylusDocAccept = '.docx,.txt,.md,.markdown,.json';
 const ASK_WORKSPACES_URL = '<<PUT_YOUR_INTERNAL_URL_HERE>>';
 type FlowSelection = 'INCOMING' | 'OUTGOING' | '';
@@ -164,6 +172,33 @@ function saveRequirementsResult(result: RequirementAnalysisResult) {
   }
 }
 
+function loadOpenQuestionAnswers(): Record<string, string> {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+  try {
+    const raw = sessionStorage.getItem(openQuestionAnswersKey);
+    if (!raw) {
+      return {};
+    }
+    return JSON.parse(raw) as Record<string, string>;
+  } catch (error) {
+    console.warn('Failed to load open question answers.', error);
+    return {};
+  }
+}
+
+function saveOpenQuestionAnswers(answers: Record<string, string>) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    sessionStorage.setItem(openQuestionAnswersKey, JSON.stringify(answers));
+  } catch (error) {
+    console.warn('Failed to save open question answers.', error);
+  }
+}
+
 function mergeUnique(base: string[], extra: Iterable<string>) {
   const next = new Set(base);
   for (const value of extra) {
@@ -182,39 +217,6 @@ function toggleSetValue<T>(prev: Set<T>, value: T) {
     next.add(value);
   }
   return next;
-}
-
-function buildWorkspaceOutputFileName(
-  countryCode: string,
-  region: string,
-  flow: Exclude<FlowSelection, ''>,
-  uploadedAt: string
-) {
-  const safeTimestamp = uploadedAt.replace(/[:.]/g, '-');
-  const parts = ['workspace-output', countryCode || 'UNKNOWN', region || 'REGION', flow, safeTimestamp];
-  return `${parts.filter(Boolean).join('-')}.json`;
-}
-
-function buildWorkspaceOutputArchive(args: {
-  fileName: string;
-  uploadedAt: string;
-  countryCode: string;
-  region: string;
-  flow: Exclude<FlowSelection, ''>;
-  content: string;
-  analysis: RequirementAnalysisResult;
-}) {
-  return {
-    meta: {
-      fileName: args.fileName,
-      uploadedAt: args.uploadedAt,
-      countryCode: args.countryCode,
-      region: args.region,
-      flow: args.flow
-    },
-    rawContent: args.content,
-    analysis: args.analysis
-  };
 }
 
 function getFileExtension(fileName: string) {
@@ -281,6 +283,7 @@ export function RequirementAnalysisPage() {
   const initialFlow: FlowSelection =
     flowParam === 'OUTGOING' ? 'OUTGOING' : flowParam === 'INCOMING' ? 'INCOMING' : '';
   const initialResult = useMemo(() => loadRequirementsResult(), []);
+  const initialAnswers = useMemo(() => loadOpenQuestionAnswers(), []);
   const [analysis, setAnalysis] = useState<RequirementAnalysisResult | null>(initialResult ?? null);
   const [uploadMode, setUploadMode] = useState<UploadMode>('WORKSPACE');
   const [countryCode, setCountryCode] = useState(() => initialResult?.countryCode ?? '');
@@ -289,6 +292,10 @@ export function RequirementAnalysisPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadMeta, setUploadMeta] = useState<WorkspaceUploadMeta | null>(null);
+  const [bundle, setBundle] = useState<WorkspaceArtifactsBundle | null>(null);
+  const [openQuestionAnswers, setOpenQuestionAnswers] = useState<Record<string, string>>(initialAnswers);
+  const [activeTab, setActiveTab] = useState<'MAPPING' | 'SUMMARY' | 'GAP' | 'QUESTIONS' | 'JIRA'>('MAPPING');
+  const [jiraCreated, setJiraCreated] = useState(false);
   const [stylusDocs, setStylusDocs] = useState<StylusDocState[]>([]);
   const [stylusResults, setStylusResults] = useState<RequirementAnalysisResult[]>([]);
   const [registryNotice, setRegistryNotice] = useState<string[]>([]);
@@ -296,6 +303,8 @@ export function RequirementAnalysisPage() {
   const [selectedRequirementId, setSelectedRequirementId] = useState<string | null>(null);
   const [isEpicDrawerOpen, setIsEpicDrawerOpen] = useState(false);
   const [selectedEpicIndex, setSelectedEpicIndex] = useState<number | null>(null);
+  const [isMappingDrawerOpen, setIsMappingDrawerOpen] = useState(false);
+  const [selectedMappingItem, setSelectedMappingItem] = useState<MappingSummaryItem | null>(null);
   const [openQuestionText, setOpenQuestionText] = useState('');
   const [appliedCapabilities, setAppliedCapabilities] = useState<Set<CapabilityId>>(new Set());
   const [appliedValidations, setAppliedValidations] = useState<Set<string>>(new Set());
@@ -305,6 +314,8 @@ export function RequirementAnalysisPage() {
   const [capabilityFilter, setCapabilityFilter] = useState<CapabilityId | 'ALL'>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<ExtractedRequirement['category'] | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [classificationFilter, setClassificationFilter] = useState<string>('ALL');
+  const [minConfidence, setMinConfidence] = useState(0);
 
   useEffect(() => {
     setAppliedCapabilities(new Set());
@@ -329,9 +340,14 @@ export function RequirementAnalysisPage() {
     setError(null);
     setIsDrawerOpen(false);
     setIsEpicDrawerOpen(false);
+    setIsMappingDrawerOpen(false);
     setSelectedEpicIndex(null);
     setSelectedRequirementId(null);
+    setSelectedMappingItem(null);
     setRegistryNotice([]);
+    setBundle(null);
+    setJiraCreated(false);
+    setActiveTab('MAPPING');
   }, [uploadMode]);
 
   const isWorkspaceMode = uploadMode === 'WORKSPACE';
@@ -353,6 +369,7 @@ export function RequirementAnalysisPage() {
   const isStylusUploadReady = Boolean(countrySelectValue);
   const isUploadReady = isWorkspaceMode ? isWorkspaceUploadReady : isStylusUploadReady;
   const hasWorkspaceAnalysis = Boolean(analysis);
+  const hasBundle = Boolean(bundle);
   const hasStylusDocs = stylusDocs.length > 0;
   const countryOptions = useMemo(() => {
     const next = [...COUNTRY_OPTIONS];
@@ -370,9 +387,58 @@ export function RequirementAnalysisPage() {
   const validationSuggestions = useMemo(() => analysis?.validationSuggestions ?? [], [analysis]);
   const enrichmentSuggestions = useMemo(() => analysis?.enrichmentSuggestions ?? [], [analysis]);
 
-  const requirementCount = analysis?.kpis.requirementsFound ?? 0;
-  const openQuestionCount = analysis?.kpis.ambiguitiesCount ?? 0;
   const categoryOptions = requirementCategories;
+  const mappingItems = useMemo(
+    () => bundle?.files.mappingSummary?.json.classification_results ?? [],
+    [bundle]
+  );
+  const openQuestions = useMemo(() => bundle?.files.openQuestions?.questions ?? [], [bundle]);
+  const mappingCounts = useMemo(() => {
+    return mappingItems.reduce<Record<string, number>>((acc, item) => {
+      const key = (item.classification || 'UNSPECIFIED').toUpperCase();
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [mappingItems]);
+  const classificationOptions = useMemo(
+    () => ['ALL', ...Object.keys(mappingCounts).sort()],
+    [mappingCounts]
+  );
+  const filteredMappingItems = useMemo(() => {
+    return mappingItems.filter((item) => {
+      const classification = (item.classification || '').toUpperCase();
+      if (classificationFilter !== 'ALL' && classification !== classificationFilter) {
+        return false;
+      }
+      const confidence = item.confidence_score ?? 0;
+      return confidence >= minConfidence;
+    });
+  }, [mappingItems, classificationFilter, minConfidence]);
+  const unansweredOpenQuestions = useMemo(
+    () =>
+      openQuestions.filter((question) => {
+        const answer = openQuestionAnswers[question.id];
+        return !answer || !answer.trim();
+      }),
+    [openQuestions, openQuestionAnswers]
+  );
+  const allQuestionsAnswered = openQuestions.length === 0 || unansweredOpenQuestions.length === 0;
+  const canCreateJira = Boolean(bundle?.files.mappingSummary) && allQuestionsAnswered;
+  const jiraEpics = analysis?.jiraEpics ?? [];
+  const highImpactDeltas = useMemo(() => {
+    const text = bundle?.files.gapAnalysis?.markdown ?? '';
+    if (!text) {
+      return [] as Array<{ id?: string; line: string }>;
+    }
+    return text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => /classification:\s*(net_new|global_modify)/i.test(line))
+      .map((line) => {
+        const idMatch = line.match(/([A-Z]{2,3}-[A-Z0-9_-]+)/);
+        return { id: idMatch?.[1], line };
+      });
+  }, [bundle]);
 
   const activeRequirement = useMemo(
     () => analysis?.requirements.find((req) => req.id === selectedRequirementId) ?? null,
@@ -429,6 +495,10 @@ export function RequirementAnalysisPage() {
     setSelectedEpicIndex(index);
     setIsEpicDrawerOpen(true);
   }, []);
+  const handleOpenMappingDetails = useCallback((item: MappingSummaryItem) => {
+    setSelectedMappingItem(item);
+    setIsMappingDrawerOpen(true);
+  }, []);
 
   const handleOverrideChange = useCallback(
     (event: SelectChangeEvent) => {
@@ -455,13 +525,31 @@ export function RequirementAnalysisPage() {
     setCategoryFilter(value);
   }, []);
 
-  const handleUploadWorkspaceOutput = useCallback(
+  const handleClassificationFilterChange = useCallback((event: SelectChangeEvent) => {
+    setClassificationFilter(event.target.value);
+  }, []);
+
+  const handleMinConfidenceChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const value = Number(event.target.value);
+    setMinConfidence(Number.isFinite(value) ? value : 0);
+  }, []);
+
+  const handleOpenQuestionAnswerChange = useCallback((id: string, value: string) => {
+    setOpenQuestionAnswers((prev) => ({ ...prev, [id]: value }));
+  }, []);
+
+  const handleSaveOpenQuestionAnswers = useCallback(() => {
+    saveOpenQuestionAnswers(openQuestionAnswers);
+    setToast({ message: 'Open question answers saved.', severity: 'success' });
+  }, [openQuestionAnswers]);
+
+  const handleUploadWorkspaceArtifacts = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
-      const [file] = Array.from(event.target.files ?? []);
-      if (!file) {
+      const files = Array.from(event.target.files ?? []);
+      if (!files.length) {
         return;
       }
-      if (!isWorkspaceUploadReady) {
+      if (!isWorkspaceUploadReady || !isValidFlow(flowSelection)) {
         setError('Select country, region, and flow before uploading.');
         event.target.value = '';
         return;
@@ -469,48 +557,90 @@ export function RequirementAnalysisPage() {
       setError(null);
       setLoading(true);
       try {
-        const text = await file.text();
-        const parsed = parseWorkspaceOutputToAnalysisResult({ fileName: file.name, content: text });
-        const resolvedCountry = normalizeCountryCode(effectiveCountryCode || parsed.countryCode || 'UNKNOWN');
-        const nextAnalysis = { ...parsed, countryCode: resolvedCountry };
-        const uploadedAt = new Date().toISOString();
-        setAnalysis(nextAnalysis);
-        setCountryCode(resolvedCountry);
-        setUploadMeta({
-          fileName: file.name,
-          uploadedAt,
-          warnings: []
+        const uploadedAtIso = new Date().toISOString();
+        const countryCode = normalizeCountryCode(countrySelectValue || effectiveCountryCode || 'UNKNOWN');
+        const nextBundle = createEmptyBundle({
+          countryCode,
+          region,
+          flow: flowSelection,
+          uploadedAtIso
         });
-        if (isValidFlow(flowSelection)) {
-          const archive = buildWorkspaceOutputArchive({
-            fileName: file.name,
-            uploadedAt,
-            countryCode: resolvedCountry,
-            region,
-            flow: flowSelection,
-            content: text,
-            analysis: nextAnalysis
-          });
-          const archiveFileName = buildWorkspaceOutputFileName(resolvedCountry, region, flowSelection, uploadedAt);
-          downloadJson(archiveFileName, archive);
-          setToast({ message: `Ask AI output saved as ${archiveFileName}.`, severity: 'success' });
+        const warnings: string[] = [];
+
+        for (const file of files) {
+          const { text, warnings: fileWarnings } = await extractTextFromFile(file);
+          fileWarnings.forEach((warning) => warnings.push(`${file.name}: ${warning}`));
+          const kind = detectArtifactKind(file.name, text);
+          if (!text) {
+            warnings.push(`${file.name}: No text extracted.`);
+            continue;
+          }
+          if (kind === 'unknown') {
+            warnings.push(`${file.name}: Unrecognized workspace artifact.`);
+            continue;
+          }
+          try {
+            if (kind === 'mappingSummary') {
+              const json = parseMappingSummaryJson(text);
+              nextBundle.files.mappingSummary = { fileName: file.name, raw: text, json };
+            } else if (kind === 'overallSummary') {
+              nextBundle.files.overallSummary = { fileName: file.name, raw: text, markdown: text };
+            } else if (kind === 'gapAnalysis') {
+              nextBundle.files.gapAnalysis = { fileName: file.name, raw: text, markdown: text };
+            } else if (kind === 'openQuestions') {
+              const questions = parseOpenQuestionsMarkdown(text);
+              nextBundle.files.openQuestions = {
+                fileName: file.name,
+                raw: text,
+                markdown: text,
+                questions
+              };
+            }
+          } catch (parseError) {
+            warnings.push(
+              `${file.name}: ${parseError instanceof Error ? parseError.message : 'Failed to parse file.'}`
+            );
+          }
         }
-        saveRequirementsResult(nextAnalysis);
-        if (resolvedCountry && resolvedCountry !== 'UNKNOWN' && isValidFlow(flowSelection)) {
-          setStage(resolvedCountry, flowSelection, 'REQUIREMENTS', 'DONE', undefined, {
-            requirementsSessionKey: requirementsResultKey
+
+        setClassificationFilter('ALL');
+        setMinConfidence(0);
+        setBundle(nextBundle);
+        setAnalysis(null);
+        setJiraCreated(false);
+        setActiveTab('MAPPING');
+        setUploadMeta({
+          fileName: `Bundle (${files.length} files)`,
+          uploadedAt: uploadedAtIso,
+          warnings
+        });
+
+        if (nextBundle.files.openQuestions?.questions?.length) {
+          const saved = loadOpenQuestionAnswers();
+          const nextAnswers: Record<string, string> = {};
+          nextBundle.files.openQuestions.questions.forEach((question) => {
+            nextAnswers[question.id] = openQuestionAnswers[question.id] ?? saved[question.id] ?? '';
           });
-          setStage(resolvedCountry, flowSelection, 'PAYLOAD_MAPPING', 'IN_PROGRESS');
+          setOpenQuestionAnswers(nextAnswers);
+        } else {
+          setOpenQuestionAnswers({});
         }
       } catch (parseError) {
-        console.warn('Failed to parse Ask AI output.', parseError);
-        setError(parseError instanceof Error ? parseError.message : 'Failed to parse Ask AI output.');
+        console.warn('Failed to parse workspace artifacts.', parseError);
+        setError(parseError instanceof Error ? parseError.message : 'Failed to parse workspace artifacts.');
       } finally {
         setLoading(false);
         event.target.value = '';
       }
     },
-    [effectiveCountryCode, flowSelection, isWorkspaceUploadReady, region]
+    [
+      countrySelectValue,
+      effectiveCountryCode,
+      flowSelection,
+      isWorkspaceUploadReady,
+      openQuestionAnswers,
+      region
+    ]
   );
 
   const handleUploadStylusDocs = useCallback(
@@ -566,10 +696,15 @@ export function RequirementAnalysisPage() {
     try {
       sessionStorage.removeItem(requirementsResultKey);
       sessionStorage.removeItem(requirementsSelectedCapabilitiesKey);
+      sessionStorage.removeItem(openQuestionAnswersKey);
     } catch (error) {
       console.warn('Failed to clear workspace session storage.', error);
     }
     setAnalysis(null);
+    setBundle(null);
+    setOpenQuestionAnswers({});
+    setJiraCreated(false);
+    setActiveTab('MAPPING');
     setCountryCode('');
     setRegion('');
     setFlowSelection(initialFlow);
@@ -577,8 +712,10 @@ export function RequirementAnalysisPage() {
     setError(null);
     setIsDrawerOpen(false);
     setIsEpicDrawerOpen(false);
+    setIsMappingDrawerOpen(false);
     setSelectedRequirementId(null);
     setSelectedEpicIndex(null);
+    setSelectedMappingItem(null);
     setOpenQuestionText('');
     setAppliedCapabilities(new Set());
     setAppliedValidations(new Set());
@@ -587,6 +724,8 @@ export function RequirementAnalysisPage() {
     setCapabilityFilter('ALL');
     setCategoryFilter('ALL');
     setSearchQuery('');
+    setClassificationFilter('ALL');
+    setMinConfidence(0);
     setToast({ message: 'Ask AI output cleared.', severity: 'success' });
   }, []);
 
@@ -692,6 +831,40 @@ export function RequirementAnalysisPage() {
       });
     }
   }, [buildInScopeTextFromEpic, effectiveCountryCode, stylusDocs]);
+
+  const handleCreateJiraFromBundle = useCallback(() => {
+    if (!bundle?.files.mappingSummary) {
+      setError('Upload mapping_summary.json before creating Jira drafts.');
+      return;
+    }
+    if (!allQuestionsAnswered) {
+      setError('Answer all open questions before creating Jira drafts.');
+      return;
+    }
+    const generatedEpics = generateJiraEpicsFromArtifacts({ bundle, openQuestionAnswers });
+    const nextAnalysis: RequirementAnalysisResult = {
+      countryCode: bundle.meta.countryCode,
+      inputDocs: [],
+      kpis: {
+        requirementsFound: mappingItems.length,
+        reuseOpportunityPct: 0,
+        discoveryTimeReductionPct: 0,
+        ambiguitiesCount: openQuestions.length,
+        manualErrorReductionPct: 0
+      },
+      mappedCapabilities: [],
+      validationSuggestions: [],
+      enrichmentSuggestions: [],
+      requirements: [],
+      jiraEpics: generatedEpics
+    };
+    setError(null);
+    setAnalysis(nextAnalysis);
+    setCountryCode(bundle.meta.countryCode);
+    setJiraCreated(true);
+    setActiveTab('JIRA');
+    setToast({ message: 'Jira drafts created (UI-only).', severity: 'success' });
+  }, [allQuestionsAnswered, bundle, mappingItems.length, openQuestionAnswers, openQuestions.length]);
 
   const renderDiffSection = useCallback((label: string, diff?: TextDiff) => {
     if (!diff) {
@@ -973,14 +1146,14 @@ export function RequirementAnalysisPage() {
         title="Overview"
         subtitle={
           isWorkspaceMode
-            ? 'Use Ask AI to analyze PDFs/Word/Jira exports and generate structured capability output.'
+            ? 'Use Ask AI to analyze PDFs/Word/Jira exports and generate structured artifacts.'
             : 'Upload Stylus template docs and generate Jira epics per capability.'
         }
       >
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
             {isWorkspaceMode
-              ? 'Upload the Ask AI output file and we’ll generate capability-wise Jira epics. Required metadata is captured for future persistence.'
+              ? 'Upload the Ask AI artifact bundle and we’ll generate capability-wise Jira epics. Required metadata is captured for future persistence.'
               : 'Upload template docs and we’ll extract sections, detect capabilities, and build Jira drafts per capability.'}
           </Typography>
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
@@ -993,14 +1166,18 @@ export function RequirementAnalysisPage() {
             <Chip
               label={
                 isWorkspaceMode
-                  ? analysis
-                    ? 'Ask AI output loaded'
-                    : 'No output yet'
+                  ? hasBundle
+                    ? 'Workspace artifacts loaded'
+                    : analysis
+                      ? 'Jira drafts ready'
+                      : 'No output yet'
                   : hasStylusDocs
                     ? `${stylusDocs.length} template doc${stylusDocs.length === 1 ? '' : 's'} loaded`
                     : 'No template docs yet'
               }
-              color={isWorkspaceMode ? (analysis ? 'success' : 'default') : hasStylusDocs ? 'success' : 'default'}
+              color={
+                isWorkspaceMode ? (hasBundle || analysis ? 'success' : 'default') : hasStylusDocs ? 'success' : 'default'
+              }
               variant="outlined"
               size="small"
             />
@@ -1036,7 +1213,34 @@ export function RequirementAnalysisPage() {
             />
           </Stack>
           {isWorkspaceMode ? (
-            hasWorkspaceAnalysis ? (
+            hasBundle ? (
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Mapping Items
+                    </Typography>
+                    <Typography variant="h5">{mappingItems.length}</Typography>
+                  </Paper>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Open Questions
+                    </Typography>
+                    <Typography variant="h5">{openQuestions.length}</Typography>
+                  </Paper>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Jira Drafts
+                    </Typography>
+                    <Typography variant="h5">{analysis?.jiraEpics.length ?? 0}</Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+            ) : hasWorkspaceAnalysis ? (
               <Grid container spacing={2}>
                 <Grid size={{ xs: 12, md: 4 }}>
                   <Paper variant="outlined" sx={{ p: 2 }}>
@@ -1065,7 +1269,7 @@ export function RequirementAnalysisPage() {
               </Grid>
             ) : (
               <Alert severity="info" variant="outlined">
-                Upload Ask AI output to see the summary and Jira drafts.
+                Upload workspace artifacts to see the summary and Jira drafts.
               </Alert>
             )
           ) : hasStylusDocs ? (
@@ -1200,7 +1404,7 @@ export function RequirementAnalysisPage() {
         title={isWorkspaceMode ? 'Ask AI' : 'Stylus Template Docs'}
         subtitle={
           isWorkspaceMode
-            ? 'Run Ask AI and upload the structured output file.'
+            ? 'Run Ask AI and upload the artifact bundle.'
             : 'Upload Stylus template docs and generate per-capability Jira drafts.'
         }
       >
@@ -1220,45 +1424,69 @@ export function RequirementAnalysisPage() {
               </Button>
             ) : null}
           </Stack>
-          <Paper variant="outlined" sx={{ p: 2, borderStyle: 'dashed' }}>
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={2}
-              alignItems={{ sm: 'center' }}
-              justifyContent="space-between"
-            >
-              <Stack spacing={0.5}>
-                <Typography variant="subtitle2">
-                  {isWorkspaceMode ? 'Upload Output' : 'Upload Template Docs'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {isUploadReady
-                    ? isWorkspaceMode
-                      ? 'Ready to upload structured output.'
-                      : 'Ready to upload template docs.'
-                    : isWorkspaceMode
-                      ? 'Complete required setup to enable uploads.'
-                      : 'Select a country to enable uploads.'}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {isWorkspaceMode
-                    ? 'Accepted: JSON, Markdown, TXT, PDF, CSV.'
-                    : 'Accepted: DOCX, TXT, Markdown, JSON. Multiple files supported.'}
-                </Typography>
-              </Stack>
-              <Button variant="outlined" component="label" disabled={loading || !isUploadReady}>
-                {loading ? 'Parsing...' : isWorkspaceMode ? 'Upload Workspace Output' : 'Upload Template Docs'}
-                <input
-                  hidden
-                  type="file"
-                  accept={isWorkspaceMode ? workspaceOutputAccept : stylusDocAccept}
-                  multiple={!isWorkspaceMode}
-                  onChange={isWorkspaceMode ? handleUploadWorkspaceOutput : handleUploadStylusDocs}
-                  disabled={loading || !isUploadReady}
-                />
-              </Button>
+          {isWorkspaceMode ? (
+            <Stack spacing={2}>
+              <Paper variant="outlined" sx={{ p: 2, borderStyle: 'dashed' }}>
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={2}
+                  alignItems={{ sm: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle2">Workspace Artifact Bundle Upload (recommended)</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Upload mapping summary, overall summary, gap analysis, and open questions together.
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Accepted: JSON, Markdown, TXT, DOCX. Multiple files supported.
+                    </Typography>
+                  </Stack>
+                  <Button variant="outlined" component="label" disabled={loading || !isUploadReady}>
+                    {loading ? 'Parsing...' : 'Upload Workspace Artifact Bundle'}
+                    <input
+                      hidden
+                      type="file"
+                      accept={workspaceOutputAccept}
+                      multiple
+                      onChange={handleUploadWorkspaceArtifacts}
+                      disabled={loading || !isUploadReady}
+                    />
+                  </Button>
+                </Stack>
+              </Paper>
             </Stack>
-          </Paper>
+          ) : (
+            <Paper variant="outlined" sx={{ p: 2, borderStyle: 'dashed' }}>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={2}
+                alignItems={{ sm: 'center' }}
+                justifyContent="space-between"
+              >
+                <Stack spacing={0.5}>
+                  <Typography variant="subtitle2">Upload Template Docs</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {isUploadReady ? 'Ready to upload template docs.' : 'Select a country to enable uploads.'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Accepted: DOCX, TXT, Markdown, JSON. Multiple files supported.
+                  </Typography>
+                </Stack>
+                <Button variant="outlined" component="label" disabled={loading || !isUploadReady}>
+                  {loading ? 'Parsing...' : 'Upload Template Docs'}
+                  <input
+                    hidden
+                    type="file"
+                    accept={stylusDocAccept}
+                    multiple
+                    onChange={handleUploadStylusDocs}
+                    disabled={loading || !isUploadReady}
+                  />
+                </Button>
+              </Stack>
+            </Paper>
+          )}
           {isWorkspaceMode && uploadMeta ? (
             <Stack spacing={0.5}>
               <Typography variant="caption" color="text.secondary">
@@ -1278,9 +1506,366 @@ export function RequirementAnalysisPage() {
               ) : null}
             </Stack>
           ) : null}
+          {isWorkspaceMode && bundle ? (
+            <Stack spacing={0.5}>
+              <Typography variant="caption" color="text.secondary">
+                Artifacts loaded
+              </Typography>
+              <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
+                {bundle.files.mappingSummary ? (
+                  <Chip label={`Mapping: ${bundle.files.mappingSummary.fileName}`} size="small" variant="outlined" />
+                ) : null}
+                {bundle.files.overallSummary ? (
+                  <Chip label={`Summary: ${bundle.files.overallSummary.fileName}`} size="small" variant="outlined" />
+                ) : null}
+                {bundle.files.gapAnalysis ? (
+                  <Chip label={`Gap: ${bundle.files.gapAnalysis.fileName}`} size="small" variant="outlined" />
+                ) : null}
+                {bundle.files.openQuestions ? (
+                  <Chip
+                    label={`Open Questions: ${bundle.files.openQuestions.fileName}`}
+                    size="small"
+                    variant="outlined"
+                  />
+                ) : null}
+              </Stack>
+            </Stack>
+          ) : null}
           {error ? <Alert severity="error">{error}</Alert> : null}
         </Stack>
       </SectionCard>
+
+      {isWorkspaceMode ? (
+        <SectionCard title="Workspace Outputs" subtitle="Review uploaded artifacts and validate content.">
+          {hasBundle ? (
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                {(['MAPPING', 'SUMMARY', 'GAP', 'QUESTIONS', 'JIRA'] as const).map((tab) => (
+                  <Button
+                    key={tab}
+                    size="small"
+                    variant={activeTab === tab ? 'contained' : 'outlined'}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab === 'MAPPING'
+                      ? 'Mapping Summary'
+                      : tab === 'SUMMARY'
+                        ? 'Overall Summary'
+                        : tab === 'GAP'
+                          ? 'Gap Analysis'
+                          : tab === 'QUESTIONS'
+                            ? 'Open Questions'
+                            : 'Jira Blotter'}
+                  </Button>
+                ))}
+              </Stack>
+
+              {activeTab === 'MAPPING' ? (
+                bundle.files.mappingSummary ? (
+                  <Stack spacing={2}>
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+                      {Object.entries(mappingCounts).map(([key, value]) => (
+                        <Chip key={key} label={`${key}: ${value}`} size="small" variant="outlined" />
+                      ))}
+                      {!Object.keys(mappingCounts).length ? (
+                        <Chip label="No classifications found" size="small" variant="outlined" />
+                      ) : null}
+                    </Stack>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+                      <TextField
+                        select
+                        label="Classification"
+                        size="small"
+                        value={classificationFilter}
+                        onChange={handleClassificationFilterChange}
+                        sx={{ minWidth: 200 }}
+                      >
+                        {classificationOptions.map((option) => (
+                          <MenuItem key={option} value={option}>
+                            {option}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <TextField
+                        label="Min Confidence"
+                        size="small"
+                        type="number"
+                        value={minConfidence}
+                        onChange={handleMinConfidenceChange}
+                        sx={{ minWidth: 160 }}
+                        inputProps={{ min: 0 }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        Showing {filteredMappingItems.length} of {mappingItems.length}
+                      </Typography>
+                    </Stack>
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table size="small" aria-label="Mapping summary">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Requirement Id</TableCell>
+                            <TableCell>Matched Global Capability</TableCell>
+                            <TableCell>Classification</TableCell>
+                            <TableCell>Confidence</TableCell>
+                            <TableCell>Requirement Description</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {filteredMappingItems.map((item, index) => {
+                            const description = item.country_requirement_description || '';
+                            const short =
+                              description.length > 110 ? `${description.slice(0, 107)}...` : description;
+                            return (
+                              <TableRow
+                                key={`${item.country_requirement_id}-${index}`}
+                                hover
+                                onClick={() => handleOpenMappingDetails(item)}
+                                sx={{ cursor: 'pointer' }}
+                              >
+                                <TableCell>{item.country_requirement_id}</TableCell>
+                                <TableCell>{item.matched_global_capability_id ?? '—'}</TableCell>
+                                <TableCell>{item.classification ?? '—'}</TableCell>
+                                <TableCell>
+                                  {item.confidence_score !== undefined ? item.confidence_score : 'n/a'}
+                                </TableCell>
+                                <TableCell>{short || '—'}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          {!filteredMappingItems.length ? (
+                            <TableRow>
+                              <TableCell colSpan={5}>No mapping rows match the current filters.</TableCell>
+                            </TableRow>
+                          ) : null}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Stack>
+                ) : (
+                  <Alert severity="info" variant="outlined">
+                    Upload mapping_summary.json to view mapping details.
+                  </Alert>
+                )
+              ) : null}
+
+              {activeTab === 'SUMMARY' ? (
+                bundle.files.overallSummary ? (
+                  <Paper variant="outlined" sx={{ p: 2, maxHeight: 360, overflow: 'auto' }}>
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                      {bundle.files.overallSummary.markdown}
+                    </Typography>
+                  </Paper>
+                ) : (
+                  <Alert severity="info" variant="outlined">
+                    Upload overall_result_summary.md to view the summary.
+                  </Alert>
+                )
+              ) : null}
+
+              {activeTab === 'GAP' ? (
+                <Stack spacing={2}>
+                  {bundle.files.gapAnalysis ? (
+                    <Paper variant="outlined" sx={{ p: 2, maxHeight: 360, overflow: 'auto' }}>
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                        {bundle.files.gapAnalysis.markdown}
+                      </Typography>
+                    </Paper>
+                  ) : (
+                    <Alert severity="info" variant="outlined">
+                      Upload gap_analysis.md to view the analysis.
+                    </Alert>
+                  )}
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="subtitle2">High Impact Deltas</Typography>
+                    {highImpactDeltas.length ? (
+                      <Table size="small" aria-label="High impact deltas">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Requirement Id</TableCell>
+                            <TableCell>Line</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {highImpactDeltas.map((delta, index) => (
+                            <TableRow key={`${delta.id ?? 'delta'}-${index}`}>
+                              <TableCell>{delta.id ?? '—'}</TableCell>
+                              <TableCell>{delta.line}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No NET_NEW or GLOBAL_MODIFY lines detected.
+                      </Typography>
+                    )}
+                  </Paper>
+                </Stack>
+              ) : null}
+
+              {activeTab === 'QUESTIONS' ? (
+                openQuestions.length ? (
+                  <Stack spacing={2}>
+                    <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                      <Chip
+                        label={allQuestionsAnswered ? 'All answered' : `${unansweredOpenQuestions.length} unanswered`}
+                        color={allQuestionsAnswered ? 'success' : 'warning'}
+                        size="small"
+                        variant="outlined"
+                      />
+                      <Button size="small" variant="outlined" onClick={handleSaveOpenQuestionAnswers}>
+                        Save Answers
+                      </Button>
+                    </Stack>
+                    {openQuestions.map((question) => {
+                      const answer = openQuestionAnswers[question.id] ?? '';
+                      const isMissing = !answer.trim();
+                      return (
+                        <Paper key={question.id} variant="outlined" sx={{ p: 2 }}>
+                          <Stack spacing={1}>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <Typography variant="subtitle2">
+                                {question.id}: {question.question}
+                              </Typography>
+                              <Chip
+                                label={isMissing ? 'Unanswered' : 'Answered'}
+                                size="small"
+                                color={isMissing ? 'warning' : 'success'}
+                                variant="outlined"
+                              />
+                            </Stack>
+                            {question.context ? (
+                              <Typography variant="body2" color="text.secondary">
+                                Context: {question.context}
+                              </Typography>
+                            ) : null}
+                            <TextField
+                              label="Answer"
+                              value={answer}
+                              onChange={(event) => handleOpenQuestionAnswerChange(question.id, event.target.value)}
+                              fullWidth
+                              multiline
+                              minRows={2}
+                              error={isMissing}
+                              helperText={isMissing ? 'Answer required to create Jira drafts.' : ' '}
+                            />
+                          </Stack>
+                        </Paper>
+                      );
+                    })}
+                  </Stack>
+                ) : (
+                  <Alert severity="info" variant="outlined">
+                    Upload open_questions.md to review and answer questions.
+                  </Alert>
+                )
+              ) : null}
+
+              {activeTab === 'JIRA' ? (
+                jiraEpics.length ? (
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small" aria-label="Jira blotter">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Capability</TableCell>
+                          <TableCell>Epic Summary</TableCell>
+                          <TableCell>Scope</TableCell>
+                          <TableCell>#Stories</TableCell>
+                          <TableCell align="right">Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {jiraEpics.map((epic, index) => {
+                          const capabilityLabel = capabilityLabelLookup.get(epic.capabilityId) ?? epic.capabilityId;
+                          return (
+                            <TableRow
+                              key={`${epic.capabilityId}-${index}`}
+                              hover
+                              onClick={() => handleOpenEpicDetails(index)}
+                              sx={{ cursor: 'pointer' }}
+                            >
+                              <TableCell>{capabilityLabel}</TableCell>
+                              <TableCell>{epic.summary}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={epic.scope}
+                                  size="small"
+                                  color={jiraScopeColorLookup[epic.scope]}
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell>{epic.children?.length ?? 0}</TableCell>
+                              <TableCell align="right">
+                                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                  <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleOpenEpicDetails(index);
+                                    }}
+                                  >
+                                    View
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleCopySingleEpic(epic);
+                                    }}
+                                  >
+                                    Copy
+                                  </Button>
+                                </Stack>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                ) : (
+                  <Alert severity="info" variant="outlined">
+                    Create Jira drafts to populate the blotter.
+                  </Alert>
+                )
+              ) : null}
+            </Stack>
+          ) : (
+            <Alert severity="info" variant="outlined">
+              Upload workspace artifact bundle to preview the outputs.
+            </Alert>
+          )}
+        </SectionCard>
+      ) : null}
+
+      {isWorkspaceMode ? (
+        <SectionCard title="Actions" subtitle="Generate Jira drafts from the uploaded artifacts.">
+          <Stack spacing={1}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
+              <Button variant="contained" onClick={handleCreateJiraFromBundle} disabled={!canCreateJira}>
+                Create Jira Drafts
+              </Button>
+              {jiraCreated ? <Chip label="Drafts created" size="small" color="success" variant="outlined" /> : null}
+              {!bundle?.files.mappingSummary ? (
+                <Chip label="Upload mapping_summary.json" size="small" variant="outlined" color="warning" />
+              ) : null}
+              {bundle?.files.openQuestions && !allQuestionsAnswered ? (
+                <Chip
+                  label={`${unansweredOpenQuestions.length} open question${unansweredOpenQuestions.length === 1 ? '' : 's'} unanswered`}
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                />
+              ) : null}
+            </Stack>
+            <Typography variant="caption" color="text.secondary">
+              Jira drafts are generated in the UI only and can be exported as JSON.
+            </Typography>
+          </Stack>
+        </SectionCard>
+      ) : null}
 
       <SectionCard title="Analysis Output" subtitle="Jira draft epics generated from the parsed output.">
         {isWorkspaceMode ? (
@@ -1328,25 +1913,28 @@ export function RequirementAnalysisPage() {
                 </Stack>
                 {analysis.jiraEpics.length ? (
                   <TableContainer component={Paper} variant="outlined">
-                    <Table size="small" aria-label="Jira epic drafts">
+                    <Table size="small" aria-label="Jira blotter">
                       <TableHead>
                         <TableRow>
                           <TableCell>Capability</TableCell>
-                          <TableCell>Title</TableCell>
+                          <TableCell>Epic Summary</TableCell>
                           <TableCell>Scope</TableCell>
-                          <TableCell>Dependencies</TableCell>
-                          <TableCell align="right">Details</TableCell>
-                          <TableCell align="right">Copy</TableCell>
+                          <TableCell>#Stories</TableCell>
+                          <TableCell align="right">Actions</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {analysis.jiraEpics.map((epic, index) => {
                           const capabilityLabel = capabilityLabelLookup.get(epic.capabilityId) ?? epic.capabilityId;
-                          const dependencyLabels = epic.dependencies.map((dep) => capabilityLabelLookup.get(dep) ?? dep);
                           return (
-                            <TableRow key={`${epic.capabilityId}-${index}`} hover>
+                            <TableRow
+                              key={`${epic.capabilityId}-${index}`}
+                              hover
+                              onClick={() => handleOpenEpicDetails(index)}
+                              sx={{ cursor: 'pointer' }}
+                            >
                               <TableCell>{capabilityLabel}</TableCell>
-                              <TableCell>{epic.title}</TableCell>
+                              <TableCell>{epic.summary}</TableCell>
                               <TableCell>
                                 <Chip
                                   label={epic.scope}
@@ -1355,16 +1943,30 @@ export function RequirementAnalysisPage() {
                                   variant="outlined"
                                 />
                               </TableCell>
-                              <TableCell>{dependencyLabels.length ? dependencyLabels.join(', ') : 'None'}</TableCell>
+                              <TableCell>{epic.children?.length ?? 0}</TableCell>
                               <TableCell align="right">
-                                <Button size="small" variant="text" onClick={() => handleOpenEpicDetails(index)}>
-                                  View
-                                </Button>
-                              </TableCell>
-                              <TableCell align="right">
-                                <Button size="small" variant="outlined" onClick={() => handleCopySingleEpic(epic)}>
-                                  Copy
-                                </Button>
+                                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                  <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleOpenEpicDetails(index);
+                                    }}
+                                  >
+                                    View
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleCopySingleEpic(epic);
+                                    }}
+                                  >
+                                    Copy
+                                  </Button>
+                                </Stack>
                               </TableCell>
                             </TableRow>
                           );
@@ -1377,12 +1979,12 @@ export function RequirementAnalysisPage() {
                 )}
               </Stack>
             </Stack>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              Upload Ask AI output to generate Jira drafts.
-            </Typography>
-          )
-        ) : stylusDocs.length ? (
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            Create Jira drafts from workspace artifacts to populate this table.
+          </Typography>
+        )
+      ) : stylusDocs.length ? (
           <Stack spacing={2}>
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
@@ -1554,25 +2156,28 @@ export function RequirementAnalysisPage() {
             </Stack>
             {stylusEpics.length ? (
               <TableContainer component={Paper} variant="outlined">
-                <Table size="small" aria-label="Jira epic drafts">
+                <Table size="small" aria-label="Jira blotter">
                   <TableHead>
                     <TableRow>
                       <TableCell>Capability</TableCell>
-                      <TableCell>Title</TableCell>
+                      <TableCell>Epic Summary</TableCell>
                       <TableCell>Scope</TableCell>
-                      <TableCell>Dependencies</TableCell>
-                      <TableCell align="right">Details</TableCell>
-                      <TableCell align="right">Copy</TableCell>
+                      <TableCell>#Stories</TableCell>
+                      <TableCell align="right">Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {stylusEpics.map((epic, index) => {
                       const capabilityLabel = capabilityLabelLookup.get(epic.capabilityId) ?? epic.capabilityId;
-                      const dependencyLabels = epic.dependencies.map((dep) => capabilityLabelLookup.get(dep) ?? dep);
                       return (
-                        <TableRow key={`${epic.capabilityId}-${index}`} hover>
+                        <TableRow
+                          key={`${epic.capabilityId}-${index}`}
+                          hover
+                          onClick={() => handleOpenEpicDetails(index)}
+                          sx={{ cursor: 'pointer' }}
+                        >
                           <TableCell>{capabilityLabel}</TableCell>
-                          <TableCell>{epic.title}</TableCell>
+                          <TableCell>{epic.summary}</TableCell>
                           <TableCell>
                             <Chip
                               label={epic.scope}
@@ -1581,16 +2186,30 @@ export function RequirementAnalysisPage() {
                               variant="outlined"
                             />
                           </TableCell>
-                          <TableCell>{dependencyLabels.length ? dependencyLabels.join(', ') : 'None'}</TableCell>
+                          <TableCell>{epic.children?.length ?? 0}</TableCell>
                           <TableCell align="right">
-                            <Button size="small" variant="text" onClick={() => handleOpenEpicDetails(index)}>
-                              View
-                            </Button>
-                          </TableCell>
-                          <TableCell align="right">
-                            <Button size="small" variant="outlined" onClick={() => handleCopySingleEpic(epic)}>
-                              Copy
-                            </Button>
+                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                              <Button
+                                size="small"
+                                variant="text"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleOpenEpicDetails(index);
+                                }}
+                              >
+                                View
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleCopySingleEpic(epic);
+                                }}
+                              >
+                                Copy
+                              </Button>
+                            </Stack>
                           </TableCell>
                         </TableRow>
                       );
@@ -1768,6 +2387,82 @@ export function RequirementAnalysisPage() {
 
       <Drawer
         anchor="right"
+        open={isMappingDrawerOpen}
+        onClose={() => setIsMappingDrawerOpen(false)}
+        PaperProps={{ sx: { width: { xs: '100%', sm: 420 } } }}
+      >
+        <Stack spacing={2} sx={{ p: 2 }}>
+          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+            <Typography variant="subtitle1">Mapping Summary Detail</Typography>
+            <Button size="small" variant="text" onClick={() => setIsMappingDrawerOpen(false)}>
+              Close
+            </Button>
+          </Stack>
+          {selectedMappingItem ? (
+            <Stack spacing={1.5}>
+              <Stack spacing={0.5}>
+                <Typography variant="caption" color="text.secondary">
+                  {selectedMappingItem.country_requirement_id}
+                </Typography>
+                <Typography variant="subtitle2">{selectedMappingItem.country_requirement_description}</Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip label={selectedMappingItem.classification ?? '—'} size="small" variant="outlined" />
+                  <Typography variant="caption" color="text.secondary">
+                    Confidence: {selectedMappingItem.confidence_score ?? 'n/a'}
+                  </Typography>
+                </Stack>
+              </Stack>
+
+              <Divider />
+
+              <Stack spacing={0.5}>
+                <Typography variant="subtitle2">Matched Global Capability</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {selectedMappingItem.matched_global_capability_id ?? '—'}
+                </Typography>
+                {selectedMappingItem.matched_global_capability_description ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {selectedMappingItem.matched_global_capability_description}
+                  </Typography>
+                ) : null}
+              </Stack>
+
+              {selectedMappingItem.reasoning ? (
+                <>
+                  <Divider />
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle2">Reasoning</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                      {selectedMappingItem.reasoning}
+                    </Typography>
+                  </Stack>
+                </>
+              ) : null}
+
+              {selectedMappingItem.comparison_breakdown ? (
+                <>
+                  <Divider />
+                  <Stack spacing={0.5}>
+                    <Typography variant="subtitle2">Comparison Breakdown</Typography>
+                    {Object.entries(selectedMappingItem.comparison_breakdown).map(([key, value]) => (
+                      <Typography key={key} variant="body2" color="text.secondary">
+                        {key}: {value}
+                      </Typography>
+                    ))}
+                  </Stack>
+                </>
+              ) : null}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Select a mapping row to view details.
+            </Typography>
+          )}
+        </Stack>
+      </Drawer>
+
+      <Drawer
+        anchor="right"
         open={isEpicDrawerOpen}
         onClose={() => setIsEpicDrawerOpen(false)}
         PaperProps={{ sx: { width: { xs: '100%', sm: 420 } } }}
@@ -1810,20 +2505,24 @@ export function RequirementAnalysisPage() {
 
               <Stack spacing={0.5}>
                 <Typography variant="subtitle2">Description</Typography>
-                <Stack spacing={0.5}>
-                  {(activeEpic.descriptionText || activeEpic.summary).split('\n').map((line, index) => (
-                    <Typography key={`epic-summary-${index}`} variant="body2" color="text.secondary">
-                      • {line.replace(/^-+\s*/, '')}
-                    </Typography>
-                  ))}
-                </Stack>
+                <Paper variant="outlined" sx={{ p: 1.5, maxHeight: 240, overflow: 'auto' }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {activeEpic.descriptionText || activeEpic.summary}
+                  </Typography>
+                </Paper>
               </Stack>
 
               <Divider />
 
               <Stack spacing={0.5}>
                 <Typography variant="subtitle2">Acceptance Criteria</Typography>
-                {activeEpic.acceptanceCriteria.length ? (
+                {activeEpic.acceptanceCriteriaText ? (
+                  <Paper variant="outlined" sx={{ p: 1.5, maxHeight: 220, overflow: 'auto' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                      {activeEpic.acceptanceCriteriaText}
+                    </Typography>
+                  </Paper>
+                ) : activeEpic.acceptanceCriteria.length ? (
                   <Stack spacing={0.5}>
                     {activeEpic.acceptanceCriteria.map((criteria, index) => (
                       <Typography key={`epic-criteria-${index}`} variant="body2" color="text.secondary">
@@ -1843,13 +2542,24 @@ export function RequirementAnalysisPage() {
               <Stack spacing={0.5}>
                 <Typography variant="subtitle2">Children</Typography>
                 {activeEpic.children?.length ? (
-                  <Stack spacing={0.5}>
-                    {activeEpic.children.map((child, index) => (
-                      <Typography key={`epic-child-${index}`} variant="body2" color="text.secondary">
-                        • {child.type}: {child.summary}
-                      </Typography>
-                    ))}
-                  </Stack>
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small" aria-label="Child stories">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Type</TableCell>
+                          <TableCell>Summary</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {activeEpic.children.map((child, index) => (
+                          <TableRow key={`epic-child-${index}`}>
+                            <TableCell>{child.type}</TableCell>
+                            <TableCell>{child.summary}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
                 ) : (
                   <Typography variant="body2" color="text.secondary">
                     No child stories generated.
