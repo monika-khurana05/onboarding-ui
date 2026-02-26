@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Test Case Generation Platform (Vertex AI + Postgres + pgvector)</title>
+  <meta name="description" content="Stakeholder-friendly requirement page for a Vertex AI powered RAG system that generates test plans and test cases using Postgres + pgvector only." />
+  <style>
+    :root{
+      --bg: #0b1020;
+      --panel: rgba(255,255,255,.06);
+      --panel2: rgba(255,255,255,.08);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.68);
+      --faint: rgba(255,255,255,.45);
+      --brand: #7c5cff;
+      --brand2: #22d3ee;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --border: rgba(255,255,255,.12);
+      --shadow: 0 18px 60px rgba(0,0,0,.35);
+      --radius: 18px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+
+    /* light mode */
+    [data-theme="light"]{
+      --bg: #f7f7fb;
+      --panel: rgba(0,0,0,.035);
+      --panel2: rgba(0,0,0,.05);
+      --text: rgba(0,0,0,.90);
+      --muted: rgba(0,0,0,.68);
+      --faint: rgba(0,0,0,.45);
+      --border: rgba(0,0,0,.10);
+      --shadow: 0 18px 50px rgba(0,0,0,.10);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 15% -10%, rgba(124,92,255,.35), transparent 65%),
+        radial-gradient(1000px 600px at 85% 0%, rgba(34,211,238,.22), transparent 60%),
+        radial-gradient(900px 700px at 65% 110%, rgba(124,92,255,.18), transparent 60%),
+        var(--bg);
+      line-height:1.55;
+      overflow-x:hidden;
+    }
+
+    a{color:inherit; text-decoration:none}
+    a:hover{opacity:.92}
+
+    .container{max-width:1120px; margin:0 auto; padding:22px}
+    .nav{
+      position:sticky; top:0; z-index:50;
+      backdrop-filter: blur(10px);
+      background: linear-gradient(to bottom, rgba(0,0,0,.25), rgba(0,0,0,0));
+      border-bottom: 1px solid var(--border);
+    }
+    [data-theme="light"] .nav{
+      background: linear-gradient(to bottom, rgba(247,247,251,.9), rgba(247,247,251,0));
+    }
+
+    .nav-inner{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:14px;
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px; font-weight:700;
+      letter-spacing:.2px;
+    }
+    .logo{
+      width:34px; height:34px; border-radius:10px;
+      background: linear-gradient(135deg, var(--brand), var(--brand2));
+      box-shadow: 0 10px 30px rgba(124,92,255,.22);
+    }
+    .nav-links{
+      display:flex; gap:14px; flex-wrap:wrap;
+      font-size:14px; color: var(--muted);
+    }
+    .nav-links a{
+      padding:8px 10px; border-radius:10px;
+    }
+    .nav-links a:hover{
+      background: var(--panel);
+      color: var(--text);
+    }
+
+    .actions{display:flex; align-items:center; gap:10px}
+    .btn{
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding:10px 12px;
+      border-radius: 12px;
+      cursor:pointer;
+      box-shadow: none;
+      transition: transform .08s ease, background .15s ease;
+      font-weight:600;
+      font-size:14px;
+      user-select:none;
+    }
+    .btn:hover{background: var(--panel2)}
+    .btn:active{transform: translateY(1px)}
+    .btn.primary{
+      border-color: rgba(124,92,255,.35);
+      background: linear-gradient(135deg, rgba(124,92,255,.22), rgba(34,211,238,.16));
+    }
+
+    .hero{
+      padding:46px 0 22px;
+    }
+    .pillrow{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size:13px;
+    }
+    .dot{width:8px;height:8px;border-radius:99px;background: var(--brand2)}
+    .dot.p{background: var(--brand)}
+    .dot.g{background: var(--ok)}
+    .dot.w{background: var(--warn)}
+
+    h1{
+      font-size: clamp(28px, 4.2vw, 44px);
+      line-height:1.1;
+      margin: 10px 0 10px;
+      letter-spacing:-.6px;
+    }
+    .subtitle{
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 80ch;
+      margin: 0 0 18px;
+    }
+
+    .grid{display:grid; gap:14px;}
+    .grid.cols-3{grid-template-columns: repeat(3, minmax(0,1fr))}
+    .grid.cols-2{grid-template-columns: repeat(2, minmax(0,1fr))}
+    @media (max-width: 980px){
+      .grid.cols-3{grid-template-columns: 1fr}
+      .grid.cols-2{grid-template-columns: 1fr}
+      .nav-links{display:none}
+    }
+
+    .card{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding:16px;
+      box-shadow: var(--shadow);
+    }
+    .card h3{margin:0 0 6px; font-size:16px}
+    .card p{margin:0; color: var(--muted); font-size:14px}
+
+    .section{padding: 26px 0}
+    .section h2{
+      font-size: 22px;
+      margin:0 0 12px;
+      letter-spacing:-.3px;
+    }
+    .section .lead{
+      margin:0 0 14px;
+      color: var(--muted);
+      max-width: 92ch;
+      font-size: 15px;
+    }
+
+    .kpi{
+      display:flex; align-items:flex-start; gap:12px;
+      padding:14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--panel), rgba(255,255,255,0));
+    }
+    .kpi strong{display:block; font-size:14px; margin-bottom:2px}
+    .kpi span{color: var(--muted); font-size:13px}
+    .icon{
+      width:34px; height:34px; border-radius:12px;
+      background: linear-gradient(135deg, rgba(124,92,255,.25), rgba(34,211,238,.18));
+      border: 1px solid rgba(255,255,255,.14);
+      display:grid; place-items:center;
+      flex: 0 0 auto;
+    }
+    .icon svg{opacity:.9}
+
+    .flow{
+      padding:16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--panel), rgba(255,255,255,0));
+      overflow:hidden;
+    }
+    .hint{color: var(--faint); font-size:12.5px; margin-top:10px}
+
+    .code{
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: rgba(255,255,255,.88);
+      background: rgba(0,0,0,.22);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      overflow:auto;
+      line-height:1.55;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+      white-space: pre;
+    }
+    [data-theme="light"] .code{
+      color: rgba(0,0,0,.85);
+      background: rgba(0,0,0,.04);
+    }
+
+    .list{
+      margin:0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .list li{margin: 6px 0}
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      padding:4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      font-size: 12px;
+      color: var(--muted);
+      gap:6px;
+    }
+    .badge b{color: var(--text); font-weight:700}
+
+    .callout{
+      border-left: 3px solid rgba(124,92,255,.6);
+      padding: 12px 12px 12px 14px;
+      background: linear-gradient(90deg, rgba(124,92,255,.13), transparent 70%);
+      border-radius: 14px;
+      border: 1px solid rgba(124,92,255,.22);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .footer{
+      padding: 26px 0 40px;
+      color: var(--faint);
+      font-size: 13px;
+    }
+
+    .toc{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
+    .toc a{
+      padding:8px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .toc a:hover{color: var(--text); background: var(--panel2)}
+
+    .two{display:grid; grid-template-columns: 1.1fr .9fr; gap:14px;}
+    @media (max-width: 980px){ .two{grid-template-columns:1fr} }
+
+    .hr{height:1px; background: var(--border); margin: 16px 0;}
+
+    /* Mermaid container */
+    .mermaid{
+      background: rgba(0,0,0,.10);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      overflow:auto;
+    }
+    [data-theme="light"] .mermaid{
+      background: rgba(0,0,0,.03);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="nav">
+    <div class="container nav-inner">
+      <div class="brand" title="Test Case Generation Platform">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <div style="font-size:14px; line-height:1.1;">Test Case Generator</div>
+          <div style="font-size:12px; color:var(--muted); font-weight:600;">Vertex AI • Postgres + pgvector • RAG</div>
+        </div>
+      </div>
+
+      <div class="nav-links" aria-label="Quick navigation">
+        <a href="#overview">Overview</a>
+        <a href="#flow">Sequence</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#data">Data model</a>
+        <a href="#rag">RAG</a>
+        <a href="#pipeline">Generation</a>
+        <a href="#security">Security</a>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="themeBtn" aria-label="Toggle theme">🌗 Theme</button>
+        <a class="btn primary" href="#flow">View Diagram</a>
+      </div>
+    </div>
+  </div>
+
+  <main class="container">
+    <header class="hero" id="overview">
+      <div class="pillrow">
+        <span class="pill"><span class="dot p"></span>Cloud Run API</span>
+        <span class="pill"><span class="dot"></span>Vertex AI (Gemini + Embeddings)</span>
+        <span class="pill"><span class="dot g"></span>Postgres + pgvector (RAG Index)</span>
+        <span class="pill"><span class="dot w"></span>No GCS / No extra GCP services</span>
+      </div>
+
+      <h1>Test Case Generation Platform</h1>
+      <p class="subtitle">
+        A system that generates <b>test plans</b> and <b>test cases</b> from requirements, Jira context, and sanitized production logs.
+        All data is stored in <b>PostgreSQL</b>, retrieval uses <b>pgvector</b>, and generation uses <b>Vertex AI APIs only</b> (Gemini + Embeddings).
+      </p>
+
+      <div class="toc" aria-label="Table of contents">
+        <a href="#value">Why this matters</a>
+        <a href="#flow">Sequence diagram</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#data">Where data lives</a>
+        <a href="#rag">RAG approach</a>
+        <a href="#pipeline">Generation pipeline</a>
+        <a href="#api">API endpoints</a>
+        <a href="#security">Security</a>
+      </div>
+
+      <section class="section" id="value" style="padding-top:18px;">
+        <div class="grid cols-3">
+          <div class="kpi">
+            <div class="icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2v20M2 12h20" stroke="currentColor" stroke-width="2" opacity=".85"/>
+              </svg>
+            </div>
+            <div>
+              <strong>Faster testing</strong>
+              <span>Generate consistent test cases in minutes.</span>
+            </div>
+          </div>
+
+          <div class="kpi">
+            <div class="icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M4 6h16M4 12h10M4 18h16" stroke="currentColor" stroke-width="2" opacity=".85"/>
+              </svg>
+            </div>
+            <div>
+              <strong>Less guesswork</strong>
+              <span>Tests are grounded in retrieved evidence chunks.</span>
+            </div>
+          </div>
+
+          <div class="kpi">
+            <div class="icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M12 21s8-4.5 8-11V5l-8-3-8 3v5c0 6.5 8 11 8 11Z" stroke="currentColor" stroke-width="2" opacity=".85"/>
+              </svg>
+            </div>
+            <div>
+              <strong>Audit-ready</strong>
+              <span>Traceability links every test to requirements and evidence.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </header>
+
+    <!-- FLOW -->
+    <section class="section" id="flow">
+      <h2>Sequence diagram</h2>
+      <p class="lead">
+        The user requests generation. The API retrieves relevant evidence from Postgres+pgvector, calls Gemini to produce a plan and test cases,
+        then validates and stores outputs. No external storage services are used.
+      </p>
+
+      <div class="flow">
+        <div class="mermaid" role="img" aria-label="Sequence diagram: Test case generation">
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant UI as React UI
+    participant API as Cloud Run API (Orchestrator)
+    participant DB as Postgres + pgvector
+    participant EMB as Vertex AI Embeddings API
+    participant LLM as Vertex AI Gemini
+    participant VAL as Validation Service (XML/XSD + Rules)
+
+    U->>UI: Click "Generate Test Cases"
+    UI->>API: POST /datasets/{id}/generate (country, flow, messageType, options)
+
+    API->>DB: Create generation_job (PENDING)
+    API->>DB: Load dataset metadata + versions
+
+    API->>EMB: Create query embeddings
+    EMB-->>API: Query vectors
+
+    API->>DB: Vector search (pgvector) + metadata filters
+    DB-->>API: Top-K evidence chunks + citations
+
+    API->>LLM: Pass A - Generate Test Plan (structured JSON) + evidence
+    LLM-->>API: TestPlan JSON (scenarios, traceability, open questions)
+
+    API->>DB: Store TestPlan + evidence references
+
+    API->>LLM: Pass B - Generate Test Cases (XML/JSON) from TestPlan + evidence
+    LLM-->>API: TestCases + traceability
+
+    API->>VAL: Validate (schema + rules + dedupe)
+    VAL-->>API: Validation report (pass/fail)
+
+    alt Validation PASS
+        API->>DB: Store outputs + mark job COMPLETED
+        API-->>UI: Job COMPLETED + output ids
+        UI-->>U: Show test cases + evidence + report
+    else Validation FAIL
+        API->>DB: Store draft outputs + mark job FAILED
+        API-->>UI: Job FAILED + issues
+        UI-->>U: Show failures + regenerate option
+    end
+        </div>
+
+        <div class="hint">
+          Retrieval uses metadata filters (country/flow/message type/capability) before vector similarity to reduce hallucinations.
+        </div>
+      </div>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section class="section" id="architecture">
+      <h2>Architecture</h2>
+      <p class="lead">
+        Minimal services: UI + API + Postgres + Vertex AI. Postgres stores both documents and outputs; pgvector powers retrieval.
+      </p>
+
+      <div class="two">
+        <div class="card">
+          <h3>Core components</h3>
+          <div class="hr"></div>
+          <ul class="list">
+            <li><b>React UI</b>: trigger generation and display outputs + evidence.</li>
+            <li><b>Cloud Run API</b>: ingestion, retrieval, orchestration, and job status.</li>
+            <li><b>Postgres + pgvector</b>: documents, metadata, embeddings, traceability, outputs.</li>
+            <li><b>Vertex AI Embeddings</b>: creates vectors for chunks and queries.</li>
+            <li><b>Vertex AI Gemini</b>: generates test plan and test cases.</li>
+            <li><b>Validation Service</b>: schema checks + rules + dedupe.</li>
+          </ul>
+
+          <div class="hr"></div>
+          <div class="callout">
+            <b>Constraint:</b> Only Vertex AI APIs are allowed (Gemini + Embeddings). Storage must be <b>Postgres</b> (no GCS).
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Outputs (what users get)</h3>
+          <div class="hr"></div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+            <span class="badge"><b>Test Plan</b> JSON</span>
+            <span class="badge"><b>Test Cases</b> XML/JSON</span>
+            <span class="badge"><b>Traceability</b> links</span>
+            <span class="badge"><b>Evidence</b> citations</span>
+          </div>
+
+          <p style="margin:0; color:var(--muted); font-size:14px;">
+            Every generated item stores references to evidence chunks so reviewers can see <i>why</i> a test exists.
+          </p>
+
+          <div class="hr"></div>
+
+          <div class="code" aria-label="Example TestPlan JSON shape">
+{
+  "scenarios": [
+    {
+      "scenario_id": "SCN-001",
+      "title": "Validate inbound payment instruction",
+      "coverage": ["positive","negative","boundary"],
+      "requirement_refs": ["REQ-123#AC-2"],
+      "needed_templates": ["pacs.008"],
+      "evidence_chunk_ids": ["CH_91","CH_104"]
+    }
+  ],
+  "open_questions": ["Missing rule for field X in country Y"]
+}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DATA -->
+    <section class="section" id="data">
+      <h2>Where data lives (Postgres is the only storage)</h2>
+      <p class="lead">
+        All raw inputs, processed records, embeddings, and generated outputs are stored in Postgres. pgvector is used for similarity search.
+      </p>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>Stored inputs</h3>
+          <ul class="list">
+            <li>Jira snapshots (epics/stories/acceptance criteria)</li>
+            <li>Requirements documents (parsed text)</li>
+            <li>Sanitized production logs (patterns + error signatures)</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Stored outputs</h3>
+          <ul class="list">
+            <li>Generation jobs (status, timestamps, errors)</li>
+            <li>Test plans (JSON)</li>
+            <li>Test cases (XML/JSON)</li>
+            <li>Validation reports</li>
+            <li>Traceability links (requirement → test → evidence)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <h3>Key tables (logical)</h3>
+        <div class="hr"></div>
+        <ul class="list">
+          <li><b>datasets</b>, <b>documents</b> (type, version, checksum)</li>
+          <li><b>knowledge_records</b> (normalized records)</li>
+          <li><b>chunks</b> (chunk text + metadata)</li>
+          <li><b>embeddings</b> (vector column via pgvector)</li>
+          <li><b>generation_jobs</b>, <b>test_plans</b>, <b>test_cases</b>, <b>validation_reports</b></li>
+          <li><b>traceability_links</b> (requirement_id → testcase_id → chunk_ids)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- RAG -->
+    <section class="section" id="rag">
+      <h2>RAG approach (how the system “finds the right info”)</h2>
+      <p class="lead">
+        The platform first filters by metadata (country/flow/message type/capability) and then runs vector similarity on pgvector.
+        This makes results more accurate and reduces hallucinations.
+      </p>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>Normalize to “Knowledge Records”</h3>
+          <ul class="list">
+            <li><b>REQ_STORY</b>: story + acceptance criteria</li>
+            <li><b>JIRA_BEHAVIOR</b>: implemented behavior + constraints</li>
+            <li><b>PROD_MESSAGE_PATTERN</b>: canonical XML + variants</li>
+            <li><b>PROD_ERROR_PATTERN</b>: error codes + triggers + expected handling</li>
+            <li><b>FIELD_RULE</b>: validations, mappings, constraints</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Multi-stage retrieval</h3>
+          <ul class="list">
+            <li>Retrieve requirements + AC first</li>
+            <li>Then retrieve Jira constraints</li>
+            <li>Then retrieve prod templates and error patterns</li>
+            <li>Dedupe and build a token-budgeted context pack</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- PIPELINE -->
+    <section class="section" id="pipeline">
+      <h2>Generation pipeline (safer 2-pass)</h2>
+      <p class="lead">
+        Pass A creates a structured test plan. Pass B generates final test cases from the plan.
+        A non-LLM validator gates what is published.
+      </p>
+
+      <div class="grid cols-3">
+        <div class="card">
+          <h3>Pass A — Test Plan</h3>
+          <ul class="list">
+            <li>Gemini outputs structured JSON</li>
+            <li>Scenarios + mapping to requirements/AC</li>
+            <li>Coverage tags + open questions</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Pass B — Test Cases</h3>
+          <ul class="list">
+            <li>Generate XML/JSON test cases</li>
+            <li>Expected results + assertions</li>
+            <li>Traceability + evidence chunk ids</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Pass C — Validation</h3>
+          <ul class="list">
+            <li>XML schema (XSD)</li>
+            <li>Required fields + rules</li>
+            <li>Deduplication</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- API -->
+    <section class="section" id="api">
+      <h2>API endpoints (minimal)</h2>
+      <p class="lead">Simple endpoints for dataset creation, ingestion, generation, and result retrieval.</p>
+
+      <div class="card">
+        <div class="code" aria-label="Endpoints">
+POST /datasets
+POST /datasets/{id}/ingest
+POST /datasets/{id}/generate
+GET  /jobs/{id}
+GET  /outputs/{id}
+        </div>
+      </div>
+    </section>
+
+    <!-- SECURITY -->
+    <section class="section" id="security">
+      <h2>Security & guardrails</h2>
+      <p class="lead">
+        The system stores only sanitized data, keeps secrets out of code, and enforces structured outputs and validation rules.
+      </p>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>Security basics</h3>
+          <ul class="list">
+            <li>Service accounts for Vertex AI access</li>
+            <li>DB credentials stored securely (no hardcoding)</li>
+            <li>Sanitize logs before ingestion</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>LLM guardrails</h3>
+          <ul class="list">
+            <li>Structured output (schema-constrained JSON)</li>
+            <li>Evidence-required generation (citations stored)</li>
+            <li>Low temperature for stable outputs</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <h3>MVP build order</h3>
+        <div class="hr"></div>
+        <ul class="list">
+          <li>Postgres schema + dataset management</li>
+          <li>Requirements parsing → chunking → embeddings</li>
+          <li>pgvector retrieval + evidence display</li>
+          <li>Generate Test Plan (structured JSON)</li>
+          <li>Generate Test Cases + validators</li>
+          <li>Add Jira + production patterns</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="footer">
+      <div class="card" style="box-shadow:none;">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div>
+            <div style="font-weight:800; margin-bottom:6px;">Notes</div>
+            <div style="color:var(--muted); font-size:14px;">
+              This page is designed for both technical and non-technical stakeholders: it explains what is built, where data lives,
+              and how the system stays accurate and auditable.
+            </div>
+          </div>
+          <a class="btn primary" href="#overview">Back to top ↑</a>
+        </div>
+      </div>
+
+      <div style="text-align:center; margin-top:14px;">
+        Test Case Generator • Vertex AI APIs only • Postgres + pgvector • Evidence-based RAG
+      </div>
+    </section>
+  </main>
+
+  <!-- Mermaid (renders the sequence diagram) -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    // Theme toggle + smooth scroll (no dependencies)
+    (function(){
+      const key = "testcase_rag_theme";
+      const btn = document.getElementById("themeBtn");
+      const root = document.documentElement;
+
+      function setTheme(t){
+        root.setAttribute("data-theme", t);
+        localStorage.setItem(key, t);
+        // Update mermaid theme for newly rendered diagrams (best-effort)
+        if(window.mermaid){
+          try{
+            mermaid.initialize({ startOnLoad: false, theme: (t === "light" ? "default" : "dark") });
+            // Re-render
+            document.querySelectorAll('.mermaid').forEach((el, i) => {
+              const src = el.getAttribute("data-src") || el.textContent;
+              el.setAttribute("data-src", src);
+              el.innerHTML = src;
+            });
+            mermaid.run();
+          }catch(e){}
+        }
+      }
+
+      const saved = localStorage.getItem(key);
+      if(saved) setTheme(saved);
+
+      btn.addEventListener("click", () => {
+        const cur = root.getAttribute("data-theme") || "dark";
+        setTheme(cur === "dark" ? "light" : "dark");
+      });
+
+      // Smooth scroll for internal links
+      document.addEventListener("click", (e) => {
+        const a = e.target.closest('a[href^="#"]');
+        if(!a) return;
+        const id = a.getAttribute("href");
+        const el = document.querySelector(id);
+        if(!el) return;
+        e.preventDefault();
+        el.scrollIntoView({behavior:"smooth", block:"start"});
+        history.replaceState(null, "", id);
+      });
+    })();
+
+    // Mermaid initial render (auto theme based on current setting)
+    (function(){
+      const cur = document.documentElement.getAttribute("data-theme") || "dark";
+      mermaid.initialize({ startOnLoad: true, theme: (cur === "light" ? "default" : "dark") });
+    })();
+  </script>
+</body>
+</html>
