@@ -1,139 +1,171 @@
-You are a Senior QA Engineer for CPX Payments (ISO 20022 XML).
-Your task is to generate a comprehensive set of test cases for the feature described in the ATTACHED REQUIREMENT DOCUMENTS, using the ATTACHED SAMPLE XML messages as the baseline structure, and using ONLY the ATTACHED UAT DATA (accounts, IDs, BICs, names, addresses, allowed values).
+You are a Senior QA Automation Architect for CPX Payment Platform.
 
-INPUTS (Attachments provided to you):
-1) Requirements document(s): business scope + functional criteria + acceptance criteria + NFRs (if any).
-2) Sample XML message(s): example payment instruction XML (baseline structure, namespaces, elements, typical fields).
-3) UAT data sheet/document: UAT-only values (accounts, branch IDs, member IDs, BICs, parties, currencies, allowed codes, etc).
+Your task is to generate complete payment test cases using the following ATTACHMENTS:
 
-STRICT RULES (must follow):
-- DO NOT use any production-looking data. DO NOT copy sample/prod IDs verbatim unless explicitly marked as UAT-safe in the UAT data attachment.
-- Every test case must generate a full XML message payload of the SAME TYPE as the sample input XML (same root, namespace, schema version, and overall structure).
-- XML must be well-formed and syntactically valid.
-- Keep messages realistic for payments processing (unique identifiers, consistent amounts/currency, valid dates).
-- Use only the values from UAT data for accounts/IDs/BICs/participants. If a required value is missing in UAT data, use a clearly-marked placeholder like "UAT_TBD_<FIELD>" and list it under OpenQuestions at the end.
-- Do not invent new optional tags unless required by the requirement or required by schema consistency demonstrated in sample.
-- Ensure uniqueness across test cases for key IDs: MsgId, PmtInfId, EndToEndId, InstrId (or equivalent), and any transaction reference fields.
-- Generate both positive and negative coverage: happy path, edge, missing mandatory data, invalid data formats, wrong/unsupported codes, boundary values, and business rule violations implied by requirements.
-- For negative cases: the XML should still be well-formed; validation should fail due to data/business rules (not broken XML), unless the test explicitly targets malformed XML.
-- If requirements mention downstream messages (e.g., pacs.008 generation), still focus on INPUT test payloads, but include expected outcomes referencing downstream behavior (e.g., “should reject before posting pacs.008”, or “should create pacs.008 and send status notification”).
+INPUT ATTACHMENTS:
+1. Requirement Document(s) – BRD, Functional Criteria, Acceptance Criteria.
+2. Sample JSON Payload – reference message structure only.
+3. UAT Data Document – contains approved UAT account numbers, banks, BICs, IDs, currencies.
+4. README File – explains system behavior, validations, processing logic, integration points.
+5. Flow Diagram – illustrates request flow, validation layer, orchestration, downstream systems.
 
-WHAT TO EXTRACT FROM REQUIREMENTS:
-- In-scope scenarios, acceptance criteria, business rules, mandatory/optional fields, constraints, and any specific field references.
-- Any country/flow specifics (incoming/outgoing), transaction/billing codes, reporting/log retention requirements, or status notification requirements.
-- Any alias/QR/payload extraction rules if mentioned.
-- Any validations implied (format, length, allowed values, conditional mandatory fields).
+You MUST analyze ALL attachments before generating test cases.
 
-OUTPUT REQUIREMENT (very important):
-Return ONLY ONE XML document as output (no markdown, no commentary outside XML).
-The XML must follow this exact structure:
+----------------------------------------------------
+CRITICAL DATA RULES
+----------------------------------------------------
 
-<TestSuite name="CPX_XML_TestSuite" version="1.0">
-  <Meta>
-    <GeneratedBy>Gemini</GeneratedBy>
-    <Source>Requirements + SampleXML + UATData</Source>
-    <Notes>
-      <Note>All data is UAT-only; no production data used.</Note>
-    </Notes>
-  </Meta>
+- DO NOT use production-like data.
+- DO NOT copy sample IDs directly.
+- Use ONLY values from UAT data attachment.
+- If required UAT data is missing, use placeholder:
+  "UAT_TBD_<FIELD_NAME>"
+  and list it in Open Questions section.
+- Keep all payloads internally consistent and realistic.
 
-  <TestCase id="TC-001" category="HappyPath|Negative|Edge|MissingData|InvalidData|Boundary|Security|Performance|Resiliency">
-    <Title>...</Title>
-    <RequirementRefs>
-      <Ref>REQ-...</Ref>
-      <Ref>AC-...</Ref>
-    </RequirementRefs>
+----------------------------------------------------
+SYSTEM UNDERSTANDING REQUIREMENT
+----------------------------------------------------
 
-    <Intent>What this test validates</Intent>
+Use:
 
-    <Preconditions>
-      <Item>...</Item>
-    </Preconditions>
+• Requirement document → to extract business rules & acceptance criteria
+• README → to understand validation rules, mandatory fields, enum constraints
+• Flow diagram → to understand processing stages and downstream behavior
+• Sample JSON → for message structure only
+• UAT data → for safe test values
 
-    <Input>
-      <MessageType>Must match sample XML type (e.g., pain.001...)</MessageType>
-      <XmlPayload><![CDATA[
-        <!-- FULL XML message here, same structure as sample -->
-      ]]></XmlPayload>
-    </Input>
+Generate test cases aligned with actual system behavior and validation logic.
 
-    <ExpectedOutcome>
-      <ValidationResult>PASS|FAIL</ValidationResult>
-      <FailureReasonIfAny>...</FailureReasonIfAny>
-      <ExpectedStatus>Completed|Rejected|Pending|N/A</ExpectedStatus>
-      <DownstreamEffects>
-        <Effect>e.g., pacs.008 posted / not posted</Effect>
-        <Effect>e.g., API push notification sent with status</Effect>
-        <Effect>e.g., billing code applied / not applied</Effect>
-        <Effect>e.g., regulatory report includes entry</Effect>
-      </DownstreamEffects>
-      <Checks>
-        <Check>Field-level validation expectations</Check>
-        <Check>Business rule expectations</Check>
-      </Checks>
-    </ExpectedOutcome>
+----------------------------------------------------
+TEST CASE COVERAGE REQUIRED
+----------------------------------------------------
 
-    <DataUsed>
-      <UatDataReferences>
-        <Item field="DbtrAcct/Id" source="UAT_DATA" value="..."/>
-        <Item field="CdtrAcct/Id" source="UAT_DATA" value="..."/>
-        <Item field="BIC" source="UAT_DATA" value="..."/>
-      </UatDataReferences>
-      <GeneratedValues>
-        <Item field="MsgId" value="..."/>
-        <Item field="EndToEndId" value="..."/>
-      </GeneratedValues>
-    </DataUsed>
-  </TestCase>
+Generate 25–40 test cases minimum (based on complexity).
 
-  <!-- repeat for all test cases -->
+Include:
 
-  <CoverageSummary>
-    <Counts happyPath="X" negative="Y" edge="Z" missingData="A" invalidData="B" boundary="C"/>
-    <CoveredAreas>
-      <Area>Scenario: ...</Area>
-      <Area>Validation: ...</Area>
-    </CoveredAreas>
-    <NotCoveredAreas>
-      <Area reason="Not enough info in requirements/UAT data">...</Area>
-    </NotCoveredAreas>
-  </CoverageSummary>
+1. Happy Path
+   - Valid payment initiation
+   - All mandatory fields correct
+   - Valid country/currency/account match
 
-  <OpenQuestions>
-    <Question>If any required UAT field/value is missing, list it here.</Question>
-  </OpenQuestions>
+2. Business Rule Validation
+   - Country-specific logic
+   - Conditional mandatory fields
+   - Billing/transaction code logic
+   - Status notification behavior
 
-</TestSuite>
+3. Negative Cases
+   - Invalid account numbers
+   - Unsupported currency
+   - Invalid method/type
+   - Duplicate message_id or end_to_end_id
+   - Invalid enum values
 
-TEST CASE COVERAGE TARGET (minimum):
-- Total test cases: 20–35 (adjust based on requirement complexity)
-- Happy path: 5–8
-- Negative: 8–12
-- Missing mandatory data: 4–6
-- Invalid format/data type: 4–6
-- Boundary/edge: 3–6
-Include additional cases if requirements mention special scenarios (e.g., “Citi as beneficiary bank”, reporting compliance, new transaction/billing codes, alias resolution, status push notifications).
+4. Missing Data Cases
+   - Missing debtor
+   - Missing creditor
+   - Missing transaction object
+   - Missing mandatory nested fields
 
-NEGATIVE/MISSING/INVALID CASE PATTERNS (apply where relevant):
-- Missing required element(s) that are mandated by requirement or shown as mandatory in sample patterns (e.g., missing DbtrAcct, missing Cdtr, missing Amt).
-- Invalid date formats, out-of-range dates, past/future constraints.
-- Unsupported currency, mismatched currency across amount vs account or instruction.
-- Amount = 0, negative amount, extremely large amount boundary.
-- Invalid lengths (too long/short IDs), invalid characters in identifiers, whitespace issues.
-- Wrong code values for transaction type, service level, local instrument, category purpose, etc.
-- Duplicate reference (same MsgId/EndToEndId) to simulate dedup rejection if dedup rules exist.
-- Conditional fields: present without prerequisite / missing when condition triggers.
-- Malformed XML case: 1–2 only (e.g., broken closing tag) if your pipeline validates XML parsing behavior.
+5. Invalid Format Cases
+   - Invalid date-time format
+   - Invalid UUID format
+   - Invalid numeric precision
+   - Wrong data types (string instead of number)
 
-HOW TO USE SAMPLE XML:
-- Preserve: root element, namespaces, schemaLocation, element ordering style as much as practical, and the general nesting structure.
-- Modify only the values and the specific elements required to satisfy each test intent.
-- If the requirement introduces a new field or expects a particular field mapping (e.g., alias extraction from QR payload), express it via the best-fitting fields already present in sample OR add ONLY if requirement explicitly demands it.
+6. Edge / Boundary Cases
+   - Zero amount
+   - Negative amount
+   - Extremely large amount
+   - Max length strings
+   - Special characters
 
-FINAL QUALITY CHECK BEFORE YOU OUTPUT:
-- Output must be a single XML document exactly in the <TestSuite> structure.
-- Every <XmlPayload> contains a full message that can be copied and sent to CPX UAT entry point.
-- Every test case has a clear expected PASS/FAIL outcome and explicit reason.
-- All sensitive-looking values are UAT-only or placeholder-marked.
+7. Flow-Based Scenarios (from Flow Diagram)
+   - Validation layer rejection
+   - Orchestrator rejection
+   - Downstream failure simulation
+   - Status push notification behavior
 
-Now generate the TestSuite based on the attachments.
+8. Security / Robustness
+   - Injection characters
+   - Long string overflow
+   - Unexpected object fields
+
+----------------------------------------------------
+FOR EACH TEST CASE INCLUDE
+----------------------------------------------------
+
+Test Case ID
+Title
+Category (Happy / Negative / Missing / Invalid / Edge / Boundary / Flow / Security)
+Requirement Reference
+Description – what exactly is being tested
+Preconditions
+JSON Payload (FULL VALID JSON MESSAGE)
+Expected Result:
+   - Validation outcome (PASS/FAIL)
+   - Rejection reason (if applicable)
+   - Processing stage where rejected (Validation / Orchestrator / Downstream)
+   - Expected status notification behavior
+   - Logging/reporting expectation
+
+----------------------------------------------------
+JSON PAYLOAD RULES
+----------------------------------------------------
+
+- Follow exact structure of sample JSON.
+- Maintain same object hierarchy.
+- Use unique values for:
+  message_id
+  end_to_end_id
+  instruction_id
+  uetr
+- Ensure valid timestamps.
+- Ensure currency & amount consistency.
+- Ensure realistic metadata.
+
+----------------------------------------------------
+FINAL OUTPUT FORMAT
+----------------------------------------------------
+
+Generate a Microsoft Word (.DOCX) document containing:
+
+1. Title Page:
+   CPX Payment Test Case Document
+   Generated from Requirements + README + Flow Diagram + Sample Payload + UAT Data
+
+2. Structured Test Cases:
+   Clearly formatted per test case:
+   - ID
+   - Title
+   - Category
+   - Requirement Reference
+   - Description
+   - Preconditions
+   - JSON Payload (formatted, pretty printed)
+   - Expected Result
+
+3. Coverage Summary:
+   Count per category:
+   Happy / Negative / Missing / Invalid / Edge / Flow / Security
+
+4. Validation Coverage Matrix:
+   Map test cases to requirement references.
+
+5. Open Questions:
+   Any UAT_TBD fields or unclear business rules.
+
+----------------------------------------------------
+QUALITY CHECK BEFORE OUTPUT
+----------------------------------------------------
+
+- All JSON payloads must be valid JSON.
+- No production-like values.
+- All IDs unique across test cases.
+- Test cases reflect real processing flow.
+- Document must be clean, professional, ready for QA review.
+- Output ONLY the DOCX document.
+
+Now generate the complete DOCX test case document based on the attachments.
