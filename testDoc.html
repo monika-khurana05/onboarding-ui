@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RAG Test Case Generation Platform — Architecture & Operations</title>
+  <meta name="description" content="Architecture review documentation for a RAG-based test case generation platform integrating Jira, Confluence, GitHub, Bitbucket with S3, MongoDB, and Postgres+pgvector; Vertex AI used as primary LLM/embedding example." />
+  <style>
+    :root{
+      --bg: #0b1020;
+      --panel: rgba(255,255,255,.06);
+      --panel2: rgba(255,255,255,.09);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.68);
+      --faint: rgba(255,255,255,.45);
+      --brand: #7c5cff;
+      --brand2: #22d3ee;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --border: rgba(255,255,255,.12);
+      --shadow: 0 18px 60px rgba(0,0,0,.35);
+      --radius: 18px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    [data-theme="light"]{
+      --bg: #f7f7fb;
+      --panel: rgba(0,0,0,.035);
+      --panel2: rgba(0,0,0,.052);
+      --text: rgba(0,0,0,.90);
+      --muted: rgba(0,0,0,.68);
+      --faint: rgba(0,0,0,.45);
+      --border: rgba(0,0,0,.10);
+      --shadow: 0 18px 50px rgba(0,0,0,.10);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 15% -10%, rgba(124,92,255,.35), transparent 65%),
+        radial-gradient(1000px 600px at 85% 0%, rgba(34,211,238,.22), transparent 60%),
+        radial-gradient(900px 700px at 65% 110%, rgba(124,92,255,.18), transparent 60%),
+        var(--bg);
+      line-height:1.55;
+      overflow-x:hidden;
+    }
+    a{color:inherit; text-decoration:none}
+    a:hover{opacity:.92}
+    .container{max-width:1160px; margin:0 auto; padding:22px}
+    .nav{
+      position:sticky; top:0; z-index:50;
+      backdrop-filter: blur(10px);
+      background: linear-gradient(to bottom, rgba(0,0,0,.25), rgba(0,0,0,0));
+      border-bottom: 1px solid var(--border);
+    }
+    [data-theme="light"] .nav{ background: linear-gradient(to bottom, rgba(247,247,251,.92), rgba(247,247,251,0)); }
+    .nav-inner{ display:flex; align-items:center; justify-content:space-between; gap:14px; }
+    .brand{ display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.2px; }
+    .logo{
+      width:34px; height:34px; border-radius:10px;
+      background: linear-gradient(135deg, var(--brand), var(--brand2));
+      box-shadow: 0 10px 30px rgba(124,92,255,.22);
+    }
+    .nav-links{ display:flex; gap:10px; flex-wrap:wrap; font-size:14px; color: var(--muted); }
+    .nav-links a{ padding:8px 10px; border-radius:10px; }
+    .nav-links a:hover{ background: var(--panel); color: var(--text); }
+    .actions{display:flex; align-items:center; gap:10px}
+    .btn{
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding:10px 12px;
+      border-radius: 12px;
+      cursor:pointer;
+      transition: transform .08s ease, background .15s ease;
+      font-weight:600;
+      font-size:14px;
+      user-select:none;
+    }
+    .btn:hover{background: var(--panel2)}
+    .btn:active{transform: translateY(1px)}
+    .btn.primary{
+      border-color: rgba(124,92,255,.35);
+      background: linear-gradient(135deg, rgba(124,92,255,.22), rgba(34,211,238,.16));
+    }
+
+    .hero{padding:44px 0 18px}
+    .pillrow{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size:13px;
+    }
+    .dot{width:8px;height:8px;border-radius:99px;background: var(--brand2)}
+    .dot.p{background: var(--brand)}
+    .dot.g{background: var(--ok)}
+    .dot.w{background: var(--warn)}
+
+    h1{
+      font-size: clamp(28px, 4.2vw, 44px);
+      line-height:1.1;
+      margin: 10px 0 10px;
+      letter-spacing:-.6px;
+    }
+    .subtitle{
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 92ch;
+      margin: 0 0 18px;
+    }
+    .toc{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
+    .toc a{
+      padding:8px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .toc a:hover{color: var(--text); background: var(--panel2)}
+
+    .section{padding: 26px 0}
+    .section h2{ font-size: 22px; margin:0 0 12px; letter-spacing:-.3px; }
+    .section .lead{ margin:0 0 14px; color: var(--muted); max-width: 100ch; font-size: 15px; }
+
+    .grid{display:grid; gap:14px;}
+    .grid.cols-3{grid-template-columns: repeat(3, minmax(0,1fr))}
+    .grid.cols-2{grid-template-columns: repeat(2, minmax(0,1fr))}
+    @media (max-width: 980px){
+      .grid.cols-3,.grid.cols-2{grid-template-columns: 1fr}
+      .nav-links{display:none}
+    }
+
+    .card{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding:16px;
+      box-shadow: var(--shadow);
+    }
+    .card h3{margin:0 0 6px; font-size:16px}
+    .card p{margin:0; color: var(--muted); font-size:14px}
+
+    .hr{height:1px; background: var(--border); margin: 16px 0;}
+    .callout{
+      border-left: 3px solid rgba(124,92,255,.6);
+      padding: 12px 12px 12px 14px;
+      background: linear-gradient(90deg, rgba(124,92,255,.13), transparent 70%);
+      border-radius: 14px;
+      border: 1px solid rgba(124,92,255,.22);
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .code{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12.8px;
+      color: rgba(255,255,255,.88);
+      background: rgba(0,0,0,.22);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      overflow:auto;
+      line-height:1.55;
+      white-space: pre;
+    }
+    [data-theme="light"] .code{ color: rgba(0,0,0,.85); background: rgba(0,0,0,.04); }
+    .mermaid{
+      background: rgba(0,0,0,.10);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      overflow:auto;
+    }
+    [data-theme="light"] .mermaid{ background: rgba(0,0,0,.03); }
+
+    table{ width:100%; border-collapse: collapse; font-size: 13.5px; }
+    th, td{ border: 1px solid var(--border); padding: 10px; vertical-align: top; }
+    th{ text-align:left; background: rgba(255,255,255,.06); color: var(--text); font-weight: 800; }
+    [data-theme="light"] th{ background: rgba(0,0,0,.04); }
+    td{ color: var(--muted); }
+    .small{font-size:12.5px; color: rgba(255,255,255,.45);}
+    [data-theme="light"] .small{color: rgba(0,0,0,.45);}
+
+    .footer{padding: 26px 0 40px; color: var(--faint); font-size: 13px;}
+  </style>
+</head>
+
+<body>
+  <div class="nav">
+    <div class="container nav-inner">
+      <div class="brand" title="RAG Test Case Generation Platform">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <div style="font-size:14px; line-height:1.1;">RAG Test Case Generator</div>
+          <div style="font-size:12px; color:var(--muted); font-weight:600;">AWS-first • Postgres+pgvector • MongoDB • S3 • Vertex AI example</div>
+        </div>
+      </div>
+
+      <div class="nav-links" aria-label="Quick navigation">
+        <a href="#exec">Executive</a>
+        <a href="#arch">Architecture</a>
+        <a href="#sequence">Sequence</a>
+        <a href="#stack">Tech stack</a>
+        <a href="#ingest">RAG ingestion</a>
+        <a href="#retrieve">Retrieval & generation</a>
+        <a href="#ops">Operations</a>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="themeBtn" aria-label="Toggle theme">🌗 Theme</button>
+        <a class="btn primary" href="#arch">View Architecture</a>
+      </div>
+    </div>
+  </div>
+
+  <main class="container">
+    <header class="hero" id="exec">
+      <div class="pillrow">
+        <span class="pill"><span class="dot p"></span>API Gateway + JWT/OIDC</span>
+        <span class="pill"><span class="dot"></span>LLM + Embeddings (Vertex AI example)</span>
+        <span class="pill"><span class="dot g"></span>Postgres + pgvector (RAG Index)</span>
+        <span class="pill"><span class="dot"></span>MongoDB (Jobs + Audit + Checkpoints)</span>
+        <span class="pill"><span class="dot"></span>S3 (Raw docs + exports)</span>
+        <span class="pill"><span class="dot w"></span>SQS + async workers</span>
+      </div>
+
+      <h1>RAG Test Case Generation Platform</h1>
+      <p class="subtitle">
+        Architecture review documentation for an evidence-first Retrieval‑Augmented Generation platform that generates
+        <b>test plans</b> and <b>test cases</b> from requirements, tickets, docs, repos, and uploaded files.
+        This document is intentionally generic (no brand-specific content).
+      </p>
+
+      <div class="toc" aria-label="Table of contents">
+        <a href="#exec">Executive summary</a>
+        <a href="#arch">Architecture diagram</a>
+        <a href="#sequence">Sequence diagram</a>
+        <a href="#stack">Tech-stack table</a>
+        <a href="#ingest">RAG ingestion pseudocode</a>
+        <a href="#retrieve">Retrieval & generation</a>
+        <a href="#ops">Operational checklist</a>
+      </div>
+
+      <section class="section" style="padding-top:18px;">
+        <div class="card">
+          <h3>Executive summary</h3>
+          <div class="hr"></div>
+          <p style="margin:0; color:var(--muted); font-size:14px; max-width:110ch;">
+            Separate <b>ingestion</b> (build a knowledge base) from <b>generation</b> (retrieve + produce tests). Store raw artifacts in <b>S3</b>,
+            store operational state (jobs, audit, checkpoints) in <b>MongoDB</b>, and store retrieval indexes (chunks, embeddings, full-text) in <b>Postgres + pgvector</b>.
+            Run ingestion and large generations on <b>async workers</b> behind a queue to handle retries and rate limits safely.
+          </p>
+          <div class="hr"></div>
+          <div class="callout">
+            <b>No brand references:</b> This page contains no Friday.ai content and is suitable for generic architecture review.
+          </div>
+        </div>
+      </section>
+    </header>
+
+    <section class="section" id="arch">
+      <h2>Reference architecture</h2>
+      <p class="lead">
+        Layered architecture: UI → API gateway → API/orchestrator → service layer → external services + AI provider → storage layer.
+        Async workers handle ingestion, embedding, indexing, and long-running generation.
+      </p>
+
+      <div class="mermaid" role="img" aria-label="Architecture diagram">
+flowchart TB
+  U[User] --> UI[Web UI]
+  UI --> AGW[API Gateway<br/>JWT/OIDC, WAF, rate limits]
+  AGW --> API[API / Orchestrator<br/>REST + job status + streaming]
+  API --> SVC[Service Layer<br/>Retrieval • Generation • Ingestion • Export]
+  SVC --> EXT[External Services<br/>Jira • Confluence • GitHub • Bitbucket]
+  SVC --> AI[LLM/Embeddings Provider<br/>Vertex AI example]
+
+  subgraph Storage Layer
+    S3[(S3<br/>raw snapshots + exports)]
+    MDB[(MongoDB<br/>jobs + audit + checkpoints)]
+    PG[(Postgres + pgvector<br/>chunks + embeddings + FTS)]
+  end
+
+  SVC --> S3
+  SVC --> MDB
+  SVC --> PG
+
+  API --> Q[SQS / Queue]
+  Q --> W[Workers<br/>Ingest • Embed • Index • Generate]
+  W --> EXT
+  W --> AI
+  W --> S3
+  W --> MDB
+  W --> PG
+      </div>
+    </section>
+
+    <section class="section" id="sequence">
+      <h2>End-to-end sequence diagram</h2>
+      <p class="lead">
+        Includes both ingestion (RAG prep) and interactive generation, with storage interactions and optional writeback to Jira.
+      </p>
+
+      <div class="mermaid" role="img" aria-label="Sequence diagram">
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant UI as Web UI
+  participant AGW as API Gateway (JWT/OIDC)
+  participant API as API / Orchestrator
+  participant SVC as Service Layer
+  participant Q as Worker Queue (SQS)
+  participant W as Worker(s)
+  participant EXT as External Services (Jira/Confluence/GitHub/Bitbucket)
+  participant S3 as S3
+  participant MDB as MongoDB
+  participant PG as Postgres+pgvector
+  participant AI as Vertex AI (Embeddings + Gemini)
+
+  rect rgb(40,40,70)
+    note over UI,AI: Ingestion / RAG preparation (async)
+    U->>UI: Configure sources / click Sync
+    UI->>AGW: POST /sources/sync
+    AGW->>API: Authenticated request
+    API->>MDB: create ingestion_job + checkpoint snapshot
+    API->>Q: enqueue INGEST(source, since_checkpoint)
+
+    loop For each ingest task
+      Q->>W: deliver INGEST task
+      W->>EXT: fetch changes (with paging)
+      EXT-->>W: content + metadata (rate limit headers)
+      W->>S3: store raw snapshot (versioned key)
+      W->>W: parse + normalize + chunk
+      W->>AI: embed chunks (batched where possible)
+      AI-->>W: embeddings
+      W->>PG: upsert chunks + vectors + FTS fields
+      W->>MDB: update checkpoint + audit
+    end
+
+    API->>MDB: mark ingestion_job COMPLETED
+  end
+
+  rect rgb(40,70,40)
+    note over UI,AI: Interactive generation (async heavy work)
+    U->>UI: Generate test cases
+    UI->>AGW: POST /generate
+    AGW->>API: Authenticated request
+    API->>MDB: create generation_job (PENDING)
+    API->>Q: enqueue GENERATE(job_id)
+
+    Q->>W: deliver GENERATE(job)
+    W->>PG: hybrid retrieval (FTS + vector + filters)
+    PG-->>W: evidence chunks + citations
+
+    W->>AI: Pass A: Test Plan (schema JSON)
+    AI-->>W: TestPlan JSON
+    W->>AI: Pass B: Test Cases (schema JSON/XML) + citations
+    AI-->>W: TestCases + traceability
+    W->>W: validate (schema + deterministic rules)
+
+    alt Validation PASS
+      W->>S3: write exports (XML/MD/attachments)
+      W->>PG: store canonical cases + evidence links
+      W->>MDB: mark job COMPLETED
+      API-->>UI: stream status + links
+      UI-->>U: show results + evidence
+
+      opt Optional writeback to Jira
+        W->>EXT: create/update Jira issue/comment
+        EXT-->>W: writeback OK
+      end
+    else Validation FAIL
+      W->>MDB: mark job FAILED + errors
+      API-->>UI: stream failures
+      UI-->>U: show errors + retry
+    end
+  end
+      </div>
+    </section>
+
+    <section class="section" id="stack">
+      <h2>Tech stack</h2>
+      <p class="lead">Comparison table of recommended primary components vs alternatives.</p>
+      <div class="card">
+        <table aria-label="Tech stack comparison">
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th>Primary option</th>
+              <th>Alternatives</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>LLM generation</td>
+              <td>Vertex AI Gemini (example)</td>
+              <td>Bedrock / OpenAI / Azure OpenAI / self-hosted</td>
+              <td>Use structured output + validation gates.</td>
+            </tr>
+            <tr>
+              <td>Embeddings</td>
+              <td>Vertex AI embeddings (gemini-embedding-001)</td>
+              <td>E5 family / other providers</td>
+              <td>Choose lower output dimensionality to reduce storage.</td>
+            </tr>
+            <tr>
+              <td>Vector store</td>
+              <td>Postgres + pgvector</td>
+              <td>OpenSearch kNN / dedicated vector DB / managed vector search</td>
+              <td>Excellent when you already run Postgres; supports ANN tuning.</td>
+            </tr>
+            <tr>
+              <td>Blob storage</td>
+              <td>S3</td>
+              <td>GCS / Azure Blob</td>
+              <td>Raw snapshots + generated exports; enable encryption and versioning.</td>
+            </tr>
+            <tr>
+              <td>Operational store</td>
+              <td>MongoDB</td>
+              <td>DynamoDB / Postgres JSONB</td>
+              <td>Jobs, audit events, checkpoints, webhook logs.</td>
+            </tr>
+            <tr>
+              <td>Async queue</td>
+              <td>SQS (+ DLQ)</td>
+              <td>Kafka / RabbitMQ / Pub/Sub</td>
+              <td>Simple ops; DLQ for poison messages.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="ingest">
+      <h2>RAG ingestion pipeline</h2>
+      <p class="lead">Pseudocode showing connectors, parsing, chunking, embeddings, deduplication, and checkpointing.</p>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>Stages</h3>
+          <div class="hr"></div>
+          <div class="code">
+1) Discover changes (webhooks preferred; scheduled sync as fallback)
+2) Fetch raw content + metadata (paged; rate-limit aware)
+3) Store immutable raw snapshots in S3 (versioned keys)
+4) Parse & normalize (HTML/MD/code → text + metadata)
+5) Chunk (token-aware, overlapped, stable boundaries)
+6) Embed (retry + circuit breaker; model/version tracked)
+7) Upsert into Postgres+pgvector (chunks, embeddings, FTS fields)
+8) Update checkpoints + audit in MongoDB
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Pseudocode</h3>
+          <div class="hr"></div>
+          <div class="code">
+def ingest_source(source):
+  ckpt = mongo.checkpoints.get(source.id)
+
+  changes = discover_changes(source, since=ckpt.cursor)
+  for item in changes:
+    raw = fetch_with_backoff(source.api, item, etag=item.etag)
+
+    s3_uri = s3.put_object(
+      key=f"{tenant}/{source.kind}/{item.external_id}/{item.revision}.json",
+      body=raw.bytes
+    )
+
+    doc = parse_to_text(raw, content_type=item.type)
+    chunks = chunk(doc.text, max_tokens=700, overlap=120)
+
+    for ordinal, ch in enumerate(chunks):
+      chunk_id = stable_hash(tenant, source.kind, item.external_id, item.revision, ordinal)
+      vec = embed(ch.text, model="gemini-embedding-001", dims=768)
+
+      pg.upsert_chunk(
+        chunk_id=chunk_id,
+        text=ch.text,
+        metadata={...,"s3_uri": s3_uri, "revision": item.revision},
+        tsv=to_tsvector(ch.text),
+        embedding=vec
+      )
+
+  mongo.checkpoints.update(source.id, cursor=changes.new_cursor, status="ok")
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="retrieve">
+      <h2>Retrieval and generation</h2>
+      <p class="lead">Hybrid retrieval + two-pass generation + deterministic validation gates.</p>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <h3>Hybrid retrieval</h3>
+          <div class="hr"></div>
+          <div class="code">
+1) Scope filters (tenant/project/system/module + freshness)
+2) Lexical candidates (Postgres FTS / tsvector + GIN)
+3) Vector candidates (pgvector ANN) with same filters
+4) Merge+dedupe (RRF / weighted score)
+5) Build context pack with citations (chunk ids + source pointers)
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Generation</h3>
+          <div class="hr"></div>
+          <div class="code">
+Pass A: Test Plan (schema JSON)
+  - scenarios + coverage tags
+  - evidence required per scenario
+  - open questions if evidence missing
+
+Pass B: Test Cases (schema JSON/XML)
+  - stable IDs + deterministic naming
+  - evidence required per test step
+
+Pass C: Validation
+  - JSON schema / XSD
+  - domain rules, dedupe, forbidden placeholders
+  - fail closed: do not publish invalid outputs
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="ops">
+      <h2>Deployment and operational checklist</h2>
+      <p class="lead">Checklist table for security, backups, observability, and failure drills.</p>
+
+      <div class="card">
+        <table aria-label="Operations checklist">
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th>Checklist item</th>
+              <th>Owner</th>
+              <th>Done</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Security</td>
+              <td>OIDC/JWT at gateway; least privilege; webhook signature verification; secrets in a secret manager</td>
+              <td>Security/Platform</td>
+              <td>⬜</td>
+            </tr>
+            <tr>
+              <td>S3</td>
+              <td>Versioning + default encryption enabled; lifecycle policies; access logging</td>
+              <td>Platform</td>
+              <td>⬜</td>
+            </tr>
+            <tr>
+              <td>Postgres</td>
+              <td>Backups + PITR; pgvector + FTS indexes; connection pooling</td>
+              <td>DBA/Platform</td>
+              <td>⬜</td>
+            </tr>
+            <tr>
+              <td>MongoDB</td>
+              <td>Replica set/managed service; backups; TTL indexes for ephemeral logs; audit retention policy</td>
+              <td>DBA/Platform</td>
+              <td>⬜</td>
+            </tr>
+            <tr>
+              <td>SQS</td>
+              <td>DLQ configured; visibility timeout aligned with job duration; redrive procedure documented</td>
+              <td>Platform</td>
+              <td>⬜</td>
+            </tr>
+            <tr>
+              <td>Observability</td>
+              <td>Tracing gateway→API→workers; dashboards for p95 latency, retries, backlog, DLQ count, 429s</td>
+              <td>SRE</td>
+              <td>⬜</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="footer">
+      <div class="card" style="box-shadow:none;">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <div>
+            <div style="font-weight:800; margin-bottom:6px;">Document usage</div>
+            <div style="color:var(--muted); font-size:14px; max-width:100ch;">
+              Use this page as a self-contained architecture review artifact. Replace provider names and endpoints to match your environment.
+            </div>
+          </div>
+          <a class="btn primary" href="#exec">Back to top ↑</a>
+        </div>
+      </div>
+      <div style="text-align:center; margin-top:14px;">
+        RAG Test Case Generator • Evidence-first • Async ingestion • Hybrid retrieval • Validated outputs
+      </div>
+    </section>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    (function(){
+      const key = "rag_testcase_theme";
+      const btn = document.getElementById("themeBtn");
+      const root = document.documentElement;
+
+      function setTheme(t){
+        root.setAttribute("data-theme", t);
+        localStorage.setItem(key, t);
+        if(window.mermaid){
+          try{
+            mermaid.initialize({ startOnLoad: false, theme: (t === "light" ? "default" : "dark") });
+            document.querySelectorAll('.mermaid').forEach((el) => {
+              const src = el.getAttribute("data-src") || el.textContent;
+              el.setAttribute("data-src", src);
+              el.innerHTML = src;
+            });
+            mermaid.run();
+          }catch(e){}
+        }
+      }
+      const saved = localStorage.getItem(key);
+      if(saved) setTheme(saved);
+
+      btn.addEventListener("click", () => {
+        const cur = root.getAttribute("data-theme") || "dark";
+        setTheme(cur === "dark" ? "light" : "dark");
+      });
+
+      document.addEventListener("click", (e) => {
+        const a = e.target.closest('a[href^="#"]');
+        if(!a) return;
+        const id = a.getAttribute("href");
+        const el = document.querySelector(id);
+        if(!el) return;
+        e.preventDefault();
+        el.scrollIntoView({behavior:"smooth", block:"start"});
+        history.replaceState(null, "", id);
+      });
+    })();
+
+    (function(){
+      const cur = document.documentElement.getAttribute("data-theme") || "dark";
+      mermaid.initialize({ startOnLoad: true, theme: (cur === "light" ? "default" : "dark") });
+    })();
+  </script>
+</body>
+</html>
