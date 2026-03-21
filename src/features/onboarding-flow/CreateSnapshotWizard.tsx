@@ -61,14 +61,17 @@ import {
   validateCountryCodeUppercase
 } from '../../models/snapshot';
 import { loadOnboardingDraft, saveOnboardingDraft } from '../../lib/storage/onboardingDraftStorage';
+import { AnalysisSummaryPanel } from '../state-manager/AnalysisSummaryPanel';
 import { StateManagerPanel } from '../state-manager/StateManagerPanel';
 import { createDefaultStateManagerConfig } from '../state-manager/defaultScenarios';
-import { previewConversion, scenariosToWorkflowSpec } from '../state-manager/scenariosToFsm';
+import { previewConversion, scenariosToWorkflowSpec, type FsmGenerationResult } from '../state-manager/scenariosToFsm';
 import { loadStateManagerDraft, saveStateManagerDraft } from '../state-manager/stateManagerStorage';
+import type { AnalysisModel } from '../state-manager/analysis/types';
+import type { GraphValidationReport, ScenarioReplayReport } from '../state-manager/validation/types';
 import type { FlowDirection, StateManagerConfig } from '../state-manager/types';
 import { loadPresetYaml } from '../workflow/presets/loadPresetYaml';
 import { parseFsmYamlToSpec } from '../workflow/presets/parseFsmYamlToSpec';
-import { findPresetUrl } from '../workflow/presets/presetsRegistry';
+import { FSM_PRESETS, findPresetUrl } from '../workflow/presets/presetsRegistry';
 import { capabilityCatalog } from './capabilityCatalog';
 import { setStage } from '../../status/onboardingStatusStorage';
 
@@ -489,6 +492,40 @@ type CreateSnapshotWizardProps = {
   onSaved?: (snapshotId: string, version?: number) => void;
 };
 
+type FsmGenerationFailureDetails = Pick<
+  Partial<FsmGenerationResult>,
+  'analysis' | 'graphValidation' | 'scenarioReplay' | 'newTransitions' | 'presetBackedTransitionKeys' | 'fallbackTransitionKeys'
+>;
+
+function cloneTransitionKeys(keys?: ReadonlySet<string>): Set<string> {
+  return new Set(keys ? [...keys] : []);
+}
+
+function extractFsmGenerationFailure(error: unknown): {
+  message: string;
+  details: FsmGenerationFailureDetails;
+} {
+  if (!(error instanceof Error)) {
+    return {
+      message: 'FSM generation failed.',
+      details: {}
+    };
+  }
+
+  const candidate = error as Error & FsmGenerationFailureDetails;
+  return {
+    message: error.message.trim() || 'FSM generation failed.',
+    details: {
+      analysis: candidate.analysis,
+      graphValidation: candidate.graphValidation,
+      scenarioReplay: candidate.scenarioReplay,
+      newTransitions: candidate.newTransitions,
+      presetBackedTransitionKeys: candidate.presetBackedTransitionKeys,
+      fallbackTransitionKeys: candidate.fallbackTransitionKeys
+    }
+  };
+}
+
 export function CreateSnapshotWizard({
   mode = 'create',
   snapshotId,
@@ -532,9 +569,28 @@ export function CreateSnapshotWizard({
   const [fsmGenerated, setFsmGenerated] = useState(!isDefaultWorkflowSpec(resolvedInitialSnapshot.workflow));
   const [fsmGenerationPending, setFsmGenerationPending] = useState(false);
   const [highlightTransitionKeys, setHighlightTransitionKeys] = useState<Set<string>>(new Set());
+  const [fsmAnalysis, setFsmAnalysis] = useState<AnalysisModel | null>(null);
+  const [fsmGraphValidation, setFsmGraphValidation] = useState<GraphValidationReport | null>(null);
+  const [fsmScenarioReplay, setFsmScenarioReplay] = useState<ScenarioReplayReport | null>(null);
+  const [fsmNewTransitionKeys, setFsmNewTransitionKeys] = useState<Set<string>>(new Set());
+  const [fsmPresetBackedTransitionKeys, setFsmPresetBackedTransitionKeys] = useState<Set<string>>(new Set());
+  const [fsmFallbackTransitionKeys, setFsmFallbackTransitionKeys] = useState<Set<string>>(new Set());
+  const [fsmGenerationError, setFsmGenerationError] = useState<string | null>(null);
+  const [fsmSummaryWorkflowKey, setFsmSummaryWorkflowKey] = useState<string | null>(null);
   const [workflowTab, setWorkflowTab] = useState<WorkflowTabKey>('transitions');
   const [workflowFocus, setWorkflowFocus] = useState<{ issue: WorkflowLintIssue; nonce: number } | null>(null);
   const [workflowSidePanel, setWorkflowSidePanel] = useState<'lint' | 'help' | null>(null);
+
+  const clearFsmGenerationSummary = useCallback(() => {
+    setFsmAnalysis(null);
+    setFsmGraphValidation(null);
+    setFsmScenarioReplay(null);
+    setFsmNewTransitionKeys(new Set());
+    setFsmPresetBackedTransitionKeys(new Set());
+    setFsmFallbackTransitionKeys(new Set());
+    setFsmGenerationError(null);
+    setFsmSummaryWorkflowKey(null);
+  }, []);
 
   const createSnapshotMutation = useMutation({
     mutationFn: createSnapshot,
@@ -556,7 +612,8 @@ export function CreateSnapshotWizard({
     setJsonValue(JSON.stringify(resolvedInitialSnapshot, null, 2));
     setFsmGenerated(!isDefaultWorkflowSpec(resolvedInitialSnapshot.workflow));
     setHighlightTransitionKeys(new Set());
-  }, [resolvedInitialSnapshot]);
+    clearFsmGenerationSummary();
+  }, [clearFsmGenerationSummary, resolvedInitialSnapshot]);
 
   useEffect(() => {
     if (!advancedJson) {
@@ -688,9 +745,21 @@ export function CreateSnapshotWizard({
     [flow, snapshot.countryCode, snapshot.stateManagerConfig]
   );
   const stateManagerPreview = useMemo(
-    () => previewConversion(stateManagerConfig.scenarios),
-    [stateManagerConfig.scenarios]
+    () =>
+      previewConversion(stateManagerConfig.scenarios, {
+        includeAnalysisSummary: true,
+        countryCode: snapshot.countryCode.trim().toUpperCase(),
+        direction: flow
+      }),
+    [flow, snapshot.countryCode, stateManagerConfig.scenarios]
   );
+  const hasFsmDiagnostics =
+    Boolean(fsmAnalysis) ||
+    Boolean(fsmGraphValidation) ||
+    Boolean(fsmScenarioReplay) ||
+    fsmNewTransitionKeys.size > 0 ||
+    fsmPresetBackedTransitionKeys.size > 0 ||
+    fsmFallbackTransitionKeys.size > 0;
   const hasWorkflowPreview = useMemo(
     () => fsmGenerated || !isDefaultWorkflowSpec(snapshot.workflow),
     [fsmGenerated, snapshot.workflow]
@@ -917,8 +986,9 @@ export function CreateSnapshotWizard({
       }));
       saveStateManagerDraft(syncedConfig);
       setHighlightTransitionKeys(new Set());
+      clearFsmGenerationSummary();
     },
-    [flow, snapshot.countryCode]
+    [clearFsmGenerationSummary, flow, snapshot.countryCode]
   );
 
   const handleGenerateFsm = useCallback(
@@ -934,25 +1004,32 @@ export function CreateSnapshotWizard({
       };
 
       setFsmGenerationPending(true);
+      setFsmGenerationError(null);
+      setFsmSummaryWorkflowKey(workflowKey);
       try {
         let presetSpec: WorkflowSpec | undefined;
-        const allPresets: WorkflowSpec[] = [];
         const presetUrl = countryCode ? findPresetUrl(countryCode, direction) : undefined;
-        if (presetUrl) {
-          const presetYaml = await loadPresetYaml(presetUrl);
-          presetSpec = parseFsmYamlToSpec(presetYaml);
-          allPresets.push(presetSpec);
-        }
-
-        const knowledgeBaseUrl = findPresetUrl('BR', 'OUTGOING');
-        if (knowledgeBaseUrl && knowledgeBaseUrl !== presetUrl) {
-          try {
-            const knowledgeBaseYaml = await loadPresetYaml(knowledgeBaseUrl);
-            allPresets.push(parseFsmYamlToSpec(knowledgeBaseYaml));
-          } catch {
-            // Keep generation deterministic even when the optional knowledge base is unavailable.
-          }
-        }
+        const presetUrls = Array.from(new Set(FSM_PRESETS.map((preset) => preset.url)));
+        const loadedPresets = await Promise.all(
+          presetUrls.map(async (url) => {
+            try {
+              const presetYaml = await loadPresetYaml(url);
+              return {
+                url,
+                spec: parseFsmYamlToSpec(presetYaml)
+              };
+            } catch (error) {
+              if (url === presetUrl) {
+                throw error;
+              }
+              return null;
+            }
+          })
+        );
+        const allPresets = loadedPresets
+          .filter((entry): entry is { url: string; spec: WorkflowSpec } => Boolean(entry))
+          .map((entry) => entry.spec);
+        presetSpec = loadedPresets.find((entry) => entry?.url === presetUrl)?.spec;
 
         const result = scenariosToWorkflowSpec(
           syncedConfig.scenarios,
@@ -963,18 +1040,36 @@ export function CreateSnapshotWizard({
           direction
         );
 
+        setFsmAnalysis(result.analysis ?? null);
+        setFsmGraphValidation(result.graphValidation ?? null);
+        setFsmScenarioReplay(result.scenarioReplay ?? null);
+        setFsmNewTransitionKeys(cloneTransitionKeys(result.newTransitions));
+        setFsmPresetBackedTransitionKeys(cloneTransitionKeys(result.presetBackedTransitionKeys));
+        setFsmFallbackTransitionKeys(cloneTransitionKeys(result.fallbackTransitionKeys));
+        setFsmSummaryWorkflowKey(result.spec.workflowKey);
+        setFsmGenerationError(null);
+
         updateSnapshot((prev) => ({
           ...prev,
           workflow: result.spec,
           stateManagerConfig: syncedConfig
         }));
         saveStateManagerDraft(syncedConfig);
-        setHighlightTransitionKeys(new Set(result.newTransitions));
+        setHighlightTransitionKeys(cloneTransitionKeys(result.newTransitions));
         setFsmGenerated(true);
         setWorkflowTab('transitions');
         setWorkflowSidePanel(null);
       } catch (error) {
-        showError(error instanceof Error ? error.message : 'FSM generation failed.');
+        const { message, details } = extractFsmGenerationFailure(error);
+        setFsmAnalysis(details.analysis ?? null);
+        setFsmGraphValidation(details.graphValidation ?? null);
+        setFsmScenarioReplay(details.scenarioReplay ?? null);
+        setFsmNewTransitionKeys(cloneTransitionKeys(details.newTransitions));
+        setFsmPresetBackedTransitionKeys(cloneTransitionKeys(details.presetBackedTransitionKeys));
+        setFsmFallbackTransitionKeys(cloneTransitionKeys(details.fallbackTransitionKeys));
+        setFsmSummaryWorkflowKey(workflowKey);
+        setFsmGenerationError(message);
+        showError(message);
       } finally {
         setFsmGenerationPending(false);
       }
@@ -1411,7 +1506,22 @@ export function CreateSnapshotWizard({
               onChange={handleStateManagerChange}
               onGenerateFsm={handleGenerateFsm}
               isGenerating={fsmGenerationPending}
+              generationPreview={stateManagerPreview}
             />
+            {fsmGenerationError ? <Alert severity="error">{fsmGenerationError}</Alert> : null}
+            {hasFsmDiagnostics ? (
+              <AnalysisSummaryPanel
+                analysis={fsmAnalysis}
+                graphValidation={fsmGraphValidation}
+                scenarioReplay={fsmScenarioReplay}
+                workflowKey={fsmSummaryWorkflowKey ?? snapshot.workflow.workflowKey}
+                scenarioCount={stateManagerPreview.scenarioCount}
+                rowCount={stateManagerPreview.totalRows}
+                newTransitions={fsmNewTransitionKeys}
+                presetBackedTransitionCount={fsmPresetBackedTransitionKeys.size}
+                fallbackTransitionCount={fsmFallbackTransitionKeys.size}
+              />
+            ) : null}
             <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2.5}>
                 <Stack
@@ -1865,4 +1975,7 @@ export function CreateSnapshotWizard({
     </Stack>
   );
 }
+
+
+
 

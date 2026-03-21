@@ -29,6 +29,7 @@ type StateManagerPanelProps = {
   onChange: (next: StateManagerConfig) => void;
   onGenerateFsm?: (config: StateManagerConfig) => Promise<void> | void;
   isGenerating?: boolean;
+  generationPreview?: ReturnType<typeof previewConversion>;
 };
 
 let localIdCounter = 0;
@@ -66,12 +67,14 @@ export function StateManagerPanel({
   value,
   onChange,
   onGenerateFsm,
-  isGenerating = false
+  isGenerating = false,
+  generationPreview
 }: StateManagerPanelProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const conversionPreview = useMemo(() => previewConversion(value.scenarios), [value.scenarios]);
+  const computedConversionPreview = useMemo(() => previewConversion(value.scenarios), [value.scenarios]);
+  const conversionPreview = generationPreview ?? computedConversionPreview;
   const activeScenario = value.scenarios[activeTab] ?? null;
 
   useEffect(() => {
@@ -156,6 +159,10 @@ export function StateManagerPanel({
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               <Chip label={`${conversionPreview.scenarioCount} scenarios`} color="primary" variant="outlined" />
               <Chip label={`${conversionPreview.totalRows} total rows`} variant="outlined" />
+              <Chip label={`${conversionPreview.discoveredStateCount} discovered states`} variant="outlined" />
+              {conversionPreview.topArchetype ? (
+                <Chip label={`Archetype: ${conversionPreview.topArchetype}`} variant="outlined" />
+              ) : null}
             </Stack>
           </Stack>
 
@@ -277,6 +284,23 @@ export function StateManagerPanel({
               <Chip label={`${conversionPreview.scenarioCount} scenarios`} variant="outlined" />
               <Chip label={`${conversionPreview.totalRows} total rows`} variant="outlined" />
               <Chip label={`${conversionPreview.discoveredStateCount} discovered states`} variant="outlined" />
+              {conversionPreview.topArchetype ? (
+                <Chip label={`Archetype: ${conversionPreview.topArchetype}`} variant="outlined" />
+              ) : null}
+              {typeof conversionPreview.warningCount === 'number' ? (
+                <Chip
+                  label={`${conversionPreview.warningCount} warnings`}
+                  variant="outlined"
+                  color={conversionPreview.warningCount > 0 ? 'warning' : 'default'}
+                />
+              ) : null}
+              {typeof conversionPreview.conflictCount === 'number' ? (
+                <Chip
+                  label={`${conversionPreview.conflictCount} conflicts`}
+                  variant="outlined"
+                  color={conversionPreview.conflictCount > 0 ? 'error' : 'default'}
+                />
+              ) : null}
             </Stack>
             <Alert severity="warning">
               Generating an FSM here will replace the current workflow. Review the scenario data before continuing.
