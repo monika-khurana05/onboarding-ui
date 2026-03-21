@@ -37,7 +37,7 @@ import { JsonMonacoPanel } from '../../components/JsonMonacoPanel';
 import { CatalogSelector, type CatalogColumn } from '../../components/CatalogSelector';
 import { ParamsEditorDrawer } from '../../components/ParamsEditorDrawer';
 import { SectionCard } from '../../components/SectionCard';
-import { WorkflowDefinitionFields, WorkflowTabPanels, type WorkflowTabKey } from '../../components/WorkflowEditor';
+import { WorkflowTabPanels, generateFsmYaml, type WorkflowTabKey } from '../../components/WorkflowEditor';
 import { createSnapshot, createSnapshotVersion } from '../../api/client';
 import type { SnapshotDetailDto } from '../../api/types';
 import { useGlobalError } from '../../app/GlobalErrorContext';
@@ -61,6 +61,14 @@ import {
   validateCountryCodeUppercase
 } from '../../models/snapshot';
 import { loadOnboardingDraft, saveOnboardingDraft } from '../../lib/storage/onboardingDraftStorage';
+import { StateManagerPanel } from '../state-manager/StateManagerPanel';
+import { createDefaultStateManagerConfig } from '../state-manager/defaultScenarios';
+import { previewConversion, scenariosToWorkflowSpec } from '../state-manager/scenariosToFsm';
+import { loadStateManagerDraft, saveStateManagerDraft } from '../state-manager/stateManagerStorage';
+import type { FlowDirection, StateManagerConfig } from '../state-manager/types';
+import { loadPresetYaml } from '../workflow/presets/loadPresetYaml';
+import { parseFsmYamlToSpec } from '../workflow/presets/parseFsmYamlToSpec';
+import { findPresetUrl } from '../workflow/presets/presetsRegistry';
 import { capabilityCatalog } from './capabilityCatalog';
 import { setStage } from '../../status/onboardingStatusStorage';
 
@@ -191,6 +199,66 @@ const defaultWorkflow: WorkflowSpec = {
     }
   ]
 };
+
+function normalizeFlowDirection(value: unknown): FlowDirection {
+  return value === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
+}
+
+function normalizeStateManagerConfig(value: unknown): StateManagerConfig | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as Partial<StateManagerConfig>;
+  if (!Array.isArray(candidate.scenarios)) {
+    return undefined;
+  }
+
+  return {
+    countryCode: typeof candidate.countryCode === 'string' ? candidate.countryCode : '',
+    flowDirection: normalizeFlowDirection(candidate.flowDirection),
+    scenarios: candidate.scenarios,
+    lastUpdated:
+      typeof candidate.lastUpdated === 'string' && candidate.lastUpdated.trim()
+        ? candidate.lastUpdated
+        : new Date().toISOString()
+  };
+}
+
+function resolveGeneratedWorkflowKey(
+  workflow: WorkflowSpec,
+  countryCode: string,
+  direction: FlowDirection
+): string {
+  const existingWorkflowKey = workflow.workflowKey.trim();
+  if (existingWorkflowKey && existingWorkflowKey !== defaultWorkflow.workflowKey) {
+    return existingWorkflowKey;
+  }
+  return `${countryCode}_${direction}_PAYMENT`;
+}
+
+function buildWorkflowDownloadFileName(countryCode: string, workflowKey: string): string {
+  const country = countryCode.trim();
+  const flow = workflowKey.trim();
+  if (!country || !flow) {
+    return 'workflow-fsm.yaml';
+  }
+  const sanitize = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+  return `${sanitize(country)}-${sanitize(flow)}-fsm.yaml`;
+}
+
+function isDefaultWorkflowSpec(spec: WorkflowSpec): boolean {
+  const normalized = normalizeWorkflowSpec(spec);
+  return (
+    normalized.workflowKey === defaultWorkflow.workflowKey &&
+    (normalized.startState ?? '') === (defaultWorkflow.startState ?? '') &&
+    generateFsmYaml(normalized) === generateFsmYaml(defaultWorkflow)
+  );
+}
 
 function normalizeDupCheckConfig(value: unknown): DupCheckConfig {
   const candidate = isRecord(value) ? value : {};
@@ -369,6 +437,7 @@ function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
   const mergedWorkflow = {
     ...normalizeWorkflowSpec(workflow)
   };
+  const normalizedStateManagerConfig = normalizeStateManagerConfig(raw.stateManagerConfig);
 
   const rawRulesConfig = raw.rulesConfig as RulesConfig | undefined;
   const normalizedRulesConfig = rawRulesConfig
@@ -400,6 +469,7 @@ function normalizeSnapshotInput(raw: Partial<SnapshotModel>): SnapshotModel {
     rulesConfig: normalizedRulesConfig,
     actions: Array.isArray(raw.actions) ? raw.actions : [],
     workflow: mergedWorkflow,
+    stateManagerConfig: normalizedStateManagerConfig,
     integrationConfig: raw.integrationConfig ?? {},
     deploymentOverrides: raw.deploymentOverrides ?? {}
   };
@@ -435,10 +505,23 @@ export function CreateSnapshotWizard({
   const jsonUpdateSource = useRef<'form' | 'editor' | null>(null);
   const isVersionMode = mode === 'version';
 
-  const resolvedInitialSnapshot = useMemo(
-    () => normalizeSnapshotInput(initialSnapshot ?? defaultSnapshot),
-    [initialSnapshot]
-  );
+  const resolvedInitialSnapshot = useMemo(() => {
+    const normalized = normalizeSnapshotInput(initialSnapshot ?? defaultSnapshot);
+    const normalizedCountryCode = normalized.countryCode.trim().toUpperCase();
+    const existingStateManagerConfig = normalized.stateManagerConfig;
+    const draftStateManagerConfig =
+      normalizedCountryCode && !existingStateManagerConfig
+        ? loadStateManagerDraft(normalizedCountryCode, flow)
+        : null;
+
+    return {
+      ...normalized,
+      stateManagerConfig:
+        existingStateManagerConfig ??
+        draftStateManagerConfig ??
+        createDefaultStateManagerConfig(normalizedCountryCode, flow)
+    };
+  }, [flow, initialSnapshot]);
 
   const [snapshot, setSnapshot] = useState<SnapshotModel>(resolvedInitialSnapshot);
   const [jsonValue, setJsonValue] = useState(JSON.stringify(resolvedInitialSnapshot, null, 2));
@@ -446,6 +529,9 @@ export function CreateSnapshotWizard({
   const [paramsDrawerContext, setParamsDrawerContext] = useState<ParamsDrawerContext>(null);
   const [catalogTab, setCatalogTab] = useState<CatalogTab>('validations');
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [fsmGenerated, setFsmGenerated] = useState(!isDefaultWorkflowSpec(resolvedInitialSnapshot.workflow));
+  const [fsmGenerationPending, setFsmGenerationPending] = useState(false);
+  const [highlightTransitionKeys, setHighlightTransitionKeys] = useState<Set<string>>(new Set());
   const [workflowTab, setWorkflowTab] = useState<WorkflowTabKey>('transitions');
   const [workflowFocus, setWorkflowFocus] = useState<{ issue: WorkflowLintIssue; nonce: number } | null>(null);
   const [workflowSidePanel, setWorkflowSidePanel] = useState<'lint' | 'help' | null>(null);
@@ -468,6 +554,8 @@ export function CreateSnapshotWizard({
   useEffect(() => {
     setSnapshot(resolvedInitialSnapshot);
     setJsonValue(JSON.stringify(resolvedInitialSnapshot, null, 2));
+    setFsmGenerated(!isDefaultWorkflowSpec(resolvedInitialSnapshot.workflow));
+    setHighlightTransitionKeys(new Set());
   }, [resolvedInitialSnapshot]);
 
   useEffect(() => {
@@ -488,7 +576,6 @@ export function CreateSnapshotWizard({
     }
   }, [activeStep, workflowSidePanel]);
 
-
   const updateSnapshot = (
     updater: (prev: SnapshotModel) => SnapshotModel,
     source: 'form' | 'editor' = 'form'
@@ -496,6 +583,44 @@ export function CreateSnapshotWizard({
     jsonUpdateSource.current = source;
     setSnapshot(updater);
   };
+
+  useEffect(() => {
+    const normalizedCountryCode = snapshot.countryCode.trim().toUpperCase();
+    updateSnapshot((prev) => {
+      const existingConfig = prev.stateManagerConfig;
+      if (!existingConfig) {
+        const draftConfig = normalizedCountryCode ? loadStateManagerDraft(normalizedCountryCode, flow) : null;
+        return {
+          ...prev,
+          stateManagerConfig: draftConfig ?? createDefaultStateManagerConfig(normalizedCountryCode, flow)
+        };
+      }
+
+      const existingCountryCode = existingConfig.countryCode.trim().toUpperCase();
+      if (!existingCountryCode && normalizedCountryCode) {
+        const draftConfig = loadStateManagerDraft(normalizedCountryCode, flow);
+        if (draftConfig) {
+          return {
+            ...prev,
+            stateManagerConfig: draftConfig
+          };
+        }
+      }
+
+      if (existingCountryCode === normalizedCountryCode && existingConfig.flowDirection === flow) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        stateManagerConfig: {
+          ...existingConfig,
+          countryCode: normalizedCountryCode,
+          flowDirection: flow
+        }
+      };
+    });
+  }, [flow, snapshot.countryCode]);
 
   useEffect(() => {
     const draft = loadOnboardingDraft();
@@ -556,6 +681,24 @@ export function CreateSnapshotWizard({
 
   const countryErrors = validateCountryCodeUppercase(snapshot.countryCode);
   const workflowLint = useMemo(() => lintWorkflowSpec(snapshot.workflow), [snapshot.workflow]);
+  const stateManagerConfig = useMemo(
+    () =>
+      snapshot.stateManagerConfig ??
+      createDefaultStateManagerConfig(snapshot.countryCode.trim().toUpperCase(), flow),
+    [flow, snapshot.countryCode, snapshot.stateManagerConfig]
+  );
+  const stateManagerPreview = useMemo(
+    () => previewConversion(stateManagerConfig.scenarios),
+    [stateManagerConfig.scenarios]
+  );
+  const hasWorkflowPreview = useMemo(
+    () => fsmGenerated || !isDefaultWorkflowSpec(snapshot.workflow),
+    [fsmGenerated, snapshot.workflow]
+  );
+  const workflowDownloadFileName = useMemo(
+    () => buildWorkflowDownloadFileName(snapshot.countryCode, snapshot.workflow.workflowKey),
+    [snapshot.countryCode, snapshot.workflow.workflowKey]
+  );
 
   const selectedValidations = snapshot.selectedValidations;
   const selectedEnrichments = snapshot.selectedEnrichments;
@@ -759,6 +902,86 @@ export function CreateSnapshotWizard({
     }));
   };
 
+  const handleStateManagerChange = useCallback(
+    (nextConfig: StateManagerConfig) => {
+      const syncedConfig: StateManagerConfig = {
+        ...nextConfig,
+        countryCode: snapshot.countryCode.trim().toUpperCase(),
+        flowDirection: flow,
+        lastUpdated: new Date().toISOString()
+      };
+
+      updateSnapshot((prev) => ({
+        ...prev,
+        stateManagerConfig: syncedConfig
+      }));
+      saveStateManagerDraft(syncedConfig);
+      setHighlightTransitionKeys(new Set());
+    },
+    [flow, snapshot.countryCode]
+  );
+
+  const handleGenerateFsm = useCallback(
+    async (config: StateManagerConfig) => {
+      const countryCode = snapshot.countryCode.trim().toUpperCase();
+      const direction = flow;
+      const workflowKey = resolveGeneratedWorkflowKey(snapshot.workflow, countryCode, direction);
+      const syncedConfig: StateManagerConfig = {
+        ...config,
+        countryCode,
+        flowDirection: direction,
+        lastUpdated: new Date().toISOString()
+      };
+
+      setFsmGenerationPending(true);
+      try {
+        let presetSpec: WorkflowSpec | undefined;
+        const allPresets: WorkflowSpec[] = [];
+        const presetUrl = countryCode ? findPresetUrl(countryCode, direction) : undefined;
+        if (presetUrl) {
+          const presetYaml = await loadPresetYaml(presetUrl);
+          presetSpec = parseFsmYamlToSpec(presetYaml);
+          allPresets.push(presetSpec);
+        }
+
+        const knowledgeBaseUrl = findPresetUrl('BR', 'OUTGOING');
+        if (knowledgeBaseUrl && knowledgeBaseUrl !== presetUrl) {
+          try {
+            const knowledgeBaseYaml = await loadPresetYaml(knowledgeBaseUrl);
+            allPresets.push(parseFsmYamlToSpec(knowledgeBaseYaml));
+          } catch {
+            // Keep generation deterministic even when the optional knowledge base is unavailable.
+          }
+        }
+
+        const result = scenariosToWorkflowSpec(
+          syncedConfig.scenarios,
+          presetSpec,
+          allPresets,
+          workflowKey,
+          countryCode,
+          direction
+        );
+
+        updateSnapshot((prev) => ({
+          ...prev,
+          workflow: result.spec,
+          stateManagerConfig: syncedConfig
+        }));
+        saveStateManagerDraft(syncedConfig);
+        setHighlightTransitionKeys(new Set(result.newTransitions));
+        setFsmGenerated(true);
+        setWorkflowTab('transitions');
+        setWorkflowSidePanel(null);
+      } catch (error) {
+        showError(error instanceof Error ? error.message : 'FSM generation failed.');
+      } finally {
+        setFsmGenerationPending(false);
+      }
+    },
+    [flow, showError, snapshot.countryCode, snapshot.workflow]
+  );
+
   const goNext = () => {
     if (activeStep < stepLabels.length - 1) {
       setStepAnimationDirection('forward');
@@ -779,9 +1002,13 @@ export function CreateSnapshotWizard({
 
   const handleSaveSnapshot = async () => {
     try {
+      const nextSnapshot: SnapshotModel = {
+        ...snapshot,
+        stateManagerConfig
+      };
       const payload = {
         countryCode: snapshot.countryCode,
-        snapshot
+        snapshot: nextSnapshot
       };
 
       if (isVersionMode) {
@@ -1179,108 +1406,107 @@ export function CreateSnapshotWizard({
       case 3:
         return (
           <Stack spacing={3}>
+            <StateManagerPanel
+              value={stateManagerConfig}
+              onChange={handleStateManagerChange}
+              onGenerateFsm={handleGenerateFsm}
+              isGenerating={fsmGenerationPending}
+            />
             <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack spacing={2.5}>
                 <Stack
                   direction={{ xs: 'column', md: 'row' }}
-                  spacing={1}
+                  spacing={1.5}
                   alignItems={{ md: 'center' }}
                   justifyContent="space-between"
                 >
                   <Stack spacing={0.5}>
-                    <Typography variant="subtitle1">Workflow Definition</Typography>
+                    <Typography variant="subtitle1">Generated Workflow Preview</Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Why this matters: the CPX State Manager uses this FSM to enforce lifecycle guarantees.
+                      Save &amp; Generate FSM materializes the current scenarios into the runtime state machine.
                     </Typography>
                   </Stack>
-                </Stack>
-                <Grid container spacing={2.5}>
-                  <Grid size={{ xs: 12 }}>
-                    <Stack spacing={2}>
-                      <WorkflowDefinitionFields
-                        value={snapshot.workflow}
-                        onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
-                        helperText="Define a clean lifecycle path with explicit states and events."
+                  {hasWorkflowPreview ? (
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Chip label={`${stateManagerPreview.scenarioCount} scenarios`} variant="outlined" />
+                      <Chip label={`${stateManagerPreview.totalRows} total rows`} variant="outlined" />
+                      <Chip
+                        label={`${stateManagerPreview.discoveredStateCount} discovered states`}
+                        variant="outlined"
                       />
+                      <Chip label={snapshot.workflow.workflowKey.trim() || 'Workflow key pending'} variant="outlined" />
+                    </Stack>
+                  ) : null}
+                </Stack>
+                {!hasWorkflowPreview ? (
+                  <Alert severity="info">No FSM generated yet</Alert>
+                ) : (
+                  <Stack spacing={2}>
+                    <Stack
+                      direction={{ xs: 'column', md: 'row' }}
+                      spacing={1}
+                      alignItems={{ xs: 'stretch', md: 'center' }}
+                      justifyContent="space-between"
+                    >
+                      <Tabs value={workflowTab} onChange={(_, value) => setWorkflowTab(value as WorkflowTabKey)}>
+                        <Tab
+                          value="transitions"
+                          label={renderWorkflowTabLabel('Transitions', workflowLintCounts.transitions)}
+                        />
+                        <Tab value="state" label={renderWorkflowTabLabel('State View', workflowLintCounts.state)} />
+                        <Tab value="yaml" label={renderWorkflowTabLabel('YAML Preview', workflowLintCounts.yaml)} />
+                      </Tabs>
                       <Stack
-                        direction={{ xs: 'column', md: 'row' }}
+                        direction="row"
                         spacing={1}
-                        alignItems={{ xs: 'stretch', md: 'center' }}
-                        justifyContent="space-between"
+                        alignItems="center"
+                        justifyContent="flex-end"
+                        useFlexGap
+                        flexWrap="wrap"
                       >
-                        <Tabs value={workflowTab} onChange={(_, value) => setWorkflowTab(value as WorkflowTabKey)}>
-                          <Tab
-                            value="transitions"
-                            label={renderWorkflowTabLabel('Transitions', workflowLintCounts.transitions)}
-                          />
-                          <Tab value="state" label={renderWorkflowTabLabel('State View', workflowLintCounts.state)} />
-                          <Tab value="yaml" label={renderWorkflowTabLabel('YAML Preview', workflowLintCounts.yaml)} />
-                        </Tabs>
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          alignItems="center"
-                          justifyContent="flex-end"
-                          useFlexGap
-                          flexWrap="wrap"
+                        <Badge
+                          color={workflowLint.errors.length > 0 ? 'error' : 'warning'}
+                          badgeContent={workflowLintIssueCount}
+                          invisible={workflowLintIssueCount === 0}
                         >
-                          <Badge
-                            color={workflowLint.errors.length > 0 ? 'error' : 'warning'}
-                            badgeContent={workflowLintIssueCount}
-                            invisible={workflowLintIssueCount === 0}
-                          >
-                            <Button
-                              size="small"
-                              variant={workflowSidePanel === 'lint' ? 'contained' : 'outlined'}
-                              onClick={() =>
-                                setWorkflowSidePanel((prev) => (prev === 'lint' ? null : 'lint'))
-                              }
-                            >
-                              Lint Checks
-                            </Button>
-                          </Badge>
                           <Button
                             size="small"
-                            variant={workflowSidePanel === 'help' ? 'contained' : 'outlined'}
-                            onClick={() => setWorkflowSidePanel((prev) => (prev === 'help' ? null : 'help'))}
+                            variant={workflowSidePanel === 'lint' ? 'contained' : 'outlined'}
+                            onClick={() => setWorkflowSidePanel((prev) => (prev === 'lint' ? null : 'lint'))}
                           >
-                            Quick Help
+                            Lint Checks
                           </Button>
-                        </Stack>
+                        </Badge>
+                        <Button
+                          size="small"
+                          variant={workflowSidePanel === 'help' ? 'contained' : 'outlined'}
+                          onClick={() => setWorkflowSidePanel((prev) => (prev === 'help' ? null : 'help'))}
+                        >
+                          Quick Help
+                        </Button>
                       </Stack>
-                      <WorkflowTabPanels
-                        value={snapshot.workflow}
-                        onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
-                        activeTab={workflowTab}
-                        focusIssue={workflowFocus?.issue ?? null}
-                        focusNonce={workflowFocus?.nonce ?? 0}
-                        downloadFileName={(() => {
-                          const country = snapshot.countryCode.trim();
-                          const flow = snapshot.workflow.workflowKey.trim();
-                          if (!country || !flow) {
-                            return 'workflow-fsm.yaml';
-                          }
-                          const sanitize = (value: string) =>
-                            value
-                              .toLowerCase()
-                              .replace(/[^a-z0-9]+/g, '-')
-                              .replace(/(^-|-$)/g, '');
-                          return `${sanitize(country)}-${sanitize(flow)}-fsm.yaml`;
-                        })()}
-                      />
                     </Stack>
-                  </Grid>
-                </Grid>
+                    <WorkflowTabPanels
+                      value={snapshot.workflow}
+                      onChange={(workflow) => updateSnapshot((prev) => ({ ...prev, workflow }))}
+                      activeTab={workflowTab}
+                      focusIssue={workflowFocus?.issue ?? null}
+                      focusNonce={workflowFocus?.nonce ?? 0}
+                      downloadFileName={workflowDownloadFileName}
+                      highlightTransitionKeys={highlightTransitionKeys}
+                    />
+                  </Stack>
+                )}
               </Stack>
             </Paper>
-            {workflowLint.errors.length > 0 ? (
+            {hasWorkflowPreview && workflowLint.errors.length > 0 ? (
               <Alert severity="warning">
                 Resolve workflow lint errors before proceeding to review.
               </Alert>
             ) : null}
             <Drawer
               anchor="right"
-              open={Boolean(workflowSidePanel)}
+              open={hasWorkflowPreview && Boolean(workflowSidePanel)}
               onClose={() => setWorkflowSidePanel(null)}
               ModalProps={{ keepMounted: true }}
               PaperProps={{ sx: { width: { xs: '100%', sm: 360 } } }}

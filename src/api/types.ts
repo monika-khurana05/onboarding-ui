@@ -1,4 +1,5 @@
 import type { SnapshotModel } from '../models/snapshot';
+import type { FlowDirection } from '../features/state-manager/types';
 
 export type ApiErrorResponseDto = {
   error?: string;
@@ -138,6 +139,24 @@ export type SnapshotVersionRequestDto = {
 };
 
 export type SnapshotVersionResponseDto = SnapshotDetailDto;
+
+export type SubmitFsmRequestDto = {
+  countryCode: string;
+  direction: FlowDirection;
+  workflowKey: string;
+  yamlContent: string;
+  commitMessage: string;
+  branchName?: string;
+};
+
+export type SubmitFsmResponseDto = {
+  operationId: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+  pullRequestUrl?: string;
+  error?: string;
+};
+
+export type FsmOperationStatusResponseDto = SubmitFsmResponseDto;
 
 export type PreviewGenerateRequestDto = {
   snapshotId: string;

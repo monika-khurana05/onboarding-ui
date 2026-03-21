@@ -13,6 +13,7 @@ type RawState = {
 type RawFsmYaml = {
   statesClass?: unknown;
   eventsClass?: unknown;
+  startState?: unknown;
   states?: unknown;
 };
 
@@ -45,17 +46,21 @@ const normalizeOnEvent = (raw: RawState['on_event']): Record<string, TransitionS
   if (!raw || typeof raw !== 'object') {
     return {};
   }
-  return Object.entries(raw as Record<string, unknown>).reduce<Record<string, TransitionSpec>>((acc, [eventName, transition]) => {
-    if (!transition || typeof transition !== 'object') {
+  return Object.entries(raw as Record<string, unknown>).reduce<Record<string, TransitionSpec>>(
+    (acc, [eventName, transition]) => {
+      if (!transition || typeof transition !== 'object') {
+        return acc;
+      }
+      acc[eventName] = normalizeTransition(transition as RawTransition);
       return acc;
-    }
-    acc[eventName] = normalizeTransition(transition as RawTransition);
-    return acc;
-  }, {});
+    },
+    {}
+  );
 };
 
 export function parseFsmYamlToSpec(yamlText: string): WorkflowSpec {
-  const parsed = load(yamlText) as RawFsmYaml | undefined;
+  const rawParsed = load(yamlText);
+  const parsed = rawParsed && typeof rawParsed === 'object' ? (rawParsed as RawFsmYaml) : undefined;
   const statesRaw = parsed?.states;
   const states: StateSpec[] = [];
 
@@ -75,7 +80,9 @@ export function parseFsmYamlToSpec(yamlText: string): WorkflowSpec {
 
   const resolvedStatesClass = typeof parsed?.statesClass === 'string' ? parsed.statesClass : undefined;
   const resolvedEventsClass = typeof parsed?.eventsClass === 'string' ? parsed.eventsClass : undefined;
-  const startState = states[0]?.name ?? '';
+  const resolvedStartState =
+    typeof parsed?.startState === 'string' && parsed.startState.trim() ? parsed.startState : undefined;
+  const startState = resolvedStartState ?? states[0]?.name ?? '';
 
   return {
     workflowKey: '',

@@ -15,6 +15,9 @@ import type {
   SnapshotDetailDto,
   SnapshotVersionRequestDto,
   SnapshotVersionResponseDto,
+  SubmitFsmRequestDto,
+  SubmitFsmResponseDto,
+  FsmOperationStatusResponseDto,
   KafkaPublishRequestDto,
   KafkaPublishResponseDto,
   KafkaValidationResponseDto
@@ -29,6 +32,20 @@ export async function getSnapshotContext(countryCode: string): Promise<SnapshotC
   const query = `?country=${encodeURIComponent(countryCode)}`;
   const raw = await httpRequest<unknown>(`/onboarding/snapshot/context${query}`);
   return normalizeSnapshotContext(raw);
+}
+
+export async function submitFsm(req: SubmitFsmRequestDto): Promise<SubmitFsmResponseDto> {
+  return httpRequest<SubmitFsmResponseDto>('/fsm/submit', {
+    method: 'POST',
+    body: JSON.stringify(req)
+  });
+}
+
+export async function getFsmOperationStatus(
+  operationId: string
+): Promise<FsmOperationStatusResponseDto> {
+  const encodedId = encodeURIComponent(operationId);
+  return httpRequest<FsmOperationStatusResponseDto>(`/fsm/operation-status/${encodedId}`);
 }
 
 export async function persistAssemblyConfig(

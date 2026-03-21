@@ -83,6 +83,7 @@ type WorkflowTabPanelsProps = {
   showErrors?: boolean;
   focusIssue?: WorkflowLintIssue | null;
   focusNonce?: number;
+  highlightTransitionKeys?: Set<string> | string[];
 };
 
 type TransitionRow = WorkflowTransitionRow & { rowIndex: number };
@@ -97,6 +98,8 @@ type SearchResult = {
 };
 
 const retryEventName = 'OnRetry';
+const DEFAULT_STATES_CLASS = 'com.citi.cpx.statemanager.fsm.State';
+const DEFAULT_EVENTS_CLASS = 'com.citi.cpx.statemanager.fsm.Event';
 const buildStateKey = (name: string) => encodeURIComponent(name || '');
 const buildTransitionRowKey = (from: string, eventName: string) =>
   encodeURIComponent(`${from}::${eventName || '__EMPTY__'}`);
@@ -227,25 +230,41 @@ function removeStateFromSpec(spec: WorkflowSpec, stateName: string): WorkflowSpe
 }
 
 function formatYamlScalar(value: string): string {
-  return value.trim();
+  const normalized = value.trim();
+  if (!normalized) {
+    return "''";
+  }
+
+  const requiresQuotes =
+    normalized !== value ||
+    /[\n\r\t]/.test(normalized) ||
+    /^(?:true|false|null|~|yes|no|on|off)$/i.test(normalized) ||
+    /^[-+]?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(normalized) ||
+    /^[\[\]\{\},&*!|>'"%@`]/.test(normalized) ||
+    /^[-?:](?:$|\s)/.test(normalized) ||
+    /[:#]/.test(normalized);
+
+  if (!requiresQuotes) {
+    return normalized;
+  }
+
+  return `'${normalized.replace(/'/g, "''")}'`;
 }
 
 export function generateFsmYaml(spec: WorkflowSpec): string {
-  const lines: string[] = [];
-  const sortedStates = [...spec.states].sort((left, right) => left.name.localeCompare(right.name));
-  if (spec.statesClass?.trim()) {
-    lines.push(`statesClass: ${formatYamlScalar(spec.statesClass)}`);
-  }
-  if (spec.eventsClass?.trim()) {
-    lines.push(`eventsClass: ${formatYamlScalar(spec.eventsClass)}`);
-  }
-  if (!sortedStates.length) {
+  const lines: string[] = [
+    `statesClass: ${formatYamlScalar(spec.statesClass?.trim() || DEFAULT_STATES_CLASS)}`,
+    `eventsClass: ${formatYamlScalar(spec.eventsClass?.trim() || DEFAULT_EVENTS_CLASS)}`
+  ];
+  const orderedStates = [...spec.states];
+
+  if (!orderedStates.length) {
     lines.push('states: {}');
     return lines.join('\n');
   }
 
   lines.push('states:');
-  sortedStates.forEach((state) => {
+  orderedStates.forEach((state) => {
     lines.push(`  ${formatYamlScalar(state.name)}:`);
     const events = Object.entries(state.onEvent ?? {}).sort(([left], [right]) => left.localeCompare(right));
     if (!events.length) {
@@ -275,10 +294,8 @@ export function WorkflowDefinitionFields({
   showErrors = true
 }: WorkflowDefinitionFieldsProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const defaultStatesClass = 'com.citi.cpx.statemanager.fsm.State';
-  const defaultEventsClass = 'com.citi.cpx.statemanager.fsm.Event';
-  const resolvedStatesClass = value.statesClass?.trim() ? value.statesClass : defaultStatesClass;
-  const resolvedEventsClass = value.eventsClass?.trim() ? value.eventsClass : defaultEventsClass;
+  const resolvedStatesClass = value.statesClass?.trim() ? value.statesClass : DEFAULT_STATES_CLASS;
+  const resolvedEventsClass = value.eventsClass?.trim() ? value.eventsClass : DEFAULT_EVENTS_CLASS;
 
   const stateNames = useMemo(() => value.states.map((state) => state.name), [value.states]);
   const stateKeySet = useMemo(() => new Set(stateNames.map((state) => normalizeStateKey(state))), [stateNames]);
@@ -344,20 +361,20 @@ export function WorkflowDefinitionFields({
               value={resolvedStatesClass}
               onChange={(event) => {
                 const next = event.target.value;
-                onChange({ ...value, statesClass: next.trim() ? next : defaultStatesClass });
+                onChange({ ...value, statesClass: next.trim() ? next : DEFAULT_STATES_CLASS });
               }}
-              helperText={`Defaults to ${defaultStatesClass}`}
-              placeholder={defaultStatesClass}
+              helperText={`Defaults to ${DEFAULT_STATES_CLASS}`}
+              placeholder={DEFAULT_STATES_CLASS}
             />
             <TextField
               label="eventsClass"
               value={resolvedEventsClass}
               onChange={(event) => {
                 const next = event.target.value;
-                onChange({ ...value, eventsClass: next.trim() ? next : defaultEventsClass });
+                onChange({ ...value, eventsClass: next.trim() ? next : DEFAULT_EVENTS_CLASS });
               }}
-              helperText={`Defaults to ${defaultEventsClass}`}
-              placeholder={defaultEventsClass}
+              helperText={`Defaults to ${DEFAULT_EVENTS_CLASS}`}
+              placeholder={DEFAULT_EVENTS_CLASS}
             />
             <TextField
               select
@@ -406,7 +423,8 @@ export function WorkflowTabPanels({
   downloadFileName = 'workflow-fsm.yaml',
   showErrors = true,
   focusIssue = null,
-  focusNonce = 0
+  focusNonce = 0,
+  highlightTransitionKeys
 }: WorkflowTabPanelsProps) {
   const [activeState, setActiveState] = useState('');
   const [showOnlyCurrentState, setShowOnlyCurrentState] = useState(false);
@@ -467,6 +485,15 @@ export function WorkflowTabPanels({
   const transitionRows = useMemo(
     () => listAllTransitions(value).map((row, index) => ({ ...row, rowIndex: index })),
     [value]
+  );
+  const highlightTransitionKeySet = useMemo(
+    () =>
+      new Set(
+        highlightTransitionKeys instanceof Set
+          ? [...highlightTransitionKeys]
+          : highlightTransitionKeys ?? []
+      ),
+    [highlightTransitionKeys]
   );
   const unusedStates = useMemo(() => {
     const inboundCounts = new Map<string, number>();
@@ -1197,6 +1224,7 @@ export function WorkflowTabPanels({
               const fromError = showErrors && !errors?.from;
               const targetError = showErrors && !errors?.target;
               const normalizedEvent = transition.eventName.trim().toUpperCase();
+              const isHighlighted = highlightTransitionKeySet.has(`${transition.from}::${transition.eventName}`);
               const eventKey = `${transition.from}::${normalizedEvent}`;
               const hasDuplicate = normalizedEvent ? (eventKeyCounts.get(eventKey) ?? 0) > 1 : false;
               const eventError = showErrors && (!errors?.eventName || hasDuplicate);
@@ -1210,6 +1238,17 @@ export function WorkflowTabPanels({
                 <TableRow
                   key={`${transition.from}-${transition.eventName}-${transition.rowIndex}`}
                   data-transition-row={rowKey}
+                  sx={
+                    isHighlighted
+                      ? {
+                          backgroundColor: theme.palette.action.hover,
+                          boxShadow: `inset 4px 0 0 ${theme.palette.info.main}`,
+                          '& td': {
+                            backgroundColor: 'inherit'
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   {showFrom ? (
                     <TableCell data-transition-field="from">

@@ -1,3 +1,5 @@
+import type { StateManagerConfig } from '../features/state-manager/types';
+
 export const capabilityKeys = [
   'DUP_CHECK',
   'PAYMENT_INITIATION',
@@ -128,6 +130,7 @@ export type SnapshotModel = {
   rulesConfig?: RulesConfig;
   actions: SnapshotAction[];
   workflow: WorkflowSpec;
+  stateManagerConfig?: StateManagerConfig;
   integrationConfig?: Record<string, any>;
   deploymentOverrides?: Record<string, any>;
 };
@@ -606,3 +609,4 @@ export function validateSnapshotModel(snapshot: SnapshotModel): SnapshotValidati
     ...validateTransitionsReferToValidStates(snapshot.workflow)
   ];
 }
+

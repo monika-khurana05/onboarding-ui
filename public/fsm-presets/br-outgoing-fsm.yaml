@@ -1,0 +1,79 @@
+statesClass: com.citi.cpx.statemanager.br.outgoing.State
+eventsClass: com.citi.cpx.statemanager.br.outgoing.Event
+startState: PaymentReceived
+
+states:
+  PaymentReceived:
+    on_event:
+      ValidationPassed:
+        target: ScreeningRequested
+        actions: [persist-payment, start-spm-check]
+      ValidationFailed:
+        target: Rejected
+        actions: [persist-rejection, notify-client]
+
+  ScreeningRequested:
+    on_event:
+      ScreeningCleared:
+        target: BalanceCheckPending
+        actions: [save-screening-result, start-balance-check]
+      ScreeningPossibleHit:
+        target: SanctionsReview
+        actions: [persist-hit, notify-compliance]
+      ScreeningError:
+        target: RetryScreening
+        actions: [record-screening-error, schedule-retry]
+
+  RetryScreening:
+    on_event:
+      RetrySucceeded:
+        target: BalanceCheckPending
+        actions: [save-retry-result, start-balance-check]
+      RetryFailed:
+        target: Rejected
+        actions: [persist-rejection, notify-ops]
+
+  BalanceCheckPending:
+    on_event:
+      BalanceConfirmed:
+        target: PostingPending
+        actions: [reserve-funds, start-posting]
+      BalanceInsufficient:
+        target: Rejected
+        actions: [persist-rejection, notify-client]
+
+  PostingPending:
+    on_event:
+      PostingAccepted:
+        target: SentToClearing
+        actions: [persist-posting, notify-clearing]
+      PostingRejected:
+        target: Rejected
+        actions: [persist-rejection, notify-client]
+
+  SentToClearing:
+    on_event:
+      ClearingAccepted:
+        target: Completed
+        actions: [persist-completion, notify-client]
+      ClearingRejected:
+        target: Rejected
+        actions: [persist-rejection, notify-client]
+
+  SanctionsReview:
+    on_event:
+      ReviewCleared:
+        target: BalanceCheckPending
+        actions: [save-review-result, start-balance-check]
+      ReviewRejected:
+        target: Seized
+        actions: [freeze-funds, notify-compliance]
+
+  Completed:
+    on_event: {}
+
+  Rejected:
+    on_event: {}
+
+  Seized:
+    on_event: {}
