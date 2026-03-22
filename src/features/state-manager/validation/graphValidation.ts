@@ -229,7 +229,7 @@ export function validateGeneratedWorkflow(
     }
   }
 
-  if (context.analysis?.lifecycleFlags.hasWarehousing) {
+  if (context.analysis?.lifecycleFlags.hasWarehousing && discoveredStates.has('Warehoused')) {
     const warehousedState = stateMap.get('Warehoused');
     const warehousedEvents = Object.keys(warehousedState?.onEvent ?? {});
     const normalizedEvents = new Set(warehousedEvents.map((eventName) => normalizeKey(eventName)));
@@ -265,3 +265,4 @@ export function validateGeneratedWorkflow(
     hasErrors: orderedIssues.some((issue) => issue.severity === 'ERROR')
   };
 }
+

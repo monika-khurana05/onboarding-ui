@@ -171,4 +171,43 @@ describe('validateGeneratedWorkflow', () => {
       expect.arrayContaining([expect.objectContaining({ code: 'WAREHOUSED_RELEASE_MISSING', severity: 'ERROR' })])
     );
   });
+
+  it('keeps warehousing validation dormant until Warehoused is explicitly discovered', () => {
+    const spec: WorkflowSpec = {
+      workflowKey: 'WF',
+      startState: 'Init',
+      states: [
+        {
+          name: 'Init',
+          onEvent: {
+            Continue: { target: 'Final', actions: [] }
+          }
+        },
+        {
+          name: 'Final',
+          onEvent: {}
+        }
+      ]
+    };
+
+    const report = validateGeneratedWorkflow(spec, {
+      analysis: makeAnalysisStub({
+        lifecycleFlags: {
+          hasSpm: false,
+          hasSanctions: false,
+          hasBalanceCheck: false,
+          hasClearing: false,
+          hasPosting: false,
+          hasWarehousing: true,
+          hasBookTransfer: false,
+          hasIncomingFlow: false,
+          hasOutgoingFlow: true
+        }
+      }),
+      terminalStates: new Set(['Final'])
+    });
+
+    expect(report.issues.some((issue) => issue.code.startsWith('WAREHOUSED_'))).toBe(false);
+  });
 });
+

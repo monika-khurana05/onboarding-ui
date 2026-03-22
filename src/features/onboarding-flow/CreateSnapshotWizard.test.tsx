@@ -36,7 +36,49 @@ vi.mock('../../api/client', async () => {
 });
 
 vi.mock('../../components/WorkflowEditor', () => ({
-  WorkflowTabPanels: ({ value }: { value: WorkflowSpec }) => <div>Workflow preview: {value.workflowKey}</div>,
+  WorkflowTabPanels: ({
+    value,
+    onChange
+  }: {
+    value: WorkflowSpec;
+    onChange?: (workflow: WorkflowSpec) => void;
+  }) => (
+    <div>
+      <div>Workflow preview: {value.workflowKey}</div>
+      {onChange ? (
+        <button
+          onClick={() =>
+            onChange({
+              workflowKey: 'PAYMENT_INGRESS',
+              statesClass: 'com.citi.cpx.statemanager.fsm.State',
+              eventsClass: 'com.citi.cpx.statemanager.fsm.Event',
+              startState: 'RECEIVED',
+              states: [
+                {
+                  name: 'RECEIVED',
+                  onEvent: {
+                    VALIDATE: { target: 'VALIDATED', actions: [] }
+                  }
+                },
+                {
+                  name: 'VALIDATED',
+                  onEvent: {
+                    CLEAR: { target: 'CLEARED', actions: [] }
+                  }
+                },
+                {
+                  name: 'CLEARED',
+                  onEvent: {}
+                }
+              ]
+            })
+          }
+        >
+          Reset Workflow Preview
+        </button>
+      ) : null}
+    </div>
+  ),
   generateFsmYaml: (spec: WorkflowSpec) => JSON.stringify(spec)
 }));
 
@@ -145,6 +187,9 @@ vi.mock('../state-manager/StateManagerPanel', () => ({
       >
         Edit Scenario
       </button>
+      <button onClick={() => onChange(createDefaultStateManagerConfig(value.countryCode, value.flowDirection))}>
+        Reset Defaults
+      </button>
       <button onClick={() => onSaveScenarios?.(value)} disabled={isSaving}>
         Save Scenarios
       </button>
@@ -188,6 +233,33 @@ function makeWorkflow(workflowKey: string): WorkflowSpec {
       },
       {
         name: 'Done',
+        onEvent: {}
+      }
+    ]
+  };
+}
+
+function makeDefaultWorkflow(): WorkflowSpec {
+  return {
+    workflowKey: 'PAYMENT_INGRESS',
+    statesClass: 'com.citi.cpx.statemanager.fsm.State',
+    eventsClass: 'com.citi.cpx.statemanager.fsm.Event',
+    startState: 'RECEIVED',
+    states: [
+      {
+        name: 'RECEIVED',
+        onEvent: {
+          VALIDATE: { target: 'VALIDATED', actions: [] }
+        }
+      },
+      {
+        name: 'VALIDATED',
+        onEvent: {
+          CLEAR: { target: 'CLEARED', actions: [] }
+        }
+      },
+      {
+        name: 'CLEARED',
         onEvent: {}
       }
     ]
@@ -340,6 +412,54 @@ describe('CreateSnapshotWizard FSM analysis UI', () => {
     mocks.loadPresetYaml.mockResolvedValue('preset-yaml');
     mocks.parseFsmYamlToSpec.mockReturnValue(makeWorkflow('PRESET_FLOW'));
   });
+
+  it(
+    'does not auto-generate on load and shows the empty preview state until generation is requested',
+    async () => {
+      renderWizard({
+        ...makeInitialSnapshot('EXISTING_FLOW'),
+        workflow: makeDefaultWorkflow()
+      });
+      const user = userEvent.setup();
+
+      await goToStateManagerStep(user);
+
+      expect(screen.getByText('No FSM generated yet')).toBeInTheDocument();
+      expect(mocks.scenariosToWorkflowSpec).not.toHaveBeenCalled();
+    },
+    20000
+  );
+
+  it(
+    'does not regenerate when the previewed workflow is manually reset and falls back to the empty preview state',
+    async () => {
+      renderWizard(makeInitialSnapshot('EXISTING_FLOW'));
+      const user = userEvent.setup();
+
+      await goToStateManagerStep(user);
+      expect(screen.getByText('Workflow preview: EXISTING_FLOW')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /reset workflow preview/i }));
+
+      expect(screen.getByText('No FSM generated yet')).toBeInTheDocument();
+      expect(mocks.scenariosToWorkflowSpec).not.toHaveBeenCalled();
+    },
+    20000
+  );
+
+  it(
+    'shows a persisted workflow preview without regenerating it on load',
+    async () => {
+      renderWizard(makeInitialSnapshot('EXISTING_FLOW'));
+      const user = userEvent.setup();
+
+      await goToStateManagerStep(user);
+
+      expect(screen.getByText('Workflow preview: EXISTING_FLOW')).toBeInTheDocument();
+      expect(mocks.scenariosToWorkflowSpec).not.toHaveBeenCalled();
+    },
+    20000
+  );
 
   it(
     'shows analysis summary, inferred targets, and transition source counts on successful generation',
@@ -501,6 +621,7 @@ describe('CreateSnapshotWizard scenario save flow', () => {
       await user.click(screen.getByRole('button', { name: /^save scenarios$/i }));
 
       await waitFor(() => expect(mocks.saveScenarioConfig).toHaveBeenCalledTimes(1));
+      expect(mocks.scenariosToWorkflowSpec).not.toHaveBeenCalled();
       expect(mocks.saveScenarioConfig.mock.calls[0]?.[0]).toEqual(
         expect.objectContaining({
           countryCode: 'SG',
@@ -512,6 +633,51 @@ describe('CreateSnapshotWizard scenario save flow', () => {
         })
       );
       expect(await screen.findByText('Scenario configuration saved successfully')).toBeInTheDocument();
+    },
+    20000
+  );
+
+  it(
+    'does not auto-generate on edit, import, country change, flow change, or reset defaults and marks the preview stale',
+    async () => {
+      renderWizard(makeInitialSnapshot('EXISTING_FLOW'));
+      const user = userEvent.setup();
+
+      await goToStateManagerStep(user);
+      expect(screen.getByText('Workflow preview: EXISTING_FLOW')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /edit scenario/i }));
+      await user.click(screen.getByRole('button', { name: /import scenario/i }));
+      await user.click(screen.getByRole('button', { name: /change country/i }));
+      await user.click(screen.getByRole('button', { name: /change flow/i }));
+      await user.click(screen.getByRole('button', { name: /reset defaults/i }));
+
+      expect(mocks.scenariosToWorkflowSpec).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(/Scenario configuration changed\. Click Save & Generate FSM to refresh the FSM\./i)
+      ).toBeInTheDocument();
+    },
+    20000
+  );
+
+  it(
+    'marks the generated workflow preview as stale after a later scenario edit',
+    async () => {
+      mocks.scenariosToWorkflowSpec.mockReturnValue(makeGenerationResult());
+      renderWizard(makeInitialSnapshot('EXISTING_FLOW'));
+      const user = userEvent.setup();
+
+      await goToStateManagerStep(user);
+      await user.click(screen.getByRole('button', { name: /generate fsm/i }));
+      expect(await screen.findByText('Workflow preview: GENERATED_FLOW')).toBeInTheDocument();
+      expect(mocks.scenariosToWorkflowSpec).toHaveBeenCalledTimes(1);
+
+      await user.click(screen.getByRole('button', { name: /edit scenario/i }));
+
+      expect(mocks.scenariosToWorkflowSpec).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByText(/Scenario configuration changed\. Click Save & Generate FSM to refresh the FSM\./i)
+      ).toBeInTheDocument();
     },
     20000
   );
@@ -547,6 +713,7 @@ describe('CreateSnapshotWizard scenario save flow', () => {
       await user.click(screen.getByRole('button', { name: /^save scenarios$/i }));
 
       await waitFor(() => expect(mocks.saveScenarioConfig).toHaveBeenCalledTimes(1));
+      expect(mocks.scenariosToWorkflowSpec).not.toHaveBeenCalled();
       expect(mocks.saveScenarioConfig.mock.calls[0]?.[0]).toEqual(
         expect.objectContaining({
           stateManagerConfig: expect.objectContaining({

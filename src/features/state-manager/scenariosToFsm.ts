@@ -1,5 +1,6 @@
 import {
   lintWorkflowSpec,
+  orderWorkflowStates,
   type StateSpec,
   type TransitionSpec,
   type WorkflowLintResult,
@@ -11,6 +12,9 @@ import type { AnalysisModel, FlowArchetype } from './analysis/types';
 import { validateGeneratedWorkflow } from './validation/graphValidation';
 import { replayScenariosAgainstWorkflow } from './validation/replayScenarios';
 import type { GraphValidationReport, ScenarioReplayReport } from './validation/types';
+import { getCountryPolicy, REGISTERED_COUNTRY_POLICY_CODES } from './countryRules/countryRuleRegistry';
+import { inferTransitionSemantic, resolveTransitionDefinition } from './countryRules/actionResolver';
+import type { CountryActionPolicy } from './countryRules/types';
 
 const DEFAULT_STATES_CLASS = 'com.citi.cpx.statemanager.fsm.State';
 const DEFAULT_EVENTS_CLASS = 'com.citi.cpx.statemanager.fsm.Event';
@@ -37,6 +41,7 @@ export type FsmGenerationOptions = {
   customDirectMap?: Record<string, string>;
   enabledRuleIds?: string[];
   disabledRuleIds?: string[];
+  skipObservedTransitions?: boolean;
 };
 
 export type FsmGenerationResult = {
@@ -55,8 +60,10 @@ export type ExpansionContext = {
   prunedTransitions: Map<string, Set<string>>;
   sequences: string[][];
   kb: Map<string, KnowledgeEntry>;
+  kbBySourceEventTarget: Map<string, KnowledgeEntry>;
   countryCode: string;
   direction: 'incoming' | 'outgoing';
+  countryPolicy: CountryActionPolicy;
   topArchetype?: FlowArchetype;
   inferredTargets: {
     nextAfterInit?: string;
@@ -119,13 +126,6 @@ function toPascalCase(value: string): string {
     .join('');
 }
 
-function toKebabCase(value: string): string {
-  return value
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/[_\s]+/g, '-')
-    .toLowerCase();
-}
 
 function normalizeActions(actions: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -153,6 +153,10 @@ function arraysEqual(left: readonly string[], right: readonly string[]): boolean
 
 function buildKnowledgeKey(source: string, target: string): string {
   return `${source.trim()}->${target.trim()}`;
+}
+
+function buildSourceEventTargetKnowledgeKey(source: string, eventName: string, target: string): string {
+  return `${source.trim()}::${normalizeEventKey(eventName)}->${target.trim()}`;
 }
 
 function normalizeEventKey(eventName: string): string {
@@ -411,8 +415,19 @@ function addTx(
 
   const normalizedActions = normalizeActions(actions);
   const existing = sourceTransitions[finalEventName];
+  const transitionKey = `${trimmedSource}::${finalEventName}`;
   if (existing) {
-    if (existing.target === trimmedTarget && arraysEqual(existing.actions, normalizedActions)) {
+    if (existing.target === trimmedTarget) {
+      if (sourceKind === 'preset') {
+        if (!arraysEqual(existing.actions, normalizedActions)) {
+          sourceTransitions[finalEventName] = {
+            target: trimmedTarget,
+            actions: normalizedActions
+          };
+        }
+        ctx.presetBackedTransitionKeys.add(transitionKey);
+        ctx.fallbackTransitionKeys.delete(transitionKey);
+      }
       return finalEventName;
     }
     return finalEventName;
@@ -423,7 +438,6 @@ function addTx(
     actions: normalizedActions
   };
 
-  const transitionKey = `${trimmedSource}::${finalEventName}`;
   ctx.newTransitions.add(transitionKey);
   if (sourceKind === 'preset') {
     ctx.presetBackedTransitionKeys.add(transitionKey);
@@ -441,19 +455,31 @@ function resolveFromKbOrFallback(
   fallbackEventName: string,
   fallbackActions: readonly string[]
 ): TransitionResolution {
-  const knowledge = ctx.kb.get(buildKnowledgeKey(source, target));
-  if (knowledge) {
+  const resolved = resolveTransitionDefinition({
+    countryCode: ctx.countryCode,
+    direction: ctx.direction,
+    source,
+    target,
+    eventName: fallbackEventName,
+    isTerminal: ctx.terminalStates.has(target),
+    policy: ctx.countryPolicy,
+    semantic: inferTransitionSemantic(source, fallbackEventName, target),
+    knowledgeBySourceTarget: ctx.kb,
+    knowledgeBySourceEventTarget: ctx.kbBySourceEventTarget
+  });
+
+  if (resolved.sourceKind === 'genericFallback' && fallbackActions.length > 0) {
     return {
-      eventName: knowledge.eventName,
-      actions: [...knowledge.actions],
-      sourceKind: 'preset'
+      eventName: resolved.eventName,
+      actions: normalizeActions(fallbackActions),
+      sourceKind: 'fallback'
     };
   }
 
   return {
-    eventName: fallbackEventName,
-    actions: normalizeActions(fallbackActions),
-    sourceKind: 'fallback'
+    eventName: resolved.eventName,
+    actions: [...resolved.actions],
+    sourceKind: resolved.sourceKind === 'preset' ? 'preset' : 'fallback'
   };
 }
 
@@ -579,14 +605,12 @@ const RULE_C_PRE_SANCTIONS_RESULT_CHECK: ExpansionRule = {
   id: 'C',
   triggers: (ctx) => ctx.discovered.has('SpmSent') && ctx.discovered.has('SanctionsSent'),
   apply: (ctx) => {
-    const balanceTarget = resolveAnalysisBalanceTarget(ctx);
-
-    let resolved = resolveFromKbOrFallback(ctx, 'PreSanctionsResultCheck', balanceTarget, 'SkipSanctions', [
+    let resolved = resolveFromKbOrFallback(ctx, 'PreSanctionsResultCheck', 'BalanceCheckPending', 'SkipSanctions', [
       'do-balance-check',
       'persist-txn',
       'notify-bd-intermediate'
     ]);
-    addTx(ctx, 'PreSanctionsResultCheck', resolved.eventName, balanceTarget, resolved.actions, resolved.sourceKind);
+    addTx(ctx, 'PreSanctionsResultCheck', resolved.eventName, 'BalanceCheckPending', resolved.actions, resolved.sourceKind);
 
     resolved = resolveFromKbOrFallback(ctx, 'PreSanctionsResultCheck', 'SanctionsSent', 'NeedSanctions', [
       'send-sanctions-request',
@@ -632,8 +656,7 @@ const RULE_D_SANCTIONS_LIFECYCLE: ExpansionRule = {
     resolved = resolveFromKbOrFallback(ctx, 'SanctionsSent', 'SanctionsSent', 'OnRetry', [
       'reset-mtp',
       'send-sanctions-request',
-      'persist-txn',
-      'notify-bd-intermediate'
+      'persist-txn'
     ]);
     addTx(ctx, 'SanctionsSent', resolved.eventName, 'SanctionsSent', resolved.actions, resolved.sourceKind);
   }
@@ -808,7 +831,6 @@ const RULE_H_CLEARING_AND_POSTING: ExpansionRule = {
   id: 'H',
   triggers: (ctx) => ctx.discovered.has('SendClearingPostingPending'),
   apply: (ctx) => {
-    const ccToken = ctx.countryCode.toLowerCase();
     const dirToken = ctx.direction;
 
     let resolved = resolveFromKbOrFallback(
@@ -816,7 +838,7 @@ const RULE_H_CLEARING_AND_POSTING: ExpansionRule = {
       'SendClearingPostingPending',
       'SendClearingPostingPending',
       'ClearingResponseReceived',
-      [`process-clearing-response-${ccToken}-${dirToken}`]
+      []
     );
     addTx(
       ctx,
@@ -868,7 +890,7 @@ const RULE_H_CLEARING_AND_POSTING: ExpansionRule = {
       'SendClearingPostingPending',
       'SendClearingPostingPending',
       'PostingFailure',
-      [`process-posting-error-${ccToken}`]
+      []
     );
     addTx(
       ctx,
@@ -903,7 +925,7 @@ const RULE_H_CLEARING_AND_POSTING: ExpansionRule = {
         'SendClearingPostingComplete',
         'SendClearingPostingComplete',
         'ClearingResponseReceived',
-        [`process-clearing-response-${ccToken}-${dirToken}`]
+        []
       );
       addTx(
         ctx,
@@ -944,17 +966,14 @@ const RULE_I_POSTING_ONLY: ExpansionRule = {
   id: 'I',
   triggers: (ctx) => ctx.discovered.has('NormalPostingPending'),
   apply: (ctx) => {
-    const ccToken = ctx.countryCode.toLowerCase();
-
     let resolved = resolveFromKbOrFallback(ctx, 'NormalPostingPending', 'FinalPostingComplete', 'PostingSuccess', [
       'process-normal-outgoing-posting-success',
+      'persist-txn',
       'notify-bd-final'
     ]);
     addTx(ctx, 'NormalPostingPending', resolved.eventName, 'FinalPostingComplete', resolved.actions, resolved.sourceKind);
 
-    const postingFailure = resolveFromKbOrFallback(ctx, 'NormalPostingPending', 'NormalPostingPending', 'PostingFailure', [
-      `process-posting-error-${ccToken}`
-    ]);
+    const postingFailure = resolveFromKbOrFallback(ctx, 'NormalPostingPending', 'NormalPostingPending', 'PostingFailure', []);
     addTx(
       ctx,
       'NormalPostingPending',
@@ -988,8 +1007,6 @@ const RULE_J_REJECTION_POSTING: ExpansionRule = {
   id: 'J',
   triggers: (ctx) => ctx.discovered.has('ClrRejectedOrgPostingPending'),
   apply: (ctx) => {
-    const ccToken = ctx.countryCode.toLowerCase();
-
     let resolved = resolveFromKbOrFallback(
       ctx,
       'ClrRejectedOrgPostingPending',
@@ -1011,7 +1028,7 @@ const RULE_J_REJECTION_POSTING: ExpansionRule = {
       'ClrRejectedOrgPostingPending',
       'ClrRejectedOrgPostingPending',
       'PostingFailure',
-      [`process-posting-error-${ccToken}`]
+      []
     );
     addTx(
       ctx,
@@ -1163,6 +1180,78 @@ function selectExpansionRules(options?: FsmGenerationOptions): ExpansionRule[] {
 
   const disabledRuleIds = new Set(options?.disabledRuleIds ?? []);
   return EXPANSION_RULES.filter((rule) => !disabledRuleIds.has(rule.id));
+}
+
+function mergeUniqueStrings(primary?: readonly string[], secondary?: readonly string[]): string[] | undefined {
+  const merged = [...new Set([...(primary ?? []), ...(secondary ?? [])].map((value) => value.trim()).filter(Boolean))];
+  return merged.length > 0 ? merged : undefined;
+}
+
+function mergeGenerationOptionsWithCountryPolicy(
+  countryPolicy: CountryActionPolicy,
+  options?: FsmGenerationOptions
+): FsmGenerationOptions | undefined {
+  const mergedDirectMap = {
+    ...(countryPolicy.directMapOverrides ?? {}),
+    ...(options?.customDirectMap ?? {})
+  };
+  const mergedEnabledRuleIds = mergeUniqueStrings(countryPolicy.enabledRuleIds, options?.enabledRuleIds);
+  const mergedDisabledRuleIds = mergeUniqueStrings(countryPolicy.disabledRuleIds, options?.disabledRuleIds);
+  const hasDirectMap = Object.keys(mergedDirectMap).length > 0;
+
+  const mergedOptions: FsmGenerationOptions = {
+    ...options,
+    ...(hasDirectMap ? { customDirectMap: mergedDirectMap } : {}),
+    ...(options?.preFsmRejections
+      ? { preFsmRejections: [...options.preFsmRejections] }
+      : countryPolicy.preFsmRejections
+        ? { preFsmRejections: [...countryPolicy.preFsmRejections] }
+        : {}),
+    ...(mergedEnabledRuleIds ? { enabledRuleIds: mergedEnabledRuleIds } : {}),
+    ...(mergedDisabledRuleIds ? { disabledRuleIds: mergedDisabledRuleIds } : {})
+  };
+
+  return Object.keys(mergedOptions).length > 0 ? mergedOptions : undefined;
+}
+
+function isDirectionScopedWorkflowKey(workflowKey: string): boolean {
+  return /^[A-Z]{2,3}_(INCOMING|OUTGOING)(_|$)/.test(workflowKey.trim().toUpperCase());
+}
+
+function extractRegisteredCountryCodeFromWorkflowKey(workflowKey: string): string | null {
+  const normalizedWorkflowKey = workflowKey.trim().toUpperCase();
+  const prefix = normalizedWorkflowKey.split('_')[0] ?? '';
+  return REGISTERED_COUNTRY_POLICY_CODES.includes(prefix) ? prefix : null;
+}
+
+function filterPresetKnowledgeByCountryAndDirection(
+  presets: readonly WorkflowSpec[],
+  countryCode: string,
+  direction: 'incoming' | 'outgoing'
+): WorkflowSpec[] {
+  const normalizedCountryCode = countryCode.trim().toUpperCase();
+  if (!normalizedCountryCode) {
+    return [...presets];
+  }
+
+  const expectedPrefix = `${normalizedCountryCode}_${direction.toUpperCase()}`;
+  return presets.filter((preset) => {
+    const normalizedWorkflowKey = preset.workflowKey?.trim().toUpperCase() ?? '';
+    if (!normalizedWorkflowKey) {
+      return true;
+    }
+
+    const scopedCountryCode = extractRegisteredCountryCodeFromWorkflowKey(normalizedWorkflowKey);
+    if (scopedCountryCode && scopedCountryCode !== normalizedCountryCode) {
+      return false;
+    }
+
+    if (!isDirectionScopedWorkflowKey(normalizedWorkflowKey)) {
+      return true;
+    }
+
+    return normalizedWorkflowKey === expectedPrefix || normalizedWorkflowKey.startsWith(`${expectedPrefix}_`);
+  });
 }
 
 function resolveWorkflowKey(
@@ -1466,6 +1555,43 @@ export function buildKnowledgeBase(presets: readonly WorkflowSpec[]): Map<string
   return knowledgeBase;
 }
 
+function buildSourceEventTargetKnowledgeBase(presets: readonly WorkflowSpec[]): Map<string, KnowledgeEntry> {
+  const knowledgeBase = new Map<string, KnowledgeEntry>();
+
+  presets.forEach((preset) => {
+    if (!preset || !Array.isArray(preset.states)) {
+      return;
+    }
+
+    preset.states.forEach((state) => {
+      const source = typeof state?.name === 'string' ? state.name.trim() : '';
+      if (!source || !state.onEvent || typeof state.onEvent !== 'object') {
+        return;
+      }
+
+      Object.entries(state.onEvent).forEach(([eventName, transition]) => {
+        const trimmedEventName = eventName.trim();
+        const target = typeof transition?.target === 'string' ? transition.target.trim() : '';
+        if (!trimmedEventName || !target) {
+          return;
+        }
+
+        const key = buildSourceEventTargetKnowledgeKey(source, trimmedEventName, target);
+        if (knowledgeBase.has(key)) {
+          return;
+        }
+
+        knowledgeBase.set(key, {
+          eventName: trimmedEventName,
+          actions: normalizeActions(transition.actions ?? [])
+        });
+      });
+    });
+  });
+
+  return knowledgeBase;
+}
+
 export function resolveEventName(
   source: string,
   target: string,
@@ -1490,23 +1616,38 @@ export function resolveActions(
   terminalStates: Set<string>,
   countryCode: string,
   direction: 'incoming' | 'outgoing',
-  kb: Map<string, KnowledgeEntry>
+  kb: Map<string, KnowledgeEntry>,
+  eventName?: string,
+  countryPolicy?: CountryActionPolicy,
+  kbBySourceEventTarget?: ReadonlyMap<string, KnowledgeEntry>
 ): string[] {
-  const knowledge = kb.get(buildKnowledgeKey(source, target));
-  if (knowledge) {
-    return [...knowledge.actions];
-  }
+  const resolvedEventName = eventName?.trim() || resolveEventName(source, target, terminalStates, kb);
+  const resolved = resolveTransitionDefinition({
+    countryCode,
+    direction,
+    source,
+    target,
+    eventName: resolvedEventName,
+    isTerminal: terminalStates.has(target),
+    policy: countryPolicy ?? getCountryPolicy(countryCode),
+    semantic: inferTransitionSemantic(source, resolvedEventName, target),
+    knowledgeBySourceTarget: kb,
+    knowledgeBySourceEventTarget: kbBySourceEventTarget
+  });
 
-  const ccToken = countryCode.trim().toLowerCase();
-  const primaryAction = `process-${toKebabCase(target)}-${ccToken}-${direction}`;
-  if (terminalStates.has(target)) {
-    return [primaryAction, 'persist-txn', 'notify-bd-final'];
-  }
-
-  return [primaryAction, 'persist-txn', 'notify-bd-intermediate'];
+  return [...resolved.actions];
 }
 
-export function selectStartState(sequences: readonly string[][]): string {
+export function selectStartState(
+  sequences: readonly string[][],
+  allStates?: ReadonlySet<string> | readonly string[]
+): string {
+  const includesInit =
+    allStates instanceof Set ? allStates.has('Init') : Array.isArray(allStates) ? allStates.includes('Init') : false;
+  if (includesInit) {
+    return 'Init';
+  }
+
   const counts = new Map<string, number>();
 
   sequences.forEach((sequence) => {
@@ -1674,7 +1815,9 @@ export function scenariosToWorkflowSpec(
 ): FsmGenerationResult {
   const normalizedDirection = normalizeDirection(direction);
   const normalizedCountryCode = countryCode?.trim().toUpperCase() ?? '';
-  const analysis = analyzeScenarios(scenarios, normalizedCountryCode, direction, options);
+  const countryPolicy = getCountryPolicy(normalizedCountryCode);
+  const resolvedOptions = mergeGenerationOptionsWithCountryPolicy(countryPolicy, options);
+  const analysis = analyzeScenarios(scenarios, normalizedCountryCode, direction, resolvedOptions);
   const blockingConflicts = analysis.conflicts.filter((conflict) => conflict.severity === 'ERROR');
   if (blockingConflicts.length > 0) {
     throw createFsmGenerationError(`FSM analysis failed: ${formatAnalysisConflicts(blockingConflicts)}`, {
@@ -1686,8 +1829,13 @@ export function scenariosToWorkflowSpec(
   const discovered = analysis.discoveredStates;
   const prunedTransitions = analysis.prunedTransitions;
   const terminalStates = detectTerminalStates(prunedTransitions, sequences, discovered);
-  const presetKnowledge = presetSpec ? [presetSpec, ...allPresets] : [...allPresets];
+  const presetKnowledge = filterPresetKnowledgeByCountryAndDirection(
+    presetSpec ? [presetSpec, ...allPresets] : [...allPresets],
+    normalizedCountryCode,
+    normalizedDirection
+  );
   const kb = buildKnowledgeBase(presetKnowledge);
+  const kbBySourceEventTarget = buildSourceEventTargetKnowledgeBase(presetKnowledge);
   const expandedTransitions = createExpandedTransitions(presetSpec);
   const newTransitions = new Set<string>();
   const presetBackedTransitionKeys = new Set<string>();
@@ -1700,8 +1848,10 @@ export function scenariosToWorkflowSpec(
     prunedTransitions,
     sequences,
     kb,
+    kbBySourceEventTarget,
     countryCode: normalizedCountryCode,
     direction: normalizedDirection,
+    countryPolicy,
     topArchetype: analysis.archetypeMatches[0]?.archetype,
     inferredTargets: { ...analysis.inferredTargets },
     additionalTerminals: new Set<string>(analysis.additionalTerminals),
@@ -1712,25 +1862,39 @@ export function scenariosToWorkflowSpec(
     terminalStates: new Set([...terminalStates, ...analysis.additionalTerminals])
   };
 
-  [...prunedTransitions.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .forEach(([source, targets]) => {
-      [...targets]
-        .sort((left, right) => left.localeCompare(right))
-        .forEach((target) => {
-          const key = buildKnowledgeKey(source, target);
-          addTx(
-            ctx,
-            source,
-            resolveEventName(source, target, ctx.terminalStates, ctx.kb),
-            target,
-            resolveActions(source, target, ctx.terminalStates, normalizedCountryCode, normalizedDirection, ctx.kb),
-            ctx.kb.has(key) ? 'preset' : 'fallback'
-          );
-        });
-    });
+  if (!resolvedOptions?.skipObservedTransitions) {
+    [...prunedTransitions.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .forEach(([source, targets]) => {
+        [...targets]
+          .sort((left, right) => left.localeCompare(right))
+          .forEach((target) => {
+            const resolvedEventName = resolveEventName(source, target, ctx.terminalStates, ctx.kb);
+            const resolvedTransition = resolveTransitionDefinition({
+              countryCode: normalizedCountryCode,
+              direction: normalizedDirection,
+              source,
+              target,
+              eventName: resolvedEventName,
+              isTerminal: ctx.terminalStates.has(target),
+              policy: ctx.countryPolicy,
+              semantic: inferTransitionSemantic(source, resolvedEventName, target),
+              knowledgeBySourceTarget: ctx.kb,
+              knowledgeBySourceEventTarget: ctx.kbBySourceEventTarget
+            });
+            addTx(
+              ctx,
+              source,
+              resolvedTransition.eventName,
+              target,
+              resolvedTransition.actions,
+              resolvedTransition.sourceKind === 'preset' ? 'preset' : 'fallback'
+            );
+          });
+      });
+  }
 
-  selectExpansionRules(options)
+  selectExpansionRules(resolvedOptions)
     .filter((rule) => rule.triggers(ctx))
     .forEach((rule) => rule.apply(ctx));
 
@@ -1744,39 +1908,35 @@ export function scenariosToWorkflowSpec(
     hasPresetBase ? presetStateOrder.filter((stateName) => !analysis.discoveredStates.has(stateName)) : []
   );
   const allStateNames = [...ctx.expandedTransitions.keys()];
-  const generatedStateOrder = hasPresetBase
-    ? allStateNames.filter((stateName) => !presetStateOrder.includes(stateName)).sort((left, right) => left.localeCompare(right))
-    : [...allStateNames].sort((left, right) => left.localeCompare(right));
-  const orderedStateNames = hasPresetBase ? [...presetStateOrder, ...generatedStateOrder] : generatedStateOrder;
-  const fallbackStartState = selectStartState(sequences);
+  const fallbackStartState = selectStartState(sequences, allStateNames);
   const preservedStartState = presetSpec?.startState?.trim();
-  const resolvedGeneratedStartState = orderedStateNames.includes(fallbackStartState)
+  const resolvedGeneratedStartState = allStateNames.includes(fallbackStartState)
     ? fallbackStartState
-    : orderedStateNames[0] ?? fallbackStartState;
+    : allStateNames[0] ?? fallbackStartState;
   const startState =
-    hasPresetBase && preservedStartState && orderedStateNames.includes(preservedStartState)
-      ? preservedStartState
-      : resolvedGeneratedStartState;
+    resolvedGeneratedStartState === 'Init' && allStateNames.includes('Init')
+      ? 'Init'
+      : hasPresetBase && preservedStartState && allStateNames.includes(preservedStartState)
+        ? preservedStartState
+        : resolvedGeneratedStartState;
 
   ensureExpandedState(ctx.expandedTransitions, startState);
 
-  const finalOrderedStateNames = orderedStateNames.includes(startState)
-    ? orderedStateNames
-    : hasPresetBase
-      ? [...orderedStateNames, startState]
-      : [...orderedStateNames, startState].sort((left, right) => left.localeCompare(right));
-
-  const spec: WorkflowSpec = {
+  const specBase: WorkflowSpec = {
     workflowKey: resolveWorkflowKey(workflowKey, normalizedCountryCode, normalizedDirection),
     statesClass: hasPresetBase ? presetSpec?.statesClass ?? DEFAULT_STATES_CLASS : DEFAULT_STATES_CLASS,
     eventsClass: hasPresetBase ? presetSpec?.eventsClass ?? DEFAULT_EVENTS_CLASS : DEFAULT_EVENTS_CLASS,
     startState,
-    states: finalOrderedStateNames.map((stateName) => buildStateSpec(stateName, ctx.expandedTransitions))
+    states: [...ctx.expandedTransitions.keys()].map((stateName) => buildStateSpec(stateName, ctx.expandedTransitions))
+  };
+  const spec: WorkflowSpec = {
+    ...specBase,
+    states: orderWorkflowStates(specBase, { sortWithinGroups: true })
   };
 
   const lint = lintWorkflowSpec(spec);
   const validationAllowedStates = new Set<string>(presetRetainedStates);
-  if (options?.enabledRuleIds?.length || options?.disabledRuleIds?.length) {
+  if (resolvedOptions?.enabledRuleIds?.length || resolvedOptions?.disabledRuleIds?.length) {
     spec.states.forEach((state) => {
       if (state.name !== startState && !analysis.discoveredStates.has(state.name)) {
         validationAllowedStates.add(state.name);
@@ -1789,8 +1949,8 @@ export function scenariosToWorkflowSpec(
     presetRetainedStates: validationAllowedStates
   });
   const scenarioReplay = replayScenariosAgainstWorkflow(scenarios, spec, {
-    preFsmRejections: options?.preFsmRejections,
-    customDirectMap: options?.customDirectMap
+    preFsmRejections: resolvedOptions?.preFsmRejections,
+    customDirectMap: resolvedOptions?.customDirectMap
   });
 
   const failureMessages: string[] = [];
@@ -1830,4 +1990,5 @@ export function scenariosToWorkflowSpec(
 }
 
 export { analyzeScenarios };
+
 

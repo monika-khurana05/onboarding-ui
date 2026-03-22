@@ -49,7 +49,7 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import type { StateSpec, WorkflowLintIssue, WorkflowSpec, WorkflowTransitionRow } from '../models/snapshot';
-import { deleteTransition, listAllTransitions, renameState, upsertTransition } from '../models/snapshot';
+import { deleteTransition, listAllTransitions, orderWorkflowStates, renameState, upsertTransition } from '../models/snapshot';
 import { FSM_PRESETS } from '../features/workflow/presets/presetsRegistry';
 import { loadPresetYaml } from '../features/workflow/presets/loadPresetYaml';
 import { parseFsmYamlToSpec } from '../features/workflow/presets/parseFsmYamlToSpec';
@@ -251,12 +251,20 @@ function formatYamlScalar(value: string): string {
   return `'${normalized.replace(/'/g, "''")}'`;
 }
 
+function orderStatesForYaml(spec: WorkflowSpec): StateSpec[] {
+  const startState = spec.startState?.trim() ?? '';
+  if (startState === 'Init' && !spec.states.some((state) => state.name === 'Init')) {
+    throw new Error('Workflow start state "Init" is configured but no "Init" state exists in spec.states.');
+  }
+  return orderWorkflowStates(spec);
+}
+
 export function generateFsmYaml(spec: WorkflowSpec): string {
   const lines: string[] = [
     `statesClass: ${formatYamlScalar(spec.statesClass?.trim() || DEFAULT_STATES_CLASS)}`,
     `eventsClass: ${formatYamlScalar(spec.eventsClass?.trim() || DEFAULT_EVENTS_CLASS)}`
   ];
-  const orderedStates = [...spec.states];
+  const orderedStates = orderStatesForYaml(spec);
 
   if (!orderedStates.length) {
     lines.push('states: {}');

@@ -487,6 +487,16 @@ function normalizeWorkflowDraft(raw: unknown): WorkflowSpec | null {
   return normalizeWorkflowSpec(raw as Partial<WorkflowSpec> & { transitions?: unknown });
 }
 
+function buildStateManagerGenerationFingerprint(snapshot: SnapshotModel, flow: FlowDirection): string {
+  const countryCode = snapshot.countryCode.trim().toUpperCase();
+  const config = snapshot.stateManagerConfig ?? createDefaultStateManagerConfig(countryCode, flow);
+  return JSON.stringify({
+    countryCode,
+    flowDirection: flow,
+    scenarios: config.scenarios
+  });
+}
+
 function buildResolvedInitialSnapshot(initialSnapshot: SnapshotModel | undefined, flow: FlowDirection): SnapshotModel {
   const normalized = normalizeSnapshotInput(initialSnapshot ?? defaultSnapshot);
   const normalizedCountryCode = normalized.countryCode.trim().toUpperCase();
@@ -574,7 +584,7 @@ export function CreateSnapshotWizard({
   const [paramsDrawerContext, setParamsDrawerContext] = useState<ParamsDrawerContext>(null);
   const [catalogTab, setCatalogTab] = useState<CatalogTab>('validations');
   const [draftHydrated, setDraftHydrated] = useState(false);
-  const [fsmGenerated, setFsmGenerated] = useState(!isDefaultWorkflowSpec(resolvedInitialSnapshot.workflow));
+  const [fsmStale, setFsmStale] = useState(false);
   const [fsmGenerationPending, setFsmGenerationPending] = useState(false);
   const [highlightTransitionKeys, setHighlightTransitionKeys] = useState<Set<string>>(new Set());
   const [fsmAnalysis, setFsmAnalysis] = useState<AnalysisModel | null>(null);
@@ -600,6 +610,14 @@ export function CreateSnapshotWizard({
     setFsmGenerationError(null);
     setFsmSummaryWorkflowKey(null);
   }, []);
+
+  const markFsmAsStale = useCallback(() => {
+    setHighlightTransitionKeys(new Set());
+    clearFsmGenerationSummary();
+    if (!isDefaultWorkflowSpec(snapshot.workflow)) {
+      setFsmStale(true);
+    }
+  }, [clearFsmGenerationSummary, snapshot.workflow]);
 
   const createSnapshotMutation = useMutation({
     mutationFn: createSnapshot,
@@ -630,7 +648,7 @@ export function CreateSnapshotWizard({
     const nextResolvedInitialSnapshot = buildResolvedInitialSnapshot(initialSnapshot, flow);
     setSnapshot(nextResolvedInitialSnapshot);
     setJsonValue(JSON.stringify(nextResolvedInitialSnapshot, null, 2));
-    setFsmGenerated(!isDefaultWorkflowSpec(nextResolvedInitialSnapshot.workflow));
+    setFsmStale(false);
     setHighlightTransitionKeys(new Set());
     clearFsmGenerationSummary();
   }, [clearFsmGenerationSummary, flow, initialSnapshot]);
@@ -682,6 +700,7 @@ export function CreateSnapshotWizard({
   const handleCountryCodeChange = useCallback(
     (countryCode: string) => {
       const nextCountryCode = countryCode.toUpperCase();
+      markFsmAsStale();
       updateSnapshot((prev) => {
         const syncedConfig = buildSyncedStateManagerConfig(prev.stateManagerConfig, nextCountryCode, flow);
         saveStateManagerDraft(syncedConfig);
@@ -692,7 +711,7 @@ export function CreateSnapshotWizard({
         };
       });
     },
-    [buildSyncedStateManagerConfig, flow]
+    [buildSyncedStateManagerConfig, flow, markFsmAsStale]
   );
 
   const handleFlowDirectionChange = useCallback(
@@ -701,6 +720,7 @@ export function CreateSnapshotWizard({
         return;
       }
 
+      markFsmAsStale();
       updateSnapshot((prev) => {
         const syncedConfig = buildSyncedStateManagerConfig(prev.stateManagerConfig, prev.countryCode, nextFlow);
         saveStateManagerDraft(syncedConfig);
@@ -714,7 +734,7 @@ export function CreateSnapshotWizard({
       nextParams.set('flow', nextFlow);
       setSearchParams(nextParams, { replace: true });
     },
-    [buildSyncedStateManagerConfig, flow, searchParams, setSearchParams]
+    [buildSyncedStateManagerConfig, flow, markFsmAsStale, searchParams, setSearchParams]
   );
 
   useEffect(() => {
@@ -793,6 +813,11 @@ export function CreateSnapshotWizard({
     try {
       const parsed = JSON.parse(next) as Partial<SnapshotModel>;
       const normalized = normalizeSnapshotInput(parsed);
+      const currentFingerprint = buildStateManagerGenerationFingerprint(snapshot, flow);
+      const nextFingerprint = buildStateManagerGenerationFingerprint(normalized, flow);
+      if (currentFingerprint !== nextFingerprint) {
+        markFsmAsStale();
+      }
       updateSnapshot(() => normalized, 'editor');
       setJsonError(null);
     } catch {
@@ -824,10 +849,14 @@ export function CreateSnapshotWizard({
     fsmNewTransitionKeys.size > 0 ||
     fsmPresetBackedTransitionKeys.size > 0 ||
     fsmFallbackTransitionKeys.size > 0;
-  const hasWorkflowPreview = useMemo(
-    () => fsmGenerated || !isDefaultWorkflowSpec(snapshot.workflow),
-    [fsmGenerated, snapshot.workflow]
-  );
+  const hasWorkflowPreview = useMemo(() => !isDefaultWorkflowSpec(snapshot.workflow), [snapshot.workflow]);
+
+  useEffect(() => {
+    if (!hasWorkflowPreview && fsmStale) {
+      setFsmStale(false);
+    }
+  }, [fsmStale, hasWorkflowPreview]);
+
   const workflowDownloadFileName = useMemo(
     () => buildWorkflowDownloadFileName(snapshot.countryCode, snapshot.workflow.workflowKey),
     [snapshot.countryCode, snapshot.workflow.workflowKey]
@@ -1044,10 +1073,9 @@ export function CreateSnapshotWizard({
         stateManagerConfig: syncedConfig
       }));
       saveStateManagerDraft(syncedConfig);
-      setHighlightTransitionKeys(new Set());
-      clearFsmGenerationSummary();
+      markFsmAsStale();
     },
-    [buildSyncedStateManagerConfig, clearFsmGenerationSummary, flow, snapshot.countryCode]
+    [buildSyncedStateManagerConfig, flow, markFsmAsStale, snapshot.countryCode]
   );
 
   const handleSaveScenarios = useCallback(
@@ -1155,7 +1183,7 @@ export function CreateSnapshotWizard({
         }));
         saveStateManagerDraft(syncedConfig);
         setHighlightTransitionKeys(cloneTransitionKeys(result.newTransitions));
-        setFsmGenerated(true);
+        setFsmStale(false);
         setWorkflowTab('transitions');
         setWorkflowSidePanel(null);
       } catch (error) {
@@ -1650,6 +1678,11 @@ export function CreateSnapshotWizard({
                   <Alert severity="info">No FSM generated yet</Alert>
                 ) : (
                   <Stack spacing={2}>
+                    {fsmStale ? (
+                      <Alert severity="warning">
+                        Scenario configuration changed. Click Save &amp; Generate FSM to refresh the FSM.
+                      </Alert>
+                    ) : null}
                     <Stack
                       direction={{ xs: 'column', md: 'row' }}
                       spacing={1}

@@ -238,6 +238,34 @@ export function listAllTransitions(spec: WorkflowSpec): WorkflowTransitionRow[] 
   return rows;
 }
 
+function hasOutgoingTransitions(state: StateSpec): boolean {
+  return Object.keys(state.onEvent ?? {}).length > 0;
+}
+
+type OrderWorkflowStatesOptions = {
+  sortWithinGroups?: boolean;
+};
+
+export function orderWorkflowStates(
+  spec: Pick<WorkflowSpec, 'startState' | 'states'>,
+  options: OrderWorkflowStatesOptions = {}
+): StateSpec[] {
+  const startState = spec.startState?.trim() ?? '';
+  if (startState && !spec.states.some((state) => state.name === startState)) {
+    throw new Error(`Workflow start state "${startState}" does not exist in spec.states.`);
+  }
+
+  const compareStates = (left: StateSpec, right: StateSpec) => left.name.localeCompare(right.name);
+  const sortWithinGroups = options.sortWithinGroups === true;
+  const sortedStates = sortWithinGroups ? [...spec.states].sort(compareStates) : [...spec.states];
+  const start = startState ? sortedStates.filter((state) => state.name === startState) : [];
+  const remainingStates = sortedStates.filter((state) => state.name !== startState);
+  const nonTerminalStates = remainingStates.filter(hasOutgoingTransitions);
+  const terminalStates = remainingStates.filter((state) => !hasOutgoingTransitions(state));
+
+  return [...start, ...nonTerminalStates, ...terminalStates];
+}
+
 export function upsertTransition(
   spec: WorkflowSpec,
   fromState: string,

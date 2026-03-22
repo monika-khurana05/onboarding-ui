@@ -76,6 +76,58 @@ function mapTargets(transitions: Map<string, Set<string>>, source: string): stri
   return [...(transitions.get(source) ?? new Set<string>())].sort();
 }
 
+function makeBrOutgoingKnowledgePreset(): WorkflowSpec {
+  return {
+    workflowKey: 'BR_OUTGOING_BASELINE',
+    states: [
+      {
+        name: 'SanctionsSent',
+        onEvent: {
+          SanctionsResponseReceived: { target: 'SanctionsSent', actions: ['process-sanctions-response'] },
+          OnRetry: { target: 'SanctionsSent', actions: ['reset-mtp', 'send-sanctions-request', 'persist-txn'] }
+        }
+      },
+      {
+        name: 'SanctionsRespRepair',
+        onEvent: {
+          OnRetry: {
+            target: 'SanctionsSent',
+            actions: ['reset-mtp', 'send-sanctions-request', 'persist-txn', 'notify-bd-intermediate']
+          }
+        }
+      },
+      {
+        name: 'BalanceCheckPending',
+        onEvent: {
+          BalanceCheckResult: { target: 'BalanceCheckPending', actions: ['process-balance-check-result-br-outgoing'] }
+        }
+      },
+      {
+        name: 'OfacPossibleHit',
+        onEvent: {
+          SanctionsFalseMatch: {
+            target: 'BalanceCheckPending',
+            actions: ['process-false-match-br-outgoing', 'do-balance-check', 'persist-txn', 'notify-bd-intermediate']
+          }
+        }
+      },
+      {
+        name: 'SendClearingPostingPending',
+        onEvent: {
+          ClearingResponseReceived: { target: 'SendClearingPostingPending', actions: ['process-clearing-response-br'] },
+          PostingFailure: { target: 'SendClearingPostingPending', actions: ['process-posting-error-br'] }
+        }
+      },
+      {
+        name: 'SendClearingPostingComplete',
+        onEvent: {
+          ClearingResponseReceived: { target: 'SendClearingPostingComplete', actions: ['process-clearing-response-br'] }
+        }
+      }
+    ]
+  };
+}
+
 describe('buildKnowledgeBase', () => {
   it('keeps first-seen entries across presets and ignores malformed transitions safely', () => {
     const presets: WorkflowSpec[] = [
@@ -300,7 +352,10 @@ describe('resolveEventName and resolveActions', () => {
 });
 
 describe('selectStartState', () => {
-  it('selects the most frequent first state with alphabetical tie-break and init fallback', () => {
+  it('prefers Init when it exists and otherwise falls back to the most frequent first state', () => {
+    expect(selectStartState([['BalanceCheckPending'], ['NormalPostingPending']], ['Init', 'BalanceCheckPending'])).toBe(
+      'Init'
+    );
     expect(selectStartState([['SpmSent'], ['Init', 'A'], ['Init', 'B']])).toBe('Init');
     expect(selectStartState([['B'], ['A']])).toBe('A');
     expect(selectStartState([])).toBe('Init');
@@ -357,6 +412,41 @@ describe('expansion rules', () => {
     expectTransition(sanctions.spec, 'PreSanctionsResultCheck', 'NeedSanctions', 'SanctionsSent');
     expectTransition(sanctions.spec, 'PreSanctionsResultCheck', 'SkipSanctions', 'BalanceCheckPending');
     expectTransition(sanctions.spec, 'SanctionsSent', 'SanctionsException', 'SanctionsRespRepair');
+  });
+
+  it('keeps the BR outgoing sanctions retry branches distinct without preset knowledge', () => {
+    const result = scenariosToWorkflowSpec(
+      makeScenario([
+        makeSubFlow('Sanctions repair', [
+          makeRow('PENDING', 'VALIDATED'),
+          makeRow('PENDING', 'SPM_SENT'),
+          makeRow('PENDING', 'SANCTIONS_SENT'),
+          makeRow('PENDING', 'SANCTIONS_RESP_REPAIR')
+        ])
+      ]),
+      null,
+      [],
+      'WF',
+      'BR',
+      'OUTGOING',
+      {
+        customDirectMap: {
+          SANCTIONS_RESP_REPAIR: 'SanctionsRespRepair'
+        }
+      }
+    );
+
+    expectTransition(result.spec, 'SanctionsSent', 'OnRetry', 'SanctionsSent', [
+      'reset-mtp',
+      'send-sanctions-request',
+      'persist-txn'
+    ]);
+    expectTransition(result.spec, 'SanctionsRespRepair', 'OnRetry', 'SanctionsSent', [
+      'reset-mtp',
+      'send-sanctions-request',
+      'persist-txn',
+      'notify-bd-intermediate'
+    ]);
   });
 
   it('covers clearing, posting-only, and no-spm paths', () => {
@@ -499,7 +589,7 @@ describe('scenariosToWorkflowSpec integration', () => {
     });
   });
 
-  it('merges preset transitions while preserving preset classes and start state', () => {
+  it('merges preset transitions while preserving preset classes and forcing Init to the front when present', () => {
     const preset: WorkflowSpec = {
       workflowKey: 'BR_OUTGOING_PAYMENT',
       statesClass: 'custom.State',
@@ -530,11 +620,39 @@ describe('scenariosToWorkflowSpec integration', () => {
 
     expect(result.spec.statesClass).toBe('custom.State');
     expect(result.spec.eventsClass).toBe('custom.Event');
-    expect(result.spec.startState).toBe('PaymentReceived');
-    expect(result.spec.states[0]?.name).toBe('PaymentReceived');
+    expect(result.spec.startState).toBe('Init');
+    expect(result.spec.states[0]?.name).toBe('Init');
     expectTransition(result.spec, 'PaymentReceived', 'ValidationPassed', 'Init', ['persist-payment']);
     expectTransition(result.spec, 'Init', 'DupCheckPassed', 'SpmCheck');
     expect(result.spec.states.some((state) => state.name === 'Completed')).toBe(true);
+  });
+
+  it('orders generated states with Init first, non-terminals next, and terminals last', () => {
+    const result = scenariosToWorkflowSpec(
+      makeScenario([
+        makeSubFlow('Current', [
+          makeRow('PENDING', 'VALIDATED'),
+          makeRow('PENDING', 'BALANCE_CHECK_PENDING'),
+          makeRow('PENDING', 'POSTING_PENDING'),
+          makeRow('COMPLETE', 'POSTING_COMPLETE')
+        ])
+      ]),
+      null,
+      [],
+      'WF',
+      'BR',
+      'OUTGOING'
+    );
+
+    expect(result.spec.startState).toBe('Init');
+    expect(result.spec.states.map((state) => state.name)).toEqual([
+      'Init',
+      'BalanceCheckPending',
+      'NormalPostingPending',
+      'FinalPostingComplete',
+      'TxnRejectedOnGLSTechError',
+      'TxnRejectedOnNSF'
+    ]);
   });
 });
 
@@ -581,6 +699,72 @@ describe('hardening guards', () => {
 
     expectTransition(result.spec, 'Alpha', 'PreferredEvent', 'Beta', ['preferred-action']);
     expect(getState(result.spec, 'Alpha')?.onEvent.LaterEvent).toBeUndefined();
+  });
+
+  it('reuses exact BR outgoing preset actions for self-loop transitions before fallback templates', () => {
+    const presetKnowledge = makeBrOutgoingKnowledgePreset();
+    const result = scenariosToWorkflowSpec(
+      makeScenario([
+        makeSubFlow('Main path', [
+          makeRow('PENDING', 'VALIDATED'),
+          makeRow('PENDING', 'SPM_SENT'),
+          makeRow('PENDING', 'SANCTIONS_SENT'),
+          makeRow('PENDING', 'OFAC_POSSIBLE_HIT'),
+          makeRow('PENDING', 'BALANCE_CHECK_PENDING'),
+          makeRow('SENT_TO_CLEARING', 'POSTING_PENDING_CLEARING_INFORMED'),
+          makeRow('SENT_TO_CLEARING', 'POSTING_COMPLETE_CLEARING_INFORMED'),
+          makeRow('COMPLETE', 'POSTING_COMPLETE')
+        ]),
+        makeSubFlow('Repair path', [
+          makeRow('PENDING', 'VALIDATED'),
+          makeRow('PENDING', 'SPM_SENT'),
+          makeRow('PENDING', 'SANCTIONS_SENT'),
+          makeRow('PENDING', 'SANCTIONS_RESP_REPAIR')
+        ])
+      ]),
+      null,
+      [presetKnowledge],
+      'WF',
+      'BR',
+      'OUTGOING',
+      {
+        customDirectMap: {
+          SANCTIONS_RESP_REPAIR: 'SanctionsRespRepair'
+        }
+      }
+    );
+
+    expect(result.spec.startState).toBe('Init');
+    expect(result.spec.states[0]?.name).toBe('Init');
+    expectTransition(result.spec, 'SanctionsSent', 'SanctionsResponseReceived', 'SanctionsSent', ['process-sanctions-response']);
+    expectTransition(result.spec, 'SanctionsSent', 'OnRetry', 'SanctionsSent', [
+      'reset-mtp',
+      'send-sanctions-request',
+      'persist-txn'
+    ]);
+    expectTransition(result.spec, 'SanctionsRespRepair', 'OnRetry', 'SanctionsSent', [
+      'reset-mtp',
+      'send-sanctions-request',
+      'persist-txn',
+      'notify-bd-intermediate'
+    ]);
+    expectTransition(result.spec, 'BalanceCheckPending', 'BalanceCheckResult', 'BalanceCheckPending', [
+      'process-balance-check-result-br-outgoing'
+    ]);
+    expectTransition(result.spec, 'OfacPossibleHit', 'SanctionsFalseMatch', 'BalanceCheckPending', [
+      'process-false-match-br-outgoing',
+      'do-balance-check',
+      'persist-txn',
+      'notify-bd-intermediate'
+    ]);
+    expectTransition(result.spec, 'SendClearingPostingPending', 'ClearingResponseReceived', 'SendClearingPostingPending', [
+      'process-clearing-response-br'
+    ]);
+    expectTransition(result.spec, 'SendClearingPostingPending', 'PostingFailure', 'SendClearingPostingPending', [
+      'process-posting-error-br'
+    ]);
+    expect(result.presetBackedTransitionKeys?.has('SanctionsSent::OnRetry')).toBe(true);
+    expect(result.presetBackedTransitionKeys?.has('SendClearingPostingPending::PostingFailure')).toBe(true);
   });
 
   it('avoids case-insensitive duplicate event names when preset events conflict with generated ones', () => {
@@ -685,6 +869,40 @@ describe('hardening guards', () => {
     expect(result.spec.states.map((state) => state.name)).toEqual(['PresetStart', 'LaterState']);
     expect(result.spec.states.some((state) => state.name === 'Init')).toBe(false);
     expect(result.lint.warnings.length).toBeGreaterThan(0);
+  });
+
+  it('reorders preset-backed output so Init stays first when it is the start state', () => {
+    const preset: WorkflowSpec = {
+      workflowKey: 'WF',
+      startState: 'Init',
+      states: [
+        {
+          name: 'BalanceCheckPending',
+          onEvent: {
+            NotifyPosting: { target: 'FinalPostingComplete', actions: ['notify'] }
+          }
+        },
+        {
+          name: 'FinalPostingComplete',
+          onEvent: {}
+        },
+        {
+          name: 'Init',
+          onEvent: {
+            DupCheckPassed: { target: 'BalanceCheckPending', actions: ['dup-check'] }
+          }
+        }
+      ]
+    };
+
+    const result = scenariosToWorkflowSpec([], preset, [preset], 'WF', 'BR', 'OUTGOING');
+
+    expect(result.spec.startState).toBe('Init');
+    expect(result.spec.states.map((state) => state.name)).toEqual([
+      'Init',
+      'BalanceCheckPending',
+      'FinalPostingComplete'
+    ]);
   });
 });
 
@@ -855,8 +1073,4 @@ describe('validation-driven generation', () => {
     );
   });
 });
-
-
-
-
 
