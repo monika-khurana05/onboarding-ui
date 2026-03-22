@@ -19,6 +19,7 @@ import {
   ListItemText,
   MenuItem,
   Paper,
+  Snackbar,
   Stack,
   Step,
   StepLabel,
@@ -38,7 +39,7 @@ import { CatalogSelector, type CatalogColumn } from '../../components/CatalogSel
 import { ParamsEditorDrawer } from '../../components/ParamsEditorDrawer';
 import { SectionCard } from '../../components/SectionCard';
 import { WorkflowTabPanels, generateFsmYaml, type WorkflowTabKey } from '../../components/WorkflowEditor';
-import { createSnapshot, createSnapshotVersion } from '../../api/client';
+import { createSnapshot, createSnapshotVersion, saveScenarioConfig } from '../../api/client';
 import type { SnapshotDetailDto } from '../../api/types';
 import { useGlobalError } from '../../app/GlobalErrorContext';
 import { enrichmentCatalog, type EnrichmentCatalogItem } from '../../catalog/enrichmentCatalog';
@@ -65,6 +66,7 @@ import { AnalysisSummaryPanel } from '../state-manager/AnalysisSummaryPanel';
 import { StateManagerPanel } from '../state-manager/StateManagerPanel';
 import { createDefaultStateManagerConfig } from '../state-manager/defaultScenarios';
 import { previewConversion, scenariosToWorkflowSpec, type FsmGenerationResult } from '../state-manager/scenariosToFsm';
+import { validateStateManagerConfig } from '../state-manager/validateStateManagerConfig';
 import { loadStateManagerDraft, saveStateManagerDraft } from '../state-manager/stateManagerStorage';
 import type { AnalysisModel } from '../state-manager/analysis/types';
 import type { GraphValidationReport, ScenarioReplayReport } from '../state-manager/validation/types';
@@ -485,6 +487,24 @@ function normalizeWorkflowDraft(raw: unknown): WorkflowSpec | null {
   return normalizeWorkflowSpec(raw as Partial<WorkflowSpec> & { transitions?: unknown });
 }
 
+function buildResolvedInitialSnapshot(initialSnapshot: SnapshotModel | undefined, flow: FlowDirection): SnapshotModel {
+  const normalized = normalizeSnapshotInput(initialSnapshot ?? defaultSnapshot);
+  const normalizedCountryCode = normalized.countryCode.trim().toUpperCase();
+  const existingStateManagerConfig = normalized.stateManagerConfig;
+  const draftStateManagerConfig =
+    normalizedCountryCode && !existingStateManagerConfig
+      ? loadStateManagerDraft(normalizedCountryCode, flow)
+      : null;
+
+  return {
+    ...normalized,
+    stateManagerConfig:
+      existingStateManagerConfig ??
+      draftStateManagerConfig ??
+      createDefaultStateManagerConfig(normalizedCountryCode, flow)
+  };
+}
+
 type CreateSnapshotWizardProps = {
   mode?: 'create' | 'version';
   snapshotId?: string;
@@ -533,35 +553,23 @@ export function CreateSnapshotWizard({
   onSaved
 }: CreateSnapshotWizardProps) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const flow = searchParams.get('flow') === 'OUTGOING' ? 'OUTGOING' : 'INCOMING';
   const { showError } = useGlobalError();
   const [activeStep, setActiveStep] = useState(0);
   const [stepAnimationDirection, setStepAnimationDirection] = useState<'forward' | 'backward'>('forward');
   const [advancedJson, setAdvancedJson] = useState(false);
   const jsonUpdateSource = useRef<'form' | 'editor' | null>(null);
+  const previousInitialSnapshotRef = useRef(initialSnapshot);
   const isVersionMode = mode === 'version';
 
-  const resolvedInitialSnapshot = useMemo(() => {
-    const normalized = normalizeSnapshotInput(initialSnapshot ?? defaultSnapshot);
-    const normalizedCountryCode = normalized.countryCode.trim().toUpperCase();
-    const existingStateManagerConfig = normalized.stateManagerConfig;
-    const draftStateManagerConfig =
-      normalizedCountryCode && !existingStateManagerConfig
-        ? loadStateManagerDraft(normalizedCountryCode, flow)
-        : null;
+  const resolvedInitialSnapshot = useMemo(
+    () => buildResolvedInitialSnapshot(initialSnapshot, flow),
+    [flow, initialSnapshot]
+  );
 
-    return {
-      ...normalized,
-      stateManagerConfig:
-        existingStateManagerConfig ??
-        draftStateManagerConfig ??
-        createDefaultStateManagerConfig(normalizedCountryCode, flow)
-    };
-  }, [flow, initialSnapshot]);
-
-  const [snapshot, setSnapshot] = useState<SnapshotModel>(resolvedInitialSnapshot);
-  const [jsonValue, setJsonValue] = useState(JSON.stringify(resolvedInitialSnapshot, null, 2));
+  const [snapshot, setSnapshot] = useState<SnapshotModel>(() => buildResolvedInitialSnapshot(initialSnapshot, flow));
+  const [jsonValue, setJsonValue] = useState(() => JSON.stringify(buildResolvedInitialSnapshot(initialSnapshot, flow), null, 2));
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [paramsDrawerContext, setParamsDrawerContext] = useState<ParamsDrawerContext>(null);
   const [catalogTab, setCatalogTab] = useState<CatalogTab>('validations');
@@ -580,6 +588,7 @@ export function CreateSnapshotWizard({
   const [workflowTab, setWorkflowTab] = useState<WorkflowTabKey>('transitions');
   const [workflowFocus, setWorkflowFocus] = useState<{ issue: WorkflowLintIssue; nonce: number } | null>(null);
   const [workflowSidePanel, setWorkflowSidePanel] = useState<'lint' | 'help' | null>(null);
+  const [scenarioSaveFeedback, setScenarioSaveFeedback] = useState<{ severity: 'success' | 'error'; message: string } | null>(null);
 
   const clearFsmGenerationSummary = useCallback(() => {
     setFsmAnalysis(null);
@@ -607,13 +616,24 @@ export function CreateSnapshotWizard({
     meta: { suppressGlobalError: true }
   });
 
+  const saveScenarioConfigMutation = useMutation({
+    mutationFn: saveScenarioConfig,
+    meta: { suppressGlobalError: true }
+  });
+
   useEffect(() => {
-    setSnapshot(resolvedInitialSnapshot);
-    setJsonValue(JSON.stringify(resolvedInitialSnapshot, null, 2));
-    setFsmGenerated(!isDefaultWorkflowSpec(resolvedInitialSnapshot.workflow));
+    if (previousInitialSnapshotRef.current === initialSnapshot) {
+      return;
+    }
+
+    previousInitialSnapshotRef.current = initialSnapshot;
+    const nextResolvedInitialSnapshot = buildResolvedInitialSnapshot(initialSnapshot, flow);
+    setSnapshot(nextResolvedInitialSnapshot);
+    setJsonValue(JSON.stringify(nextResolvedInitialSnapshot, null, 2));
+    setFsmGenerated(!isDefaultWorkflowSpec(nextResolvedInitialSnapshot.workflow));
     setHighlightTransitionKeys(new Set());
     clearFsmGenerationSummary();
-  }, [clearFsmGenerationSummary, resolvedInitialSnapshot]);
+  }, [clearFsmGenerationSummary, flow, initialSnapshot]);
 
   useEffect(() => {
     if (!advancedJson) {
@@ -641,6 +661,62 @@ export function CreateSnapshotWizard({
     setSnapshot(updater);
   };
 
+  const buildSyncedStateManagerConfig = useCallback(
+    (
+      config: StateManagerConfig | undefined,
+      countryCode: string,
+      direction: FlowDirection
+    ): StateManagerConfig => {
+      const normalizedCountryCode = countryCode.trim().toUpperCase();
+      const baseConfig = config ?? createDefaultStateManagerConfig(normalizedCountryCode, direction);
+      return {
+        ...baseConfig,
+        countryCode: normalizedCountryCode,
+        flowDirection: direction,
+        lastUpdated: new Date().toISOString()
+      };
+    },
+    []
+  );
+
+  const handleCountryCodeChange = useCallback(
+    (countryCode: string) => {
+      const nextCountryCode = countryCode.toUpperCase();
+      updateSnapshot((prev) => {
+        const syncedConfig = buildSyncedStateManagerConfig(prev.stateManagerConfig, nextCountryCode, flow);
+        saveStateManagerDraft(syncedConfig);
+        return {
+          ...prev,
+          countryCode: nextCountryCode,
+          stateManagerConfig: syncedConfig
+        };
+      });
+    },
+    [buildSyncedStateManagerConfig, flow]
+  );
+
+  const handleFlowDirectionChange = useCallback(
+    (nextFlow: FlowDirection) => {
+      if (nextFlow === flow) {
+        return;
+      }
+
+      updateSnapshot((prev) => {
+        const syncedConfig = buildSyncedStateManagerConfig(prev.stateManagerConfig, prev.countryCode, nextFlow);
+        saveStateManagerDraft(syncedConfig);
+        return {
+          ...prev,
+          stateManagerConfig: syncedConfig
+        };
+      });
+
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('flow', nextFlow);
+      setSearchParams(nextParams, { replace: true });
+    },
+    [buildSyncedStateManagerConfig, flow, searchParams, setSearchParams]
+  );
+
   useEffect(() => {
     const normalizedCountryCode = snapshot.countryCode.trim().toUpperCase();
     updateSnapshot((prev) => {
@@ -653,31 +729,19 @@ export function CreateSnapshotWizard({
         };
       }
 
-      const existingCountryCode = existingConfig.countryCode.trim().toUpperCase();
-      if (!existingCountryCode && normalizedCountryCode) {
-        const draftConfig = loadStateManagerDraft(normalizedCountryCode, flow);
-        if (draftConfig) {
-          return {
-            ...prev,
-            stateManagerConfig: draftConfig
-          };
-        }
-      }
-
-      if (existingCountryCode === normalizedCountryCode && existingConfig.flowDirection === flow) {
+      if (
+        existingConfig.countryCode.trim().toUpperCase() === normalizedCountryCode &&
+        existingConfig.flowDirection === flow
+      ) {
         return prev;
       }
 
       return {
         ...prev,
-        stateManagerConfig: {
-          ...existingConfig,
-          countryCode: normalizedCountryCode,
-          flowDirection: flow
-        }
+        stateManagerConfig: buildSyncedStateManagerConfig(existingConfig, normalizedCountryCode, flow)
       };
     });
-  }, [flow, snapshot.countryCode]);
+  }, [buildSyncedStateManagerConfig, flow, snapshot.countryCode]);
 
   useEffect(() => {
     const draft = loadOnboardingDraft();
@@ -973,12 +1037,7 @@ export function CreateSnapshotWizard({
 
   const handleStateManagerChange = useCallback(
     (nextConfig: StateManagerConfig) => {
-      const syncedConfig: StateManagerConfig = {
-        ...nextConfig,
-        countryCode: snapshot.countryCode.trim().toUpperCase(),
-        flowDirection: flow,
-        lastUpdated: new Date().toISOString()
-      };
+      const syncedConfig = buildSyncedStateManagerConfig(nextConfig, snapshot.countryCode, flow);
 
       updateSnapshot((prev) => ({
         ...prev,
@@ -988,7 +1047,52 @@ export function CreateSnapshotWizard({
       setHighlightTransitionKeys(new Set());
       clearFsmGenerationSummary();
     },
-    [clearFsmGenerationSummary, flow, snapshot.countryCode]
+    [buildSyncedStateManagerConfig, clearFsmGenerationSummary, flow, snapshot.countryCode]
+  );
+
+  const handleSaveScenarios = useCallback(
+    async (config: StateManagerConfig) => {
+      const syncedConfig = buildSyncedStateManagerConfig(config, snapshot.countryCode, flow);
+      const validationMessages = validateStateManagerConfig(syncedConfig);
+      if (validationMessages.length > 0) {
+        setScenarioSaveFeedback({
+          severity: 'error',
+          message: validationMessages[0] ?? 'Scenario configuration is incomplete.'
+        });
+        return;
+      }
+
+      try {
+        const response = await saveScenarioConfigMutation.mutateAsync({
+          countryCode: syncedConfig.countryCode,
+          flowDirection: syncedConfig.flowDirection,
+          stateManagerConfig: syncedConfig
+        });
+        const persistedConfig: StateManagerConfig = {
+          ...syncedConfig,
+          lastUpdated: response.updatedAt?.trim() ? response.updatedAt : syncedConfig.lastUpdated
+        };
+
+        updateSnapshot((prev) => ({
+          ...prev,
+          stateManagerConfig: persistedConfig
+        }));
+        saveStateManagerDraft(persistedConfig);
+        setScenarioSaveFeedback({
+          severity: 'success',
+          message: response.message?.trim() || 'Scenario configuration saved successfully'
+        });
+      } catch (error) {
+        setScenarioSaveFeedback({
+          severity: 'error',
+          message:
+            error instanceof Error && error.message.trim()
+              ? error.message
+              : 'Failed to save scenario configuration.'
+        });
+      }
+    },
+    [buildSyncedStateManagerConfig, flow, saveScenarioConfigMutation, snapshot.countryCode]
   );
 
   const handleGenerateFsm = useCallback(
@@ -996,12 +1100,7 @@ export function CreateSnapshotWizard({
       const countryCode = snapshot.countryCode.trim().toUpperCase();
       const direction = flow;
       const workflowKey = resolveGeneratedWorkflowKey(snapshot.workflow, countryCode, direction);
-      const syncedConfig: StateManagerConfig = {
-        ...config,
-        countryCode,
-        flowDirection: direction,
-        lastUpdated: new Date().toISOString()
-      };
+      const syncedConfig = buildSyncedStateManagerConfig(config, countryCode, direction);
 
       setFsmGenerationPending(true);
       setFsmGenerationError(null);
@@ -1074,7 +1173,7 @@ export function CreateSnapshotWizard({
         setFsmGenerationPending(false);
       }
     },
-    [flow, showError, snapshot.countryCode, snapshot.workflow]
+    [buildSyncedStateManagerConfig, flow, showError, snapshot.countryCode, snapshot.workflow]
   );
 
   const goNext = () => {
@@ -1193,12 +1292,7 @@ export function CreateSnapshotWizard({
                       label="Country Code"
                       placeholder="GB, SG, AE"
                       value={snapshot.countryCode}
-                      onChange={(event) =>
-                        updateSnapshot((prev) => ({
-                          ...prev,
-                          countryCode: event.target.value.toUpperCase()
-                        }))
-                      }
+                      onChange={(event) => handleCountryCodeChange(event.target.value)}
                       error={countryErrors.length > 0}
                       helperText={
                         countryErrors[0]?.message ??
@@ -1504,7 +1598,11 @@ export function CreateSnapshotWizard({
             <StateManagerPanel
               value={stateManagerConfig}
               onChange={handleStateManagerChange}
+              onCountryChange={handleCountryCodeChange}
+              onFlowDirectionChange={handleFlowDirectionChange}
+              onSaveScenarios={handleSaveScenarios}
               onGenerateFsm={handleGenerateFsm}
+              isSaving={saveScenarioConfigMutation.isPending}
               isGenerating={fsmGenerationPending}
               generationPreview={stateManagerPreview}
             />
@@ -1960,6 +2058,19 @@ export function CreateSnapshotWizard({
         </Stack>
       </SectionCard>
 
+      <Snackbar
+        open={Boolean(scenarioSaveFeedback)}
+        autoHideDuration={5000}
+        onClose={() => setScenarioSaveFeedback(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        {scenarioSaveFeedback ? (
+          <Alert onClose={() => setScenarioSaveFeedback(null)} severity={scenarioSaveFeedback.severity} sx={{ width: '100%' }}>
+            {scenarioSaveFeedback.message}
+          </Alert>
+        ) : null}
+      </Snackbar>
+
       <ParamsEditorDrawer
         open={Boolean(paramsDrawerContext)}
         title={paramsDrawerContext?.title}
@@ -1975,6 +2086,26 @@ export function CreateSnapshotWizard({
     </Stack>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

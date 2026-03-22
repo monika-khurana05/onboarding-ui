@@ -20,7 +20,9 @@ import type {
   FsmOperationStatusResponseDto,
   KafkaPublishRequestDto,
   KafkaPublishResponseDto,
-  KafkaValidationResponseDto
+  KafkaValidationResponseDto,
+  SaveScenarioConfigRequestDto,
+  SaveScenarioConfigResponseDto
 } from './types';
 
 export async function getRepoDefaults(): Promise<RepoDefaultsResponseDto> {
@@ -52,6 +54,15 @@ export async function persistAssemblyConfig(
   req: AssemblyConfigRequestDto
 ): Promise<AssemblyConfigResponseDto> {
   return httpRequest<AssemblyConfigResponseDto>('/onboarding/assembly/config', {
+    method: 'POST',
+    body: JSON.stringify(req)
+  });
+}
+
+export async function saveScenarioConfig(
+  req: SaveScenarioConfigRequestDto
+): Promise<SaveScenarioConfigResponseDto> {
+  return httpRequest<SaveScenarioConfigResponseDto>('/onboarding/state-manager/scenarios', {
     method: 'POST',
     body: JSON.stringify(req)
   });

@@ -1,10 +1,7 @@
-import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import {
   Alert,
   Box,
-  Button,
   Chip,
   Dialog,
   DialogActions,
@@ -16,18 +13,26 @@ import {
   Tab,
   Tabs,
   TextField,
-  Typography
+  Typography,
+  Button
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { createDefaultScenarios } from './defaultScenarios';
-import { previewConversion } from './scenariosToFsm';
+import { ImportScenariosPanel } from './import/ImportScenariosPanel';
 import { ScenarioTable } from './ScenarioTable';
-import type { ScenarioCategory, StateManagerConfig, SubFlow } from './types';
+import { previewConversion } from './scenariosToFsm';
+import { StateManagerContextBar } from './StateManagerContextBar';
+import type { FlowDirection, ScenarioCategory, StateManagerConfig, SubFlow } from './types';
+import { validateStateManagerConfig } from './validateStateManagerConfig';
 
 type StateManagerPanelProps = {
   value: StateManagerConfig;
   onChange: (next: StateManagerConfig) => void;
+  onCountryChange?: (countryCode: string) => void;
+  onFlowDirectionChange?: (flowDirection: FlowDirection) => void;
+  onSaveScenarios?: (config: StateManagerConfig) => Promise<void> | void;
   onGenerateFsm?: (config: StateManagerConfig) => Promise<void> | void;
+  isSaving?: boolean;
   isGenerating?: boolean;
   generationPreview?: ReturnType<typeof previewConversion>;
 };
@@ -66,7 +71,11 @@ function countScenarioRows(scenario: ScenarioCategory): number {
 export function StateManagerPanel({
   value,
   onChange,
+  onCountryChange,
+  onFlowDirectionChange,
+  onSaveScenarios,
   onGenerateFsm,
+  isSaving = false,
   isGenerating = false,
   generationPreview
 }: StateManagerPanelProps) {
@@ -75,7 +84,10 @@ export function StateManagerPanel({
 
   const computedConversionPreview = useMemo(() => previewConversion(value.scenarios), [value.scenarios]);
   const conversionPreview = generationPreview ?? computedConversionPreview;
+  const validationMessages = useMemo(() => validateStateManagerConfig(value), [value]);
   const activeScenario = value.scenarios[activeTab] ?? null;
+  const canSaveScenarios = validationMessages.length === 0;
+  const canGenerateFsm = Boolean(onGenerateFsm) && value.scenarios.length > 0 && !isGenerating && !isSaving;
 
   useEffect(() => {
     if (activeTab >= value.scenarios.length) {
@@ -87,6 +99,30 @@ export function StateManagerPanel({
     onChange({
       ...value,
       scenarios: nextScenarios,
+      lastUpdated: new Date().toISOString()
+    });
+  };
+
+  const handleCountryFieldChange = (countryCode: string) => {
+    if (onCountryChange) {
+      onCountryChange(countryCode);
+      return;
+    }
+    onChange({
+      ...value,
+      countryCode,
+      lastUpdated: new Date().toISOString()
+    });
+  };
+
+  const handleFlowFieldChange = (flowDirection: FlowDirection) => {
+    if (onFlowDirectionChange) {
+      onFlowDirectionChange(flowDirection);
+      return;
+    }
+    onChange({
+      ...value,
+      flowDirection,
       lastUpdated: new Date().toISOString()
     });
   };
@@ -126,6 +162,19 @@ export function StateManagerPanel({
     );
   };
 
+  const handleSave = async () => {
+    if (!onSaveScenarios || validationMessages.length > 0) {
+      return;
+    }
+    await Promise.resolve(
+      onSaveScenarios({
+        ...value,
+        countryCode: value.countryCode.trim().toUpperCase(),
+        lastUpdated: new Date().toISOString()
+      })
+    );
+  };
+
   const handleConfirmGenerate = async () => {
     if (!onGenerateFsm) {
       return;
@@ -144,49 +193,32 @@ export function StateManagerPanel({
       }}
     >
       <Stack spacing={3}>
-        <Stack
-          direction={{ xs: 'column', lg: 'row' }}
-          justifyContent="space-between"
-          alignItems={{ xs: 'stretch', lg: 'flex-start' }}
-          spacing={2}
-        >
-          <Stack spacing={1.25}>
-            <Typography variant="h6">State Manager Configuration</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 880 }}>
-              Define message status/substatus transitions, notification rules, and customer-facing
-              statuses for each payment scenario.
-            </Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              <Chip label={`${conversionPreview.scenarioCount} scenarios`} color="primary" variant="outlined" />
-              <Chip label={`${conversionPreview.totalRows} total rows`} variant="outlined" />
-              <Chip label={`${conversionPreview.discoveredStateCount} discovered states`} variant="outlined" />
-              {conversionPreview.topArchetype ? (
-                <Chip label={`Archetype: ${conversionPreview.topArchetype}`} variant="outlined" />
-              ) : null}
-            </Stack>
-          </Stack>
+        <StateManagerContextBar
+          countryCode={value.countryCode}
+          flowDirection={value.flowDirection}
+          onCountryChange={handleCountryFieldChange}
+          onFlowDirectionChange={handleFlowFieldChange}
+          onAddScenario={handleAddScenario}
+          onResetDefaults={handleResetDefaults}
+          onSaveScenarios={handleSave}
+          onOpenGenerateConfirm={() => setConfirmOpen(true)}
+          isSaving={isSaving}
+          isGenerating={isGenerating}
+          canSaveScenarios={canSaveScenarios}
+          canGenerateFsm={canGenerateFsm}
+          validationMessages={validationMessages}
+          preview={conversionPreview}
+        />
 
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <Button startIcon={<AddIcon />} variant="outlined" onClick={handleAddScenario} disabled={isGenerating}>
-              Add Scenario
-            </Button>
-            <Button
-              startIcon={<RefreshIcon />}
-              variant="outlined"
-              onClick={handleResetDefaults}
-              disabled={isGenerating}
-            >
-              Reset Defaults
-            </Button>
-            <Button
-              variant="contained"
-              onClick={() => setConfirmOpen(true)}
-              disabled={isGenerating || !onGenerateFsm || value.scenarios.length === 0}
-            >
-              Save &amp; Generate FSM
-            </Button>
-          </Stack>
-        </Stack>
+        <ImportScenariosPanel
+          countryCode={value.countryCode}
+          flowDirection={value.flowDirection}
+          disabled={isGenerating || isSaving}
+          onImportSuccess={(nextConfig) => {
+            onChange(nextConfig);
+            setActiveTab(0);
+          }}
+        />
 
         <Divider />
 
@@ -233,7 +265,7 @@ export function StateManagerPanel({
                 variant="outlined"
                 startIcon={<DeleteOutlineIcon />}
                 onClick={handleDeleteActiveScenario}
-                disabled={isGenerating}
+                disabled={isGenerating || isSaving}
               >
                 Delete Scenario
               </Button>
@@ -260,7 +292,7 @@ export function StateManagerPanel({
             <Stack spacing={1}>
               <Typography variant="subtitle1">No scenarios configured</Typography>
               <Typography variant="body2" color="text.secondary">
-                Add a scenario or reset to the seeded defaults to begin editing state-manager rules.
+                Add a scenario, import a scenario file, or reset to the seeded defaults to begin editing state-manager rules.
               </Typography>
             </Stack>
           </Paper>
@@ -303,7 +335,7 @@ export function StateManagerPanel({
               ) : null}
             </Stack>
             <Alert severity="warning">
-              Generating an FSM here will replace the current workflow. Review the scenario data before continuing.
+              Save &amp; Generate FSM is separate from Save Scenarios and will replace the current workflow preview.
             </Alert>
           </Stack>
         </DialogContent>
@@ -311,7 +343,7 @@ export function StateManagerPanel({
           <Button onClick={() => setConfirmOpen(false)} disabled={isGenerating}>
             Cancel
           </Button>
-          <Button onClick={handleConfirmGenerate} variant="contained" disabled={isGenerating || !onGenerateFsm}>
+          <Button onClick={handleConfirmGenerate} variant="contained" disabled={!canGenerateFsm}>
             Generate
           </Button>
         </DialogActions>

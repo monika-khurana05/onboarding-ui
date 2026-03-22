@@ -29,6 +29,20 @@ export const handlers = [
       pullRequestUrl: 'https://example.internal/pr/fsm-op-001'
     });
   }),
+  http.post('*/onboarding/state-manager/scenarios', async ({ request }) => {
+    await delay(250);
+    const payload = (await request.json()) as {
+      countryCode?: string;
+      stateManagerConfig?: { lastUpdated?: string };
+    };
+    return HttpResponse.json({
+      success: true,
+      message: 'Scenario configuration saved successfully',
+      configId: 'state-manager-config-001',
+      updatedAt: payload.stateManagerConfig?.lastUpdated ?? new Date().toISOString(),
+      countryCode: payload.countryCode
+    });
+  }),
   http.get('*/fsm/operation-status/:operationId', async ({ params }) => {
     await delay(250);
     return HttpResponse.json({
@@ -38,3 +52,4 @@ export const handlers = [
     });
   })
 ];
+

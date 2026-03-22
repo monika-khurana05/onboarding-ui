@@ -1,6 +1,6 @@
 import { ThemeProvider } from '@mui/material/styles';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -17,12 +17,23 @@ const mocks = vi.hoisted(() => ({
   previewConversion: vi.fn(),
   scenariosToWorkflowSpec: vi.fn(),
   loadPresetYaml: vi.fn(),
-  parseFsmYamlToSpec: vi.fn()
+  parseFsmYamlToSpec: vi.fn(),
+  saveScenarioConfig: vi.fn()
 }));
 
 vi.mock('../../app/GlobalErrorContext', () => ({
   useGlobalError: () => ({ showError: mocks.showError })
 }));
+
+vi.mock('../../api/client', async () => {
+  const actual = await vi.importActual<typeof import('../../api/client')>('../../api/client');
+  return {
+    ...actual,
+    createSnapshot: vi.fn(),
+    createSnapshotVersion: vi.fn(),
+    saveScenarioConfig: mocks.saveScenarioConfig
+  };
+});
 
 vi.mock('../../components/WorkflowEditor', () => ({
   WorkflowTabPanels: ({ value }: { value: WorkflowSpec }) => <div>Workflow preview: {value.workflowKey}</div>,
@@ -55,21 +66,88 @@ vi.mock('../../components/SectionCard', () => ({
 vi.mock('../state-manager/StateManagerPanel', () => ({
   StateManagerPanel: ({
     value,
+    onChange,
+    onCountryChange,
+    onFlowDirectionChange,
+    onSaveScenarios,
     onGenerateFsm,
     generationPreview,
+    isSaving,
     isGenerating
   }: {
     value: ReturnType<typeof createDefaultStateManagerConfig>;
+    onChange: (config: ReturnType<typeof createDefaultStateManagerConfig>) => void;
+    onCountryChange?: (countryCode: string) => void;
+    onFlowDirectionChange?: (flowDirection: 'INCOMING' | 'OUTGOING') => void;
+    onSaveScenarios?: (config: ReturnType<typeof createDefaultStateManagerConfig>) => Promise<void> | void;
     onGenerateFsm?: (config: ReturnType<typeof createDefaultStateManagerConfig>) => Promise<void> | void;
     generationPreview?: {
       topArchetype?: string;
       warningCount?: number;
     };
+    isSaving?: boolean;
     isGenerating?: boolean;
   }) => (
     <div>
       <div>Panel archetype: {generationPreview?.topArchetype ?? 'none'}</div>
       <div>Panel warnings: {generationPreview?.warningCount ?? 0}</div>
+      <div>Panel country: {value.countryCode}</div>
+      <div>Panel flow: {value.flowDirection}</div>
+      <div>Panel scenarios: {value.scenarios.length}</div>
+      <button onClick={() => onCountryChange?.('SG')}>Change Country</button>
+      <button onClick={() => onFlowDirectionChange?.('INCOMING')}>Change Flow</button>
+      <button
+        onClick={() =>
+          onChange({
+            ...value,
+            scenarios: [
+              {
+                id: 'imported-scenario',
+                name: 'Imported Scenario',
+                description: 'Imported from file',
+                hasScenarioColumn: false,
+                hasResponsibleColumn: false,
+                hasTriggerReversalColumn: false,
+                subFlows: [
+                  {
+                    id: 'imported-sub-flow',
+                    title: 'Imported Sub-flow',
+                    rows: [
+                      {
+                        id: 'imported-row',
+                        msgStatus: 'RECEIVED',
+                        msgSubStatus: 'VALIDATED',
+                        channelPushNotification: false,
+                        cdmNotification: false,
+                        transactionStatus: 'PDNG',
+                        transactionStatusReason: 'ACCEPTED',
+                        reasonDescription: 'Imported row'
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          })
+        }
+      >
+        Import Scenario
+      </button>
+      <button
+        onClick={() =>
+          onChange({
+            ...value,
+            scenarios: value.scenarios.map((scenario, index) =>
+              index === 0 ? { ...scenario, name: 'Edited Scenario' } : scenario
+            )
+          })
+        }
+      >
+        Edit Scenario
+      </button>
+      <button onClick={() => onSaveScenarios?.(value)} disabled={isSaving}>
+        Save Scenarios
+      </button>
       <button onClick={() => onGenerateFsm?.(value)} disabled={isGenerating}>
         Generate FSM
       </button>
@@ -377,4 +455,112 @@ describe('CreateSnapshotWizard FSM analysis UI', () => {
     20000
   );
 });
+
+
+
+
+
+describe('CreateSnapshotWizard scenario save flow', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    mocks.previewConversion.mockReturnValue({
+      scenarioCount: 8,
+      totalRows: 105,
+      discoveredStateCount: 18,
+      topArchetype: 'OUTGOING_SIMPLE_POSTING',
+      warningCount: 0,
+      conflictCount: 0
+    });
+    mocks.loadPresetYaml.mockResolvedValue('preset-yaml');
+    mocks.parseFsmYamlToSpec.mockReturnValue(makeWorkflow('PRESET_FLOW'));
+    mocks.scenariosToWorkflowSpec.mockReturnValue(makeGenerationResult());
+    mocks.saveScenarioConfig.mockResolvedValue({
+      success: true,
+      message: 'Scenario configuration saved successfully',
+      updatedAt: '2026-03-21T10:00:00.000Z'
+    });
+  });
+
+  it(
+    'keeps country and flow aligned with the wizard state and sends them in the save payload',
+    async () => {
+      renderWizard();
+      const user = userEvent.setup();
+
+      await goToStateManagerStep(user);
+      expect(screen.getByText('Panel country: BR')).toBeInTheDocument();
+      expect(screen.getByText('Panel flow: OUTGOING')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /change country/i }));
+      await user.click(screen.getByRole('button', { name: /change flow/i }));
+
+      expect(await screen.findByText('Panel country: SG')).toBeInTheDocument();
+      expect(await screen.findByText('Panel flow: INCOMING')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /^save scenarios$/i }));
+
+      await waitFor(() => expect(mocks.saveScenarioConfig).toHaveBeenCalledTimes(1));
+      expect(mocks.saveScenarioConfig.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          countryCode: 'SG',
+          flowDirection: 'INCOMING',
+          stateManagerConfig: expect.objectContaining({
+            countryCode: 'SG',
+            flowDirection: 'INCOMING'
+          })
+        })
+      );
+      expect(await screen.findByText('Scenario configuration saved successfully')).toBeInTheDocument();
+    },
+    20000
+  );
+
+  it(
+    'shows save failure feedback and keeps Save Scenarios separate from Generate FSM',
+    async () => {
+      mocks.saveScenarioConfig.mockRejectedValueOnce(new Error('Scenario save failed'));
+      renderWizard();
+      const user = userEvent.setup();
+
+      await goToStateManagerStep(user);
+      await user.click(screen.getByRole('button', { name: /^save scenarios$/i }));
+
+      expect(await screen.findByText('Scenario save failed')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /generate fsm/i }));
+      await waitFor(() => expect(mocks.saveScenarioConfig).toHaveBeenCalledTimes(1));
+    },
+    20000
+  );
+
+  it(
+    'saves imported scenarios from the latest panel state',
+    async () => {
+      renderWizard();
+      const user = userEvent.setup();
+
+      await goToStateManagerStep(user);
+      await user.click(screen.getByRole('button', { name: /import scenario/i }));
+      expect(await screen.findByText('Panel scenarios: 1')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /^save scenarios$/i }));
+
+      await waitFor(() => expect(mocks.saveScenarioConfig).toHaveBeenCalledTimes(1));
+      expect(mocks.saveScenarioConfig.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          stateManagerConfig: expect.objectContaining({
+            scenarios: [expect.objectContaining({ name: 'Imported Scenario' })]
+          })
+        })
+      );
+    },
+    20000
+  );
+});
+
+
+
+
+
 

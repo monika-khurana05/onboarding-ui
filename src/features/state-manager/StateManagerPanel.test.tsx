@@ -6,7 +6,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '../../app/theme';
 import { createDefaultStateManagerConfig } from './defaultScenarios';
 import { StateManagerPanel } from './StateManagerPanel';
-import type { ScenarioCategory, StatusRow } from './types';
+import type { ScenarioCategory, StateManagerConfig, StatusRow } from './types';
+
+vi.mock('./import/ImportScenariosPanel', () => ({
+  ImportScenariosPanel: () => <div>Import Scenarios</div>
+}));
 
 vi.mock('./ScenarioTable', () => ({
   ScenarioTable: ({
@@ -76,18 +80,37 @@ vi.mock('./ScenarioTable', () => ({
 
 function TestHarness({
   onGenerateFsm = vi.fn(),
-  generationPreview
+  onSaveScenarios = vi.fn(),
+  generationPreview,
+  initialValue = createDefaultStateManagerConfig('BR', 'OUTGOING')
 }: {
-  onGenerateFsm?: (config: ReturnType<typeof createDefaultStateManagerConfig>) => Promise<void> | void;
+  onGenerateFsm?: (config: StateManagerConfig) => Promise<void> | void;
+  onSaveScenarios?: (config: StateManagerConfig) => Promise<void> | void;
   generationPreview?: ComponentProps<typeof StateManagerPanel>['generationPreview'];
+  initialValue?: StateManagerConfig;
 }) {
-  const [value, setValue] = useState(createDefaultStateManagerConfig('BR', 'OUTGOING'));
+  const [value, setValue] = useState(initialValue);
 
   return (
     <ThemeProvider theme={createAppTheme('dark')}>
       <StateManagerPanel
         value={value}
         onChange={setValue}
+        onCountryChange={(countryCode) =>
+          setValue((prev) => ({
+            ...prev,
+            countryCode,
+            lastUpdated: new Date().toISOString()
+          }))
+        }
+        onFlowDirectionChange={(flowDirection) =>
+          setValue((prev) => ({
+            ...prev,
+            flowDirection,
+            lastUpdated: new Date().toISOString()
+          }))
+        }
+        onSaveScenarios={onSaveScenarios}
         onGenerateFsm={onGenerateFsm}
         generationPreview={generationPreview}
       />
@@ -96,11 +119,53 @@ function TestHarness({
 }
 
 describe('StateManagerPanel', () => {
-  it('renders scenario tabs and the seeded row count summary', () => {
+  it('renders country and flow context controls', () => {
     render(<TestHarness />);
 
-    expect(screen.getByRole('tab', { name: /Happy Flow Non BOOK/i })).toBeInTheDocument();
-    expect(screen.getByText('105 total rows')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /country code/i })).toHaveValue('BR');
+    expect(screen.getByRole('button', { name: 'OUTGOING' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'INCOMING' })).toBeInTheDocument();
+  });
+
+  it('updates country and flow from the context bar', async () => {
+    render(<TestHarness />);
+    const user = userEvent.setup();
+
+    const countryInput = screen.getByRole('textbox', { name: /country code/i });
+    await user.clear(countryInput);
+    await user.type(countryInput, 'sg');
+    expect(countryInput).toHaveValue('SG');
+
+    await user.click(screen.getByRole('button', { name: 'INCOMING' }));
+    expect(screen.getByRole('button', { name: 'INCOMING' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('disables Save Scenarios when the configuration is invalid', async () => {
+    render(<TestHarness />);
+    const user = userEvent.setup();
+
+    const countryInput = screen.getByRole('textbox', { name: /country code/i });
+    await user.clear(countryInput);
+
+    expect(screen.getByRole('button', { name: /save scenarios/i })).toBeDisabled();
+    expect(screen.getAllByText(/country code is required before saving scenarios/i).length).toBeGreaterThan(0);
+  });
+
+  it('invokes Save Scenarios with the current config', async () => {
+    const onSaveScenarios = vi.fn();
+    render(<TestHarness onSaveScenarios={onSaveScenarios} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: /save scenarios/i }));
+
+    await waitFor(() => expect(onSaveScenarios).toHaveBeenCalledTimes(1));
+    expect(onSaveScenarios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryCode: 'BR',
+        flowDirection: 'OUTGOING',
+        scenarios: expect.any(Array)
+      })
+    );
   });
 
   it(

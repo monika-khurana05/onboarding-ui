@@ -1,5 +1,5 @@
 import type { SnapshotModel } from '../models/snapshot';
-import type { FlowDirection } from '../features/state-manager/types';
+import type { FlowDirection, StateManagerConfig } from '../features/state-manager/types';
 
 export type ApiErrorResponseDto = {
   error?: string;
@@ -139,6 +139,19 @@ export type SnapshotVersionRequestDto = {
 };
 
 export type SnapshotVersionResponseDto = SnapshotDetailDto;
+
+export type SaveScenarioConfigRequestDto = {
+  countryCode: string;
+  flowDirection: FlowDirection;
+  stateManagerConfig: StateManagerConfig;
+};
+
+export type SaveScenarioConfigResponseDto = {
+  success: boolean;
+  message?: string;
+  configId?: string;
+  updatedAt?: string;
+};
 
 export type SubmitFsmRequestDto = {
   countryCode: string;
@@ -306,3 +319,5 @@ export type ParamDefDto = {
   constraints?: Record<string, unknown>;
   ui?: Record<string, unknown>;
 };
+
+
