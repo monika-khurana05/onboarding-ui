@@ -431,31 +431,36 @@ describe('CreateSnapshotWizard FSM analysis UI', () => {
   );
 
   it(
-    'does not regenerate when the previewed workflow is manually reset and falls back to the empty preview state',
+    'reveals the workflow preview only after explicit generation and falls back to the empty preview state after manual reset',
     async () => {
+      mocks.scenariosToWorkflowSpec.mockReturnValue(makeGenerationResult());
       renderWizard(makeInitialSnapshot('EXISTING_FLOW'));
       const user = userEvent.setup();
 
       await goToStateManagerStep(user);
-      expect(screen.getByText('Workflow preview: EXISTING_FLOW')).toBeInTheDocument();
+      expect(screen.getByText('No FSM generated yet')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /generate fsm/i }));
+      expect(await screen.findByText('Workflow preview: GENERATED_FLOW')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: /reset workflow preview/i }));
 
       expect(screen.getByText('No FSM generated yet')).toBeInTheDocument();
-      expect(mocks.scenariosToWorkflowSpec).not.toHaveBeenCalled();
+      expect(mocks.scenariosToWorkflowSpec).toHaveBeenCalledTimes(1);
     },
     20000
   );
 
   it(
-    'shows a persisted workflow preview without regenerating it on load',
+    'keeps a persisted workflow preview hidden until generation is explicitly requested',
     async () => {
       renderWizard(makeInitialSnapshot('EXISTING_FLOW'));
       const user = userEvent.setup();
 
       await goToStateManagerStep(user);
 
-      expect(screen.getByText('Workflow preview: EXISTING_FLOW')).toBeInTheDocument();
+      expect(screen.getByText('No FSM generated yet')).toBeInTheDocument();
+      expect(screen.queryByText('Workflow preview: EXISTING_FLOW')).not.toBeInTheDocument();
       expect(mocks.scenariosToWorkflowSpec).not.toHaveBeenCalled();
     },
     20000
@@ -638,13 +643,13 @@ describe('CreateSnapshotWizard scenario save flow', () => {
   );
 
   it(
-    'does not auto-generate on edit, import, country change, flow change, or reset defaults and marks the preview stale',
+    'does not auto-generate on edit, import, country change, flow change, or reset defaults before explicit generation',
     async () => {
       renderWizard(makeInitialSnapshot('EXISTING_FLOW'));
       const user = userEvent.setup();
 
       await goToStateManagerStep(user);
-      expect(screen.getByText('Workflow preview: EXISTING_FLOW')).toBeInTheDocument();
+      expect(screen.getByText('No FSM generated yet')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: /edit scenario/i }));
       await user.click(screen.getByRole('button', { name: /import scenario/i }));
@@ -653,9 +658,10 @@ describe('CreateSnapshotWizard scenario save flow', () => {
       await user.click(screen.getByRole('button', { name: /reset defaults/i }));
 
       expect(mocks.scenariosToWorkflowSpec).not.toHaveBeenCalled();
+      expect(screen.getByText('No FSM generated yet')).toBeInTheDocument();
       expect(
-        screen.getByText(/Scenario configuration changed\. Click Save & Generate FSM to refresh the FSM\./i)
-      ).toBeInTheDocument();
+        screen.queryByText(/Scenario configuration changed. Click Save & Generate FSM to refresh the FSM./i)
+      ).not.toBeInTheDocument();
     },
     20000
   );

@@ -585,6 +585,7 @@ export function CreateSnapshotWizard({
   const [catalogTab, setCatalogTab] = useState<CatalogTab>('validations');
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [fsmStale, setFsmStale] = useState(false);
+  const [hasExplicitWorkflowPreview, setHasExplicitWorkflowPreview] = useState(false);
   const [fsmGenerationPending, setFsmGenerationPending] = useState(false);
   const [highlightTransitionKeys, setHighlightTransitionKeys] = useState<Set<string>>(new Set());
   const [fsmAnalysis, setFsmAnalysis] = useState<AnalysisModel | null>(null);
@@ -614,10 +615,10 @@ export function CreateSnapshotWizard({
   const markFsmAsStale = useCallback(() => {
     setHighlightTransitionKeys(new Set());
     clearFsmGenerationSummary();
-    if (!isDefaultWorkflowSpec(snapshot.workflow)) {
+    if (hasExplicitWorkflowPreview && !isDefaultWorkflowSpec(snapshot.workflow)) {
       setFsmStale(true);
     }
-  }, [clearFsmGenerationSummary, snapshot.workflow]);
+  }, [clearFsmGenerationSummary, hasExplicitWorkflowPreview, snapshot.workflow]);
 
   const createSnapshotMutation = useMutation({
     mutationFn: createSnapshot,
@@ -649,6 +650,7 @@ export function CreateSnapshotWizard({
     setSnapshot(nextResolvedInitialSnapshot);
     setJsonValue(JSON.stringify(nextResolvedInitialSnapshot, null, 2));
     setFsmStale(false);
+    setHasExplicitWorkflowPreview(false);
     setHighlightTransitionKeys(new Set());
     clearFsmGenerationSummary();
   }, [clearFsmGenerationSummary, flow, initialSnapshot]);
@@ -849,7 +851,10 @@ export function CreateSnapshotWizard({
     fsmNewTransitionKeys.size > 0 ||
     fsmPresetBackedTransitionKeys.size > 0 ||
     fsmFallbackTransitionKeys.size > 0;
-  const hasWorkflowPreview = useMemo(() => !isDefaultWorkflowSpec(snapshot.workflow), [snapshot.workflow]);
+  const hasWorkflowPreview = useMemo(
+    () => hasExplicitWorkflowPreview && !isDefaultWorkflowSpec(snapshot.workflow),
+    [hasExplicitWorkflowPreview, snapshot.workflow]
+  );
 
   useEffect(() => {
     if (!hasWorkflowPreview && fsmStale) {
@@ -1130,6 +1135,7 @@ export function CreateSnapshotWizard({
       const workflowKey = resolveGeneratedWorkflowKey(snapshot.workflow, countryCode, direction);
       const syncedConfig = buildSyncedStateManagerConfig(config, countryCode, direction);
 
+      setHasExplicitWorkflowPreview(true);
       setFsmGenerationPending(true);
       setFsmGenerationError(null);
       setFsmSummaryWorkflowKey(workflowKey);
