@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { lintWorkflowSpec, listAllTransitions, type WorkflowSpec } from '../../models/snapshot';
-import { createDefaultScenarios } from './defaultScenarios';
+import { lintWorkflowSpec, listAllTransitions, type WorkflowSpec } from '../../../src/models/snapshot';
+import { createDefaultScenarios } from '../../../src/features/state-manager/defaultScenarios';
 import {
   DEFAULT_DIRECT_MAP,
   DEFAULT_PRE_FSM_REJECTIONS,
@@ -17,8 +17,8 @@ import {
   scenariosToWorkflowSpec,
   selectStartState,
   shouldSkipSubFlow
-} from './scenariosToFsm';
-import type { ScenarioCategory, StatusRow, SubFlow } from './types';
+} from '../../../src/features/state-manager/scenariosToFsm';
+import type { ScenarioCategory, StatusRow, SubFlow } from '../../../src/features/state-manager/types';
 
 let nextId = 0;
 

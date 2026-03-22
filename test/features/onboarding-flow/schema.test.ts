@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generatePreviewSchema, snapshotFormSchema } from './schema';
+import { generatePreviewSchema, snapshotFormSchema } from '../../../src/features/onboarding-flow/schema';
 
 describe('snapshotFormSchema', () => {
   it('accepts a valid snapshot request payload', () => {

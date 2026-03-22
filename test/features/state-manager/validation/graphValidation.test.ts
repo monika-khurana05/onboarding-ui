@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkflowSpec } from '../../../models/snapshot';
-import type { AnalysisModel } from '../analysis/types';
-import { validateGeneratedWorkflow } from './graphValidation';
+import type { WorkflowSpec } from '../../../../src/models/snapshot';
+import type { AnalysisModel } from '../../../../src/features/state-manager/analysis/types';
+import { validateGeneratedWorkflow } from '../../../../src/features/state-manager/validation/graphValidation';
 
 function makeAnalysisStub(partial: Partial<AnalysisModel> = {}): AnalysisModel {
   return {

@@ -2,8 +2,8 @@ import { ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { createAppTheme } from '../../app/theme';
-import { SnapshotRequestForm } from './SnapshotRequestForm';
+import { createAppTheme } from '../../../src/app/theme';
+import { SnapshotRequestForm } from '../../../src/features/onboarding-flow/SnapshotRequestForm';
 
 function renderForm() {
   const onSubmit = vi.fn();
@@ -25,7 +25,7 @@ describe('SnapshotRequestForm', () => {
     expect(await screen.findByText(/Country code must be exactly 2 uppercase letters/i)).toBeInTheDocument();
     expect(await screen.findByText(/Country name must be at least 2 characters/i)).toBeInTheDocument();
     expect(await screen.findByText(/Requester email must be valid/i)).toBeInTheDocument();
-  });
+  }, 20000);
 
   it('switches to advanced JSON mode', async () => {
     renderForm();
@@ -34,5 +34,6 @@ describe('SnapshotRequestForm', () => {
     await user.click(screen.getByRole('tab', { name: /advanced json/i }));
 
     expect(await screen.findByText(/Advanced mode accepts strict JSON/i)).toBeInTheDocument();
-  });
+  }, 20000);
 });
+

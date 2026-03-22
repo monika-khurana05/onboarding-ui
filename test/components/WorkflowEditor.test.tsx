@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkflowSpec } from '../models/snapshot';
-import { generateFsmYaml } from './WorkflowEditor';
-import { parseFsmYamlToSpec } from '../features/workflow/presets/parseFsmYamlToSpec';
+import type { WorkflowSpec } from '../../src/models/snapshot';
+import { generateFsmYaml } from '../../src/components/WorkflowEditor';
+import { parseFsmYamlToSpec } from '../../src/features/workflow/presets/parseFsmYamlToSpec';
 
 describe('generateFsmYaml', () => {
   it('emits Init first, keeps non-terminals before terminals, and preserves alphabetical event ordering', () => {

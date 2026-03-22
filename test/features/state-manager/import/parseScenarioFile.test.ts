@@ -1,6 +1,6 @@
 import { utils, write } from 'xlsx';
 import { describe, expect, it } from 'vitest';
-import { parseScenarioFile } from './parseScenarioFile';
+import { parseScenarioFile } from '../../../../src/features/state-manager/import/parseScenarioFile';
 
 describe('parseScenarioFile', () => {
   it('parses CSV with canonical headers', async () => {

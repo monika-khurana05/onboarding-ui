@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { brPolicy } from './brPolicy';
+import { brPolicy } from '../../../../src/features/state-manager/countryRules/brPolicy';
 import {
   buildExactKnowledgeLookupKey,
   inferTransitionSemantic,
   resolveTransitionDefinition
-} from './actionResolver';
-import type { CountryActionPolicy } from './types';
+} from '../../../../src/features/state-manager/countryRules/actionResolver';
+import type { CountryActionPolicy } from '../../../../src/features/state-manager/countryRules/types';
 
 function buildContext(overrides: Partial<Parameters<typeof resolveTransitionDefinition>[0]> = {}) {
   return {

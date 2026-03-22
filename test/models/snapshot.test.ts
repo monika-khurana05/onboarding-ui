@@ -4,7 +4,7 @@ import {
   validateNoDuplicateCapabilityKey,
   validateNoDuplicateRuleKeys,
   validateTransitionsReferToValidStates
-} from './snapshot';
+} from '../../src/models/snapshot';
 
 describe('snapshot validation helpers', () => {
   it('requires countryCode and enforces uppercase', () => {
@@ -57,7 +57,9 @@ describe('snapshot validation helpers', () => {
       ]
     };
     const errors = validateTransitionsReferToValidStates(workflow);
-    expect(errors).toHaveLength(1);
-    expect(errors[0].path).toContain('target');
+    expect(errors).toHaveLength(2);
+    expect(errors.every((error) => error.path.includes('target'))).toBe(true);
+    expect(errors.every((error) => error.message.includes('VALIDATED'))).toBe(true);
   });
 });
+

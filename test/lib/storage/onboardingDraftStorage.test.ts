@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadOnboardingDraft, saveOnboardingDraft } from './onboardingDraftStorage';
+import { loadOnboardingDraft, saveOnboardingDraft } from '../../../src/lib/storage/onboardingDraftStorage';
 
 describe('onboardingDraftStorage', () => {
   beforeEach(() => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultScenarios } from './defaultScenarios';
+import { createDefaultScenarios } from '../../../src/features/state-manager/defaultScenarios';
 
 function countRows() {
   return createDefaultScenarios().reduce(

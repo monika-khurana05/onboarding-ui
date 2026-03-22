@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkflowSpec } from '../../../models/snapshot';
-import type { ScenarioCategory, StatusRow, SubFlow } from '../types';
-import { replayScenariosAgainstWorkflow } from './replayScenarios';
+import type { WorkflowSpec } from '../../../../src/models/snapshot';
+import type { ScenarioCategory, StatusRow, SubFlow } from '../../../../src/features/state-manager/types';
+import { replayScenariosAgainstWorkflow } from '../../../../src/features/state-manager/validation/replayScenarios';
 
 let nextId = 0;
 

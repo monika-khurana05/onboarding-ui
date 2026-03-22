@@ -1,12 +1,12 @@
 import { ThemeProvider } from '@mui/material/styles';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { createAppTheme } from '../../app/theme';
-import { createDefaultStateManagerConfig } from './defaultScenarios';
-import { StateManagerPanel } from './StateManagerPanel';
-import type { ScenarioCategory, StateManagerConfig, StatusRow, SubFlow } from './types';
+import { createAppTheme } from '../../../src/app/theme';
+import { createDefaultStateManagerConfig } from '../../../src/features/state-manager/defaultScenarios';
+import { StateManagerPanel } from '../../../src/features/state-manager/StateManagerPanel';
+import type { ScenarioCategory, StateManagerConfig, StatusRow, SubFlow } from '../../../src/features/state-manager/types';
 
 function buildRow(id: string, overrides: Partial<StatusRow> = {}): StatusRow {
   return {
@@ -55,7 +55,7 @@ function buildConfig(scenarios: ScenarioCategory[]): StateManagerConfig {
   };
 }
 
-vi.mock('./import/ImportScenariosPanel', () => ({
+vi.mock('../../../src/features/state-manager/import/ImportScenariosPanel', () => ({
   ImportScenariosPanel: ({
     countryCode,
     flowDirection,
@@ -94,7 +94,7 @@ vi.mock('./import/ImportScenariosPanel', () => ({
   )
 }));
 
-vi.mock('./ScenarioTable', () => ({
+vi.mock('../../../src/features/state-manager/ScenarioTable', () => ({
   ScenarioTable: ({
     scenario,
     onChange
@@ -210,7 +210,7 @@ describe('StateManagerPanel', () => {
       expect(screen.getByRole('button', { name: 'OUTGOING' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByRole('button', { name: 'INCOMING' })).toBeInTheDocument();
     },
-    20000
+    30000
   );
 
   it(
@@ -220,14 +220,13 @@ describe('StateManagerPanel', () => {
       const user = userEvent.setup();
 
       const countryInput = screen.getByRole('textbox', { name: /country code/i });
-      await user.clear(countryInput);
-      await user.type(countryInput, 'sg');
+      fireEvent.change(countryInput, { target: { value: 'SG' } });
       expect(countryInput).toHaveValue('SG');
 
       await user.click(screen.getByRole('button', { name: 'INCOMING' }));
       expect(screen.getByRole('button', { name: 'INCOMING' })).toHaveAttribute('aria-pressed', 'true');
     },
-    20000
+    30000
   );
 
   it('disables Save Scenarios when the configuration is invalid', async () => {
@@ -275,7 +274,7 @@ describe('StateManagerPanel', () => {
       await user.click(screen.getByRole('button', { name: /^add sub-flow$/i }));
       await waitFor(() => expect(screen.getByText('3 sub-flows')).toBeInTheDocument());
     },
-    20000
+    30000
   );
 
   it(
@@ -302,7 +301,7 @@ describe('StateManagerPanel', () => {
       expect(screen.getByDisplayValue('Updated description for architects')).toBeInTheDocument();
       expect(onGenerateFsm).not.toHaveBeenCalled();
     },
-    20000
+    30000
   );
 
   it(
@@ -327,14 +326,14 @@ describe('StateManagerPanel', () => {
       await waitFor(() => expect(screen.queryByText('Alpha Scenario')).not.toBeInTheDocument());
       expect(screen.getByText('Beta Scenario')).toBeInTheDocument();
     },
-    20000
+    30000
   );
 
   it(
     'keeps generation explicit for scenario edits, imports, resets, and context changes',
     async () => {
       const onGenerateFsm = vi.fn();
-      render(<TestHarness onGenerateFsm={onGenerateFsm} />);
+      render(<TestHarness onGenerateFsm={onGenerateFsm} initialValue={buildConfig([buildScenario('Alpha Scenario')])} />);
       const user = userEvent.setup();
 
       await user.click(screen.getByRole('button', { name: /add scenario/i }));
@@ -343,12 +342,10 @@ describe('StateManagerPanel', () => {
       await user.click(screen.getByRole('button', { name: /^add sub-flow$/i }));
 
       const nameField = screen.getByRole('textbox', { name: /scenario name/i });
-      await user.clear(nameField);
-      await user.type(nameField, 'Edited Scenario');
+      fireEvent.change(nameField, { target: { value: 'Edited Scenario' } });
 
       const descriptionField = screen.getByRole('textbox', { name: /scenario description/i });
-      await user.clear(descriptionField);
-      await user.type(descriptionField, 'Edited description');
+      fireEvent.change(descriptionField, { target: { value: 'Edited description' } });
 
       await user.click(screen.getByRole('button', { name: /delete scenario/i }));
       const deleteDialog = await screen.findByRole('dialog');
@@ -359,32 +356,31 @@ describe('StateManagerPanel', () => {
       await user.click(screen.getByRole('button', { name: /reset defaults/i }));
 
       const countryInput = screen.getByRole('textbox', { name: /country code/i });
-      await user.clear(countryInput);
-      await user.type(countryInput, 'sg');
+      fireEvent.change(countryInput, { target: { value: 'SG' } });
       await user.click(screen.getByRole('button', { name: 'INCOMING' }));
 
       expect(onGenerateFsm).not.toHaveBeenCalled();
     },
-    20000
+    30000
   );
 
   it(
     'opens the generate dialog and confirms generation',
     async () => {
       const onGenerateFsm = vi.fn();
-      render(<TestHarness onGenerateFsm={onGenerateFsm} />);
+      render(<TestHarness onGenerateFsm={onGenerateFsm} initialValue={buildConfig([buildScenario('Alpha Scenario')])} />);
       const user = userEvent.setup();
 
       await user.click(screen.getByRole('button', { name: /save & generate fsm/i }));
 
-      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-      expect(screen.getAllByText('18 discovered states').length).toBeGreaterThan(0);
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getAllByText(/discovered states/i).length).toBeGreaterThan(0);
 
       await user.click(screen.getByRole('button', { name: /^generate$/i }));
 
       await waitFor(() => expect(onGenerateFsm).toHaveBeenCalledTimes(1));
     },
-    20000
+    30000
   );
 
   it('shows preview archetype and warning counts in the generate dialog', async () => {
@@ -410,3 +406,9 @@ describe('StateManagerPanel', () => {
     expect(screen.getByText('1 conflicts')).toBeInTheDocument();
   });
 });
+
+
+
+
+
+

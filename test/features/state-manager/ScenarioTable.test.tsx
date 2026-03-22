@@ -3,9 +3,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
-import { createAppTheme } from '../../app/theme';
-import { ScenarioTable } from './ScenarioTable';
-import type { ScenarioCategory, StatusRow, SubFlow } from './types';
+import { createAppTheme } from '../../../src/app/theme';
+import { ScenarioTable } from '../../../src/features/state-manager/ScenarioTable';
+import type { ScenarioCategory, StatusRow, SubFlow } from '../../../src/features/state-manager/types';
 
 function buildRow(id: string, overrides: Partial<StatusRow> = {}): StatusRow {
   return {

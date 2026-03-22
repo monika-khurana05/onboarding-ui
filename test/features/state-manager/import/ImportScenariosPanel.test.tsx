@@ -2,20 +2,20 @@ import { ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { createAppTheme } from '../../../app/theme';
-import { ImportScenariosPanel } from './ImportScenariosPanel';
-import type { ScenarioImportParseResult } from './types';
+import { createAppTheme } from '../../../../src/app/theme';
+import { ImportScenariosPanel } from '../../../../src/features/state-manager/import/ImportScenariosPanel';
+import type { ScenarioImportParseResult } from '../../../../src/features/state-manager/import/types';
 
 const parserMocks = vi.hoisted(() => ({
   parseScenarioFile: vi.fn(),
   buildStateManagerConfigFromImportRows: vi.fn()
 }));
 
-vi.mock('./parseScenarioFile', () => ({
+vi.mock('../../../../src/features/state-manager/import/parseScenarioFile', () => ({
   parseScenarioFile: parserMocks.parseScenarioFile
 }));
 
-vi.mock('./buildStateManagerConfigFromImport', () => ({
+vi.mock('../../../../src/features/state-manager/import/buildStateManagerConfigFromImport', () => ({
   buildStateManagerConfigFromImportRows: parserMocks.buildStateManagerConfigFromImportRows
 }));
 

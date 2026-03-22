@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createDefaultStateManagerConfig } from './defaultScenarios';
-import { clearStateManagerDraft, loadStateManagerDraft, saveStateManagerDraft } from './stateManagerStorage';
+import { createDefaultStateManagerConfig } from '../../../src/features/state-manager/defaultScenarios';
+import { clearStateManagerDraft, loadStateManagerDraft, saveStateManagerDraft } from '../../../src/features/state-manager/stateManagerStorage';
 
 describe('stateManagerStorage', () => {
   beforeEach(() => {

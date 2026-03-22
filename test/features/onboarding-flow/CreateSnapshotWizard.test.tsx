@@ -5,12 +5,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAppTheme } from '../../app/theme';
-import type { WorkflowLintResult, WorkflowSpec, SnapshotModel } from '../../models/snapshot';
-import { createDefaultStateManagerConfig } from '../state-manager/defaultScenarios';
-import type { AnalysisModel } from '../state-manager/analysis/types';
-import type { FsmGenerationResult } from '../state-manager/scenariosToFsm';
-import { CreateSnapshotWizard } from './CreateSnapshotWizard';
+import { createAppTheme } from '../../../src/app/theme';
+import type { WorkflowLintResult, WorkflowSpec, SnapshotModel } from '../../../src/models/snapshot';
+import { createDefaultStateManagerConfig } from '../../../src/features/state-manager/defaultScenarios';
+import type { AnalysisModel } from '../../../src/features/state-manager/analysis/types';
+import type { FsmGenerationResult } from '../../../src/features/state-manager/scenariosToFsm';
+import { CreateSnapshotWizard } from '../../../src/features/onboarding-flow/CreateSnapshotWizard';
 
 const mocks = vi.hoisted(() => ({
   showError: vi.fn(),
@@ -21,12 +21,12 @@ const mocks = vi.hoisted(() => ({
   saveScenarioConfig: vi.fn()
 }));
 
-vi.mock('../../app/GlobalErrorContext', () => ({
+vi.mock('../../../src/app/GlobalErrorContext', () => ({
   useGlobalError: () => ({ showError: mocks.showError })
 }));
 
-vi.mock('../../api/client', async () => {
-  const actual = await vi.importActual<typeof import('../../api/client')>('../../api/client');
+vi.mock('../../../src/api/client', async () => {
+  const actual = await vi.importActual<typeof import('../../api/client')>('../../../src/api/client');
   return {
     ...actual,
     createSnapshot: vi.fn(),
@@ -35,7 +35,7 @@ vi.mock('../../api/client', async () => {
   };
 });
 
-vi.mock('../../components/WorkflowEditor', () => ({
+vi.mock('../../../src/components/WorkflowEditor', () => ({
   WorkflowTabPanels: ({
     value,
     onChange
@@ -82,19 +82,19 @@ vi.mock('../../components/WorkflowEditor', () => ({
   generateFsmYaml: (spec: WorkflowSpec) => JSON.stringify(spec)
 }));
 
-vi.mock('../../components/JsonMonacoPanel', () => ({
+vi.mock('../../../src/components/JsonMonacoPanel', () => ({
   JsonMonacoPanel: () => <div>Json editor</div>
 }));
 
-vi.mock('../../components/CatalogSelector', () => ({
+vi.mock('../../../src/components/CatalogSelector', () => ({
   CatalogSelector: () => <div>Catalog selector</div>
 }));
 
-vi.mock('../../components/ParamsEditorDrawer', () => ({
+vi.mock('../../../src/components/ParamsEditorDrawer', () => ({
   ParamsEditorDrawer: () => null
 }));
 
-vi.mock('../../components/SectionCard', () => ({
+vi.mock('../../../src/components/SectionCard', () => ({
   SectionCard: ({ title, subtitle, actions, children }: { title: string; subtitle?: string; actions?: ReactNode; children: ReactNode }) => (
     <section>
       <h2>{title}</h2>
@@ -105,7 +105,7 @@ vi.mock('../../components/SectionCard', () => ({
   )
 }));
 
-vi.mock('../state-manager/StateManagerPanel', () => ({
+vi.mock('../../../src/features/state-manager/StateManagerPanel', () => ({
   StateManagerPanel: ({
     value,
     onChange,
@@ -200,20 +200,20 @@ vi.mock('../state-manager/StateManagerPanel', () => ({
   )
 }));
 
-vi.mock('../state-manager/scenariosToFsm', () => ({
+vi.mock('../../../src/features/state-manager/scenariosToFsm', () => ({
   previewConversion: mocks.previewConversion,
   scenariosToWorkflowSpec: mocks.scenariosToWorkflowSpec
 }));
 
-vi.mock('../workflow/presets/loadPresetYaml', () => ({
+vi.mock('../../../src/features/workflow/presets/loadPresetYaml', () => ({
   loadPresetYaml: mocks.loadPresetYaml
 }));
 
-vi.mock('../workflow/presets/parseFsmYamlToSpec', () => ({
+vi.mock('../../../src/features/workflow/presets/parseFsmYamlToSpec', () => ({
   parseFsmYamlToSpec: mocks.parseFsmYamlToSpec
 }));
 
-vi.mock('../workflow/presets/presetsRegistry', () => ({
+vi.mock('../../../src/features/workflow/presets/presetsRegistry', () => ({
   FSM_PRESETS: [{ url: '/presets/br-outgoing.yaml' }, { url: '/presets/ar-outgoing.yaml' }],
   findPresetUrl: () => '/presets/br-outgoing.yaml'
 }));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkflowSpec } from '../../../models/snapshot';
-import { reverseEngineerFsm } from './reverseEngineerFsm';
+import type { WorkflowSpec } from '../../../../src/models/snapshot';
+import { reverseEngineerFsm } from '../../../../src/features/state-manager/validation/reverseEngineerFsm';
 
 describe('reverseEngineerFsm', () => {
   it('normalizes state names, terminals, and transitions deterministically', () => {

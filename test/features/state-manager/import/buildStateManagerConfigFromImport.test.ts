@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildStateManagerConfigFromImportRows } from './buildStateManagerConfigFromImport';
-import type { NormalizedImportRow } from './types';
+import { buildStateManagerConfigFromImportRows } from '../../../../src/features/state-manager/import/buildStateManagerConfigFromImport';
+import type { NormalizedImportRow } from '../../../../src/features/state-manager/import/types';
 
 function createRow(overrides: Partial<NormalizedImportRow>): NormalizedImportRow {
   return {

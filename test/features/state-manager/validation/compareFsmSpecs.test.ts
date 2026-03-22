@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkflowSpec } from '../../../models/snapshot';
-import { compareFsmSpecs } from './compareFsmSpecs';
-import { formatBrOutgoingValidationReport } from './brOutgoingValidationReport';
+import type { WorkflowSpec } from '../../../../src/models/snapshot';
+import { compareFsmSpecs } from '../../../../src/features/state-manager/validation/compareFsmSpecs';
+import { formatBrOutgoingValidationReport } from '../../../../src/features/state-manager/validation/brOutgoingValidationReport';
 
 function makeActualSpec(): WorkflowSpec {
   return {

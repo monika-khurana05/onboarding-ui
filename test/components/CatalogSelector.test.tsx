@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
-import { createAppTheme } from '../app/theme';
-import { CatalogSelector, type CatalogColumn } from './CatalogSelector';
+import { createAppTheme } from '../../src/app/theme';
+import { CatalogSelector, type CatalogColumn } from '../../src/components/CatalogSelector';
 
 type ValidationItem = {
   id: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scenariosToWorkflowSpec } from './scenariosToFsm';
+import { scenariosToWorkflowSpec } from '../../../src/features/state-manager/scenariosToFsm';
 import {
   BR_OUTGOING_ACTUAL_SPEC,
   BR_OUTGOING_COUNTRY_CODE,
@@ -7,10 +7,10 @@ import {
   BR_OUTGOING_GENERATION_OPTIONS,
   BR_OUTGOING_SEED_SCENARIOS,
   BR_OUTGOING_WORKFLOW_KEY
-} from './validation/brOutgoingActual.fixture';
-import { compareFsmSpecs, toTransitionComparisonKey } from './validation/compareFsmSpecs';
-import { createBrOutgoingValidationReport } from './validation/brOutgoingValidationReport';
-import { reverseEngineerFsm } from './validation/reverseEngineerFsm';
+} from '../../../src/features/state-manager/validation/brOutgoingActual.fixture';
+import { compareFsmSpecs, toTransitionComparisonKey } from '../../../src/features/state-manager/validation/compareFsmSpecs';
+import { createBrOutgoingValidationReport } from '../../../src/features/state-manager/validation/brOutgoingValidationReport';
+import { reverseEngineerFsm } from '../../../src/features/state-manager/validation/reverseEngineerFsm';
 
 function generateBrOutgoingSpec() {
   return scenariosToWorkflowSpec(

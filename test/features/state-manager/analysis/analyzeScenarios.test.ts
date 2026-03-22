@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ScenarioCategory, StatusRow, SubFlow } from '../types';
-import { analyzeScenarios } from './analyzeScenarios';
-import { detectArchetypes } from './archetypes';
-import { detectConflicts } from './conflicts';
+import type { ScenarioCategory, StatusRow, SubFlow } from '../../../../src/features/state-manager/types';
+import { analyzeScenarios } from '../../../../src/features/state-manager/analysis/analyzeScenarios';
+import { detectArchetypes } from '../../../../src/features/state-manager/analysis/archetypes';
+import { detectConflicts } from '../../../../src/features/state-manager/analysis/conflicts';
 import {
   inferBalanceTarget,
   inferLifecycleFlags,
@@ -10,8 +10,8 @@ import {
   inferPostSanctionsTarget,
   inferWarehousedReleaseTarget,
   type SequenceEvidence
-} from './inference';
-import type { NormalizedRow } from './types';
+} from '../../../../src/features/state-manager/analysis/inference';
+import type { NormalizedRow } from '../../../../src/features/state-manager/analysis/types';
 
 let nextId = 0;
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { getCountryPolicy, REGISTERED_COUNTRY_POLICY_CODES } from './countryRuleRegistry';
-import { brPolicy } from './brPolicy';
-import { defaultCountryPolicy } from './defaultCountryPolicy';
+import { getCountryPolicy, REGISTERED_COUNTRY_POLICY_CODES } from '../../../../src/features/state-manager/countryRules/countryRuleRegistry';
+import { brPolicy } from '../../../../src/features/state-manager/countryRules/brPolicy';
+import { defaultCountryPolicy } from '../../../../src/features/state-manager/countryRules/defaultCountryPolicy';
 
 describe('getCountryPolicy', () => {
   it('returns the BR policy for BR requests', () => {
